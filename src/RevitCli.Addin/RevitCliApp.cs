@@ -1,6 +1,6 @@
 using System;
-using RevitCli.Addin.Bridge;
 using RevitCli.Addin.Server;
+using RevitCli.Addin.Services;
 
 namespace RevitCli.Addin;
 
@@ -15,14 +15,13 @@ namespace RevitCli.Addin;
 public class RevitCliApp
 {
     private ApiServer? _server;
-    private RevitBridge? _bridge;
     private const int DefaultPort = 17839;
 
     public void OnStartup()
     {
-        _bridge = new RevitBridge();
+        var operations = new PlaceholderRevitOperations();
 
-        _server = new ApiServer(DefaultPort, _bridge.InvokeOnMainThreadAsync);
+        _server = new ApiServer(DefaultPort, operations);
         _server.Start();
 
         Console.WriteLine($"[RevitCli] Server started on port {DefaultPort}");
@@ -32,7 +31,6 @@ public class RevitCliApp
     {
         _server?.Stop();
         _server = null;
-        _bridge = null;
 
         Console.WriteLine("[RevitCli] Server stopped");
     }

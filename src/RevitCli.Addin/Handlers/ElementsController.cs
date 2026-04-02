@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EmbedIO;
@@ -10,24 +9,17 @@ namespace RevitCli.Addin.Handlers;
 
 public class ElementsController : WebApiController
 {
-    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
+    private readonly IRevitOperations _operations;
 
-    public ElementsController(Func<Action<Action<object?>>, Task<object?>> revitInvoke)
+    public ElementsController(IRevitOperations operations)
     {
-        _revitInvoke = revitInvoke;
+        _operations = operations;
     }
 
     [Route(HttpVerbs.Get, "/elements")]
     public async Task QueryElements([QueryField] string? category, [QueryField] string? filter)
     {
-        var result = await _revitInvoke(setResult =>
-        {
-            // Placeholder: real implementation uses FilteredElementCollector
-            setResult(Array.Empty<ElementInfo>());
-        });
-
-        var elements = (ElementInfo[])result!;
-
+        var elements = await _operations.QueryElementsAsync(category, filter);
         var response = ApiResponse<ElementInfo[]>.Ok(elements);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();
@@ -37,15 +29,8 @@ public class ElementsController : WebApiController
     [Route(HttpVerbs.Get, "/elements/{id}")]
     public async Task GetElement(int id)
     {
-        var result = await _revitInvoke(setResult =>
-        {
-            // Placeholder: real implementation uses doc.GetElement(new ElementId(id))
-            setResult(new ElementInfo { Id = id, Name = $"Element {id}" });
-        });
-
-        var element = (ElementInfo)result!;
-
-        var response = ApiResponse<ElementInfo>.Ok(element);
+        var element = await _operations.GetElementByIdAsync(id);
+        var response = ApiResponse<ElementInfo?>.Ok(element);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();
         await writer.WriteAsync(JsonSerializer.Serialize(response));

@@ -2,8 +2,8 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-using RevitCli.Addin.Bridge;
 using RevitCli.Addin.Server;
+using RevitCli.Addin.Services;
 using RevitCli.Client;
 using RevitCli.Shared;
 using Xunit;
@@ -25,8 +25,8 @@ public class ProtocolTests : IDisposable
     public ProtocolTests()
     {
         _port = GetAvailablePort();
-        var bridge = new RevitBridge();
-        _server = new ApiServer(_port, bridge.InvokeOnMainThreadAsync);
+        var operations = new PlaceholderRevitOperations();
+        _server = new ApiServer(_port, operations);
         _server.Start();
         _client = new RevitClient($"http://localhost:{_port}");
     }

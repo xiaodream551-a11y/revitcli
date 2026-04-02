@@ -17,16 +17,16 @@ public class ApiServer : IDisposable
     private WebServer? _server;
     private CancellationTokenSource? _cts;
     private readonly int _port;
-    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
+    private readonly IRevitOperations _operations;
 
     private static readonly string ServerInfoPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".revitcli", "server.json");
 
-    public ApiServer(int port, Func<Action<Action<object?>>, Task<object?>> revitInvoke)
+    public ApiServer(int port, IRevitOperations operations)
     {
         _port = port;
-        _revitInvoke = revitInvoke;
+        _operations = operations;
     }
 
     public void Start()
@@ -60,11 +60,11 @@ public class ApiServer : IDisposable
                 .WithUrlPrefix($"http://localhost:{port}/")
                 .WithMode(HttpListenerMode.EmbedIO))
             .WithWebApi("/api", m => m
-                .WithController(() => new StatusController(_revitInvoke))
-                .WithController(() => new ElementsController(_revitInvoke))
-                .WithController(() => new ExportController(_revitInvoke))
-                .WithController(() => new SetController(_revitInvoke))
-                .WithController(() => new AuditController(_revitInvoke)))
+                .WithController(() => new StatusController(_operations))
+                .WithController(() => new ElementsController(_operations))
+                .WithController(() => new ExportController(_operations))
+                .WithController(() => new SetController(_operations))
+                .WithController(() => new AuditController(_operations)))
             .WithModule(new ActionModule("/", HttpVerbs.Any, ctx =>
             {
                 ctx.Response.StatusCode = 404;

@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EmbedIO;
@@ -10,27 +9,20 @@ namespace RevitCli.Addin.Handlers;
 
 public class SetController : WebApiController
 {
-    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
+    private readonly IRevitOperations _operations;
 
-    public SetController(Func<Action<Action<object?>>, Task<object?>> revitInvoke)
+    public SetController(IRevitOperations operations)
     {
-        _revitInvoke = revitInvoke;
+        _operations = operations;
     }
 
     [Route(HttpVerbs.Post, "/elements/set")]
     public async Task SetParameter()
     {
         var body = await HttpContext.GetRequestBodyAsStringAsync();
-        var request = JsonSerializer.Deserialize<SetRequest>(body);
+        var request = JsonSerializer.Deserialize<SetRequest>(body)!;
 
-        var result = await _revitInvoke(setResult =>
-        {
-            // Placeholder: real implementation uses Transaction to modify parameters
-            setResult(new SetResult { Affected = 0 });
-        });
-
-        var data = (SetResult)result!;
-
+        var data = await _operations.SetParametersAsync(request);
         var response = ApiResponse<SetResult>.Ok(data);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();

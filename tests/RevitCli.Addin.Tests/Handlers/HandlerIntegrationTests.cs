@@ -1,84 +1,90 @@
-using RevitCli.Addin.Bridge;
+using RevitCli.Addin.Services;
 using RevitCli.Shared;
 
 namespace RevitCli.Addin.Tests.Handlers;
 
 public class HandlerIntegrationTests
 {
+    private readonly PlaceholderRevitOperations _operations = new();
+
     [Fact]
-    public async Task StatusHandler_ReturnsStatusInfo()
+    public async Task GetStatusAsync_ReturnsStatusInfo()
     {
-        var bridge = new RevitBridge();
+        var status = await _operations.GetStatusAsync();
 
-        // Simulate what StatusController does
-        var result = await bridge.InvokeOnMainThreadAsync(setResult =>
-        {
-            setResult(new StatusInfo
-            {
-                RevitVersion = "2025",
-                DocumentName = "Test.rvt"
-            });
-        });
-
-        var status = (StatusInfo)result!;
         Assert.Equal("2025", status.RevitVersion);
-        Assert.Equal("Test.rvt", status.DocumentName);
+        Assert.Equal("Placeholder.rvt", status.DocumentName);
     }
 
     [Fact]
-    public async Task ElementsHandler_ReturnsElementArray()
+    public async Task QueryElementsAsync_ReturnsEmptyArray()
     {
-        var bridge = new RevitBridge();
+        var elements = await _operations.QueryElementsAsync("Walls", null);
 
-        var result = await bridge.InvokeOnMainThreadAsync(setResult =>
-        {
-            setResult(new[] { new ElementInfo { Id = 1, Name = "Wall 1", Category = "Walls" } });
-        });
-
-        var elements = (ElementInfo[])result!;
-        Assert.Single(elements);
-        Assert.Equal("Wall 1", elements[0].Name);
+        Assert.Empty(elements);
     }
 
     [Fact]
-    public async Task SetHandler_ReturnsDryRunResult()
+    public async Task GetElementByIdAsync_ReturnsElementWithId()
     {
-        var bridge = new RevitBridge();
+        var element = await _operations.GetElementByIdAsync(42);
 
-        var result = await bridge.InvokeOnMainThreadAsync(setResult =>
-        {
-            setResult(new SetResult
-            {
-                Affected = 3,
-                Preview = new List<SetPreviewItem>
-                {
-                    new() { Id = 100, Name = "Door 1", OldValue = "30min", NewValue = "60min" }
-                }
-            });
-        });
-
-        var setData = (SetResult)result!;
-        Assert.Equal(3, setData.Affected);
-        Assert.Single(setData.Preview);
+        Assert.NotNull(element);
+        Assert.Equal(42, element.Id);
+        Assert.Equal("Element 42", element.Name);
     }
 
     [Fact]
-    public async Task ExportHandler_ReturnsProgress()
+    public async Task ExportAsync_ReturnsCompletedProgress()
     {
-        var bridge = new RevitBridge();
-
-        var result = await bridge.InvokeOnMainThreadAsync(setResult =>
+        var request = new ExportRequest
         {
-            setResult(new ExportProgress
-            {
-                TaskId = "test-123",
-                Status = "completed",
-                Progress = 100
-            });
-        });
+            Format = "dwg",
+            Sheets = new() { "A1" },
+            OutputDir = "/tmp"
+        };
 
-        var progress = (ExportProgress)result!;
+        var progress = await _operations.ExportAsync(request);
+
+        Assert.Equal("completed", progress.Status);
+        Assert.Equal(100, progress.Progress);
+        Assert.False(string.IsNullOrEmpty(progress.TaskId));
+    }
+
+    [Fact]
+    public async Task GetExportProgressAsync_ReturnsProgressForTaskId()
+    {
+        var progress = await _operations.GetExportProgressAsync("test-123");
+
         Assert.Equal("test-123", progress.TaskId);
         Assert.Equal("completed", progress.Status);
+    }
+
+    [Fact]
+    public async Task SetParametersAsync_ReturnsZeroAffected()
+    {
+        var request = new SetRequest
+        {
+            Category = "doors",
+            Param = "Fire Rating",
+            Value = "60min",
+            DryRun = true
+        };
+
+        var result = await _operations.SetParametersAsync(request);
+
+        Assert.Equal(0, result.Affected);
+    }
+
+    [Fact]
+    public async Task RunAuditAsync_ReturnsPlaceholderResult()
+    {
+        var request = new AuditRequest { Rules = new() { "naming" } };
+
+        var result = await _operations.RunAuditAsync(request);
+
+        Assert.Equal(5, result.Passed);
+        Assert.Equal(0, result.Failed);
+        Assert.Empty(result.Issues);
     }
 }
