@@ -46,13 +46,13 @@ public static class AuditCommand
                 return;
             }
 
-            await ExecuteAsync(client, rules, Console.Out);
+            Environment.ExitCode = await ExecuteAsync(client, rules, Console.Out);
         }, rulesOpt, listOpt);
 
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, string? rules, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? rules, TextWriter output)
     {
         var ruleList = rules?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                            .ToList() ?? AvailableRules.ToList();
@@ -62,7 +62,7 @@ public static class AuditCommand
         {
             await output.WriteLineAsync($"Error: unknown rule(s): {string.Join(", ", invalidRules)}");
             await output.WriteLineAsync($"Available rules: {string.Join(", ", AvailableRules)}");
-            return;
+            return 1;
         }
 
         var request = new AuditRequest { Rules = ruleList };
@@ -71,7 +71,7 @@ public static class AuditCommand
         if (!result.Success)
         {
             await output.WriteLineAsync($"Error: {result.Error}");
-            return;
+            return 1;
         }
 
         var data = result.Data!;
@@ -83,5 +83,6 @@ public static class AuditCommand
             var elementRef = issue.ElementId.HasValue ? $" [Element {issue.ElementId}]" : "";
             await output.WriteLineAsync($"  [{prefix}] {issue.Rule}: {issue.Message}{elementRef}");
         }
+        return 0;
     }
 }

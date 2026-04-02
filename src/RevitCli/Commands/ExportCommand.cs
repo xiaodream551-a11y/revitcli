@@ -30,13 +30,14 @@ public static class ExportCommand
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                await ExecuteAsync(client, format, sheets, outputDir, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, format, sheets, outputDir, Console.Out);
                 return;
             }
 
             if (string.IsNullOrEmpty(format) || !ValidFormats.Contains(format.ToLower()))
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] --format must be one of: {string.Join(", ", ValidFormats)}");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -51,6 +52,7 @@ public static class ExportCommand
             if (!result.Success)
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -90,22 +92,30 @@ public static class ExportCommand
                 });
 
             if (progress.Status == "completed")
+            {
                 AnsiConsole.MarkupLine("[green]Export completed.[/]");
+            }
             else if (progress.Status == "failed")
+            {
                 AnsiConsole.MarkupLine($"[red]Export failed:[/] {Markup.Escape(progress.Message ?? "Unknown error")}");
+                Environment.ExitCode = 1;
+            }
             else
+            {
                 AnsiConsole.MarkupLine("[red]Export status unknown:[/] lost connection to Revit.");
+                Environment.ExitCode = 1;
+            }
         }, formatOpt, sheetsOpt, outputDirOpt);
 
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, string format, string[] sheets, string outputDir, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string format, string[] sheets, string outputDir, TextWriter output)
     {
         if (string.IsNullOrEmpty(format) || !ValidFormats.Contains(format.ToLower()))
         {
             await output.WriteLineAsync($"Error: --format must be one of: {string.Join(", ", ValidFormats)}");
-            return;
+            return 1;
         }
 
         var request = new ExportRequest
@@ -120,14 +130,14 @@ public static class ExportCommand
         if (!result.Success)
         {
             await output.WriteLineAsync($"Error: {result.Error}");
-            return;
+            return 1;
         }
 
         var progress = result.Data!;
         if (progress.Status == "completed")
         {
             await output.WriteLineAsync($"Export completed. Task ID: {progress.TaskId}");
-            return;
+            return 0;
         }
 
         await output.WriteLineAsync($"Export started. Task ID: {progress.TaskId}");
@@ -143,8 +153,13 @@ public static class ExportCommand
         }
 
         if (progress.Status == "completed")
+        {
             await output.WriteLineAsync("Export completed.");
-        else if (progress.Status == "failed")
+            return 0;
+        }
+
+        if (progress.Status == "failed")
             await output.WriteLineAsync($"Export failed: {progress.Message}");
+        return 1;
     }
 }

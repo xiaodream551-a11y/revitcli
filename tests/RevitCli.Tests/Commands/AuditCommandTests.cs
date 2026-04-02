@@ -22,11 +22,12 @@ public class AuditCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await AuditCommand.ExecuteAsync(client, null, writer);
+        var exitCode = await AuditCommand.ExecuteAsync(client, null, writer);
 
         var output = writer.ToString();
         Assert.Contains("5 passed", output);
         Assert.Contains("0 failed", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -47,7 +48,7 @@ public class AuditCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await AuditCommand.ExecuteAsync(client, "naming,clash", writer);
+        var exitCode = await AuditCommand.ExecuteAsync(client, "naming,clash", writer);
 
         var output = writer.ToString();
         Assert.Contains("3 passed", output);
@@ -55,6 +56,7 @@ public class AuditCommandTests
         Assert.Contains("[ERROR]", output);
         Assert.Contains("[WARN]", output);
         Assert.Contains("Element 100", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -64,8 +66,9 @@ public class AuditCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await AuditCommand.ExecuteAsync(client, "nonexistent", writer);
+        var exitCode = await AuditCommand.ExecuteAsync(client, "nonexistent", writer);
 
         Assert.Contains("unknown rule", writer.ToString().ToLower());
+        Assert.Equal(1, exitCode);
     }
 }

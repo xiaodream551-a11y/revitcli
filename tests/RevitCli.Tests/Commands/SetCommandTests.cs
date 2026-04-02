@@ -30,13 +30,14 @@ public class SetCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await SetCommand.ExecuteAsync(client, "doors", null, null, "Fire Rating", "60min", true, writer);
+        var exitCode = await SetCommand.ExecuteAsync(client, "doors", null, null, "Fire Rating", "60min", true, writer);
 
         var output = writer.ToString();
         Assert.Contains("2 element(s)", output);
         Assert.Contains("Door 1", output);
         Assert.Contains("30min", output);
         Assert.Contains("60min", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -46,9 +47,10 @@ public class SetCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await SetCommand.ExecuteAsync(client, "doors", null, null, null!, "60min", false, writer);
+        var exitCode = await SetCommand.ExecuteAsync(client, "doors", null, null, null!, "60min", false, writer);
 
         Assert.Contains("--param", writer.ToString().ToLower());
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]
@@ -58,8 +60,9 @@ public class SetCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await SetCommand.ExecuteAsync(client, null, null, null, "Mark", "W-01", false, writer);
+        var exitCode = await SetCommand.ExecuteAsync(client, null, null, null, "Mark", "W-01", false, writer);
 
         Assert.Contains("category", writer.ToString().ToLower());
+        Assert.Equal(1, exitCode);
     }
 }

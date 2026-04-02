@@ -30,10 +30,11 @@ public class QueryCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await QueryCommand.ExecuteAsync(client, "walls", null, null, "table", writer);
+        var exitCode = await QueryCommand.ExecuteAsync(client, "walls", null, null, "table", writer);
 
         var output = writer.ToString();
         Assert.Contains("Wall 1", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -49,10 +50,11 @@ public class QueryCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await QueryCommand.ExecuteAsync(client, null, null, 100, "json", writer);
+        var exitCode = await QueryCommand.ExecuteAsync(client, null, null, 100, "json", writer);
 
         var output = writer.ToString();
         Assert.Contains("\"id\": 100", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -63,8 +65,9 @@ public class QueryCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await QueryCommand.ExecuteAsync(client, "walls", null, null, "table", writer);
+        var exitCode = await QueryCommand.ExecuteAsync(client, "walls", null, null, "table", writer);
 
         Assert.Contains("No elements matched", writer.ToString());
+        Assert.Equal(0, exitCode);
     }
 }

@@ -17,7 +17,7 @@ public static class StatusCommand
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                await ExecuteAsync(client, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, Console.Out);
                 return;
             }
 
@@ -25,6 +25,7 @@ public static class StatusCommand
             if (!result.Success)
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -43,14 +44,14 @@ public static class StatusCommand
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, TextWriter output)
     {
         var result = await client.GetStatusAsync();
 
         if (!result.Success)
         {
             await output.WriteLineAsync($"Error: {result.Error}");
-            return;
+            return 1;
         }
 
         var status = result.Data!;
@@ -65,5 +66,6 @@ public static class StatusCommand
         {
             await output.WriteLineAsync("Document:      (none open)");
         }
+        return 0;
     }
 }

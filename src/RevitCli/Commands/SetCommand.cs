@@ -29,19 +29,21 @@ public static class SetCommand
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                await ExecuteAsync(client, category, filter, id, param, value, dryRun, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, param, value, dryRun, Console.Out);
                 return;
             }
 
             if (string.IsNullOrEmpty(param))
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] --param is required.");
+                Environment.ExitCode = 1;
                 return;
             }
 
             if (category == null && !id.HasValue)
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id to target elements.");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -60,6 +62,7 @@ public static class SetCommand
             if (!result.Success)
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -92,18 +95,18 @@ public static class SetCommand
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string param, string value, bool dryRun, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string param, string value, bool dryRun, TextWriter output)
     {
         if (string.IsNullOrEmpty(param))
         {
             await output.WriteLineAsync("Error: --param is required.");
-            return;
+            return 1;
         }
 
         if (category == null && !id.HasValue)
         {
             await output.WriteLineAsync("Error: provide a category or --id to target elements.");
-            return;
+            return 1;
         }
 
         var request = new SetRequest
@@ -121,7 +124,7 @@ public static class SetCommand
         if (!result.Success)
         {
             await output.WriteLineAsync($"Error: {result.Error}");
-            return;
+            return 1;
         }
 
         var data = result.Data!;
@@ -131,9 +134,10 @@ public static class SetCommand
             await output.WriteLineAsync($"Dry run: {data.Affected} element(s) would be modified.");
             foreach (var item in data.Preview)
                 await output.WriteLineAsync($"  [{item.Id}] {item.Name}: \"{item.OldValue}\" -> \"{item.NewValue}\"");
-            return;
+            return 0;
         }
 
         await output.WriteLineAsync($"Modified {data.Affected} element(s).");
+        return 0;
     }
 }

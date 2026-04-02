@@ -21,10 +21,11 @@ public class ExportCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await ExportCommand.ExecuteAsync(client, "dwg", new[] { "A1*" }, "./exports", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, "dwg", new[] { "A1*" }, "./exports", writer);
 
         var output = writer.ToString();
         Assert.Contains("task-001", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -34,9 +35,10 @@ public class ExportCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await ExportCommand.ExecuteAsync(client, "dwg", new[] { "all" }, "./exports", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, "dwg", new[] { "all" }, "./exports", writer);
 
         Assert.Contains("not running", writer.ToString().ToLower());
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]
@@ -46,8 +48,9 @@ public class ExportCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await ExportCommand.ExecuteAsync(client, null!, new[] { "all" }, "./exports", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, null!, new[] { "all" }, "./exports", writer);
 
         Assert.Contains("--format", writer.ToString().ToLower());
+        Assert.Equal(1, exitCode);
     }
 }

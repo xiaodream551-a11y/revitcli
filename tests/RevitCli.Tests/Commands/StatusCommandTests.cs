@@ -21,11 +21,12 @@ public class StatusCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await StatusCommand.ExecuteAsync(client, writer);
+        var exitCode = await StatusCommand.ExecuteAsync(client, writer);
 
         var output = writer.ToString();
         Assert.Contains("2025", output);
         Assert.Contains("Test.rvt", output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
@@ -35,9 +36,10 @@ public class StatusCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        await StatusCommand.ExecuteAsync(client, writer);
+        var exitCode = await StatusCommand.ExecuteAsync(client, writer);
 
         var output = writer.ToString();
         Assert.Contains("not running", output.ToLower());
+        Assert.Equal(1, exitCode);
     }
 }

@@ -21,7 +21,7 @@ public static class DoctorCommand
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                await ExecuteAsync(client, config, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, config, Console.Out);
                 return;
             }
 
@@ -31,7 +31,7 @@ public static class DoctorCommand
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, CliConfig config, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, CliConfig config, TextWriter output)
     {
         // 1. Config file
         var configPath = Path.Combine(
@@ -77,10 +77,12 @@ public static class DoctorCommand
                 await output.WriteLineAsync($"OK: Document: {status.Data.DocumentName}");
             else
                 await output.WriteLineAsync("INFO: No document open");
+            return 0;
         }
         else
         {
             await output.WriteLineAsync($"FAIL: {status.Error}");
+            return 1;
         }
     }
 
@@ -149,6 +151,7 @@ public static class DoctorCommand
         else
         {
             AnsiConsole.MarkupLine($"  [red]\u2717[/] Connection failed: [red]{Markup.Escape(status.Error ?? "Unknown")}[/]");
+            Environment.ExitCode = 1;
         }
 
         AnsiConsole.WriteLine();

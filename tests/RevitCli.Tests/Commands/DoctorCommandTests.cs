@@ -21,11 +21,12 @@ public class DoctorCommandTests
         var config = new CliConfig();
         var writer = new StringWriter();
 
-        await DoctorCommand.ExecuteAsync(client, config, writer);
+        var exitCode = await DoctorCommand.ExecuteAsync(client, config, writer);
 
         var output = writer.ToString();
         Assert.Contains("FAIL", output);
         Assert.Contains("Server URL", output);
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]
@@ -38,10 +39,11 @@ public class DoctorCommandTests
         var config = new CliConfig();
         var writer = new StringWriter();
 
-        await DoctorCommand.ExecuteAsync(client, config, writer);
+        var exitCode = await DoctorCommand.ExecuteAsync(client, config, writer);
 
         var output = writer.ToString();
         Assert.Contains("Connected to Revit 2025", output);
         Assert.Contains("Test.rvt", output);
+        Assert.Equal(0, exitCode);
     }
 }

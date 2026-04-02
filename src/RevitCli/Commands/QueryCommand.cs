@@ -1,3 +1,4 @@
+using System;
 using System.CommandLine;
 using System.IO;
 using System.Threading.Tasks;
@@ -27,7 +28,7 @@ public static class QueryCommand
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                await ExecuteAsync(client, category, filter, id, output, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, output, Console.Out);
                 return;
             }
 
@@ -37,6 +38,7 @@ public static class QueryCommand
                 if (!result.Success)
                 {
                     AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                    Environment.ExitCode = 1;
                     return;
                 }
                 OutputFormatter.WriteElementsToConsole(new[] { result.Data! }, output);
@@ -46,6 +48,7 @@ public static class QueryCommand
             if (category == null)
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -53,6 +56,7 @@ public static class QueryCommand
             if (!queryResult.Success)
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(queryResult.Error ?? "Unknown error")}");
+                Environment.ExitCode = 1;
                 return;
             }
 
@@ -62,7 +66,7 @@ public static class QueryCommand
         return command;
     }
 
-    public static async Task ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string outputFormat, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string outputFormat, TextWriter output)
     {
         if (id.HasValue)
         {
@@ -70,27 +74,28 @@ public static class QueryCommand
             if (!result.Success)
             {
                 await output.WriteLineAsync($"Error: {result.Error}");
-                return;
+                return 1;
             }
             var formatted = OutputFormatter.FormatElements(new[] { result.Data! }, outputFormat);
             await output.WriteLineAsync(formatted);
-            return;
+            return 0;
         }
 
         if (category == null)
         {
             await output.WriteLineAsync("Error: provide a category or --id");
-            return;
+            return 1;
         }
 
         var queryResult = await client.QueryElementsAsync(category, filter);
         if (!queryResult.Success)
         {
             await output.WriteLineAsync($"Error: {queryResult.Error}");
-            return;
+            return 1;
         }
 
         var text = OutputFormatter.FormatElements(queryResult.Data!, outputFormat);
         await output.WriteLineAsync(text);
+        return 0;
     }
 }
