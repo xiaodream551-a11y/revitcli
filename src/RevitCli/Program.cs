@@ -14,6 +14,12 @@ if (args.Length == 1 && args[0] is "--version" or "-v")
     return 0;
 }
 
+// -i: shortcut for interactive mode
+if (args.Length == 1 && args[0] == "-i")
+{
+    args = new[] { "interactive" };
+}
+
 // --verbose: enable HTTP request logging
 if (args.Contains("--verbose"))
 {
@@ -32,4 +38,5 @@ rootCommand.AddCommand(SetCommand.Create(client));
 rootCommand.AddCommand(ConfigCommand.Create());
 rootCommand.AddCommand(AuditCommand.Create(client));
 rootCommand.AddCommand(CompletionsCommand.Create());
+rootCommand.AddCommand(InteractiveCommand.Create(client, config));
 return await rootCommand.InvokeAsync(args);
