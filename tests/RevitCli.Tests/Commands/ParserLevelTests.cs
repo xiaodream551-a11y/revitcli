@@ -11,23 +11,29 @@ using Xunit;
 namespace RevitCli.Tests.Commands;
 
 /// <summary>
-/// Tests that go through Create().InvokeAsync() to verify System.CommandLine parser behavior:
-/// required options, type binding, defaults, and that parser rejection prevents handler execution.
-/// These run with stdout redirected (IsInteractive = false), so Create() delegates to ExecuteAsync().
+/// Tests that go through Create().InvokeAsync() to verify System.CommandLine parser behavior.
+/// Verifies: required options, type binding, defaults, handler wiring, and that parser
+/// rejection prevents handler execution (proven by CallCount==0 AND parser error text).
 /// </summary>
-[Collection("Sequential")] // Environment.ExitCode is process-global
+[Collection("Sequential")] // uses Environment.ExitCode + Console.Out/Error (process-global)
 public class ParserLevelTests : IDisposable
 {
     private readonly int _savedExitCode;
+    private readonly TextWriter _savedOut;
+    private readonly TextWriter _savedError;
 
     public ParserLevelTests()
     {
         _savedExitCode = Environment.ExitCode;
+        _savedOut = Console.Out;
+        _savedError = Console.Error;
         Environment.ExitCode = 0;
     }
 
     public void Dispose()
     {
+        Console.SetOut(_savedOut);
+        Console.SetError(_savedError);
         Environment.ExitCode = _savedExitCode;
     }
 
@@ -39,32 +45,47 @@ public class ParserLevelTests : IDisposable
         return (client, handler);
     }
 
+    private (StringWriter stdout, StringWriter stderr) CaptureConsole()
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+        return (stdout, stderr);
+    }
+
     // ==========================================================
-    // Parser rejection: required options missing → handler NOT called
+    // Parser rejection: required options missing
+    // Proof: exitCode != 0, CallCount == 0, parser error text present
     // ==========================================================
 
     [Fact]
-    public async Task Export_MissingRequiredFormat_ParserRejects_NoHandlerCall()
+    public async Task Export_MissingRequiredFormat_ParserRejects()
     {
         var (client, handler) = CreateClientWithHandler();
         var command = ExportCommand.Create(client, new CliConfig());
+        var (_, stderr) = CaptureConsole();
 
         var exitCode = await command.InvokeAsync(Array.Empty<string>());
 
-        Assert.NotEqual(0, exitCode); // parser itself returns non-zero
-        Assert.Equal(0, handler.CallCount); // handler never executed → no HTTP call
+        Assert.NotEqual(0, exitCode);
+        Assert.Equal(0, handler.CallCount); // handler never executed
+        Assert.Contains("--format", stderr.ToString()); // parser's own error mentions the option
     }
 
     [Fact]
-    public async Task Set_MissingRequiredParamAndValue_ParserRejects_NoHandlerCall()
+    public async Task Set_MissingRequiredOptions_ParserRejects()
     {
         var (client, handler) = CreateClientWithHandler();
         var command = SetCommand.Create(client);
+        var (_, stderr) = CaptureConsole();
 
         var exitCode = await command.InvokeAsync(new[] { "doors" });
 
         Assert.NotEqual(0, exitCode);
         Assert.Equal(0, handler.CallCount);
+        var errText = stderr.ToString();
+        Assert.Contains("--param", errText);
     }
 
     // ==========================================================
@@ -83,144 +104,16 @@ public class ParserLevelTests : IDisposable
         Assert.Equal(0, handler.CallCount);
     }
 
-    // ==========================================================
-    // Default values correctly bound
-    // ==========================================================
-
     [Fact]
-    public async Task Query_DefaultOutput_UsesConfigValue()
+    public async Task Set_InvalidIdType_ParserRejects()
     {
-        var elements = new[] { new ElementInfo { Id = 1, Name = "Wall 1", Category = "Walls" } };
-        var response = ApiResponse<ElementInfo[]>.Ok(elements);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
-        var config = new CliConfig { DefaultOutput = "json" };
-        var command = QueryCommand.Create(client, config);
-
-        // Capture stdout
-        var originalOut = Console.Out;
-        var sw = new StringWriter();
-        Console.SetOut(sw);
-        try
-        {
-            var exitCode = await command.InvokeAsync(new[] { "walls" });
-            var output = sw.ToString();
-
-            Assert.Equal(0, Environment.ExitCode);
-            Assert.Equal(1, handler.CallCount);
-            // JSON output proves the default "json" from config was used
-            Assert.Contains("\"id\":", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-        }
-    }
-
-    [Fact]
-    public async Task Set_DryRunFlag_SentInRequest()
-    {
-        var result = new SetResult { Affected = 0 };
-        var response = ApiResponse<SetResult>.Ok(result);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var (client, handler) = CreateClientWithHandler();
         var command = SetCommand.Create(client);
 
-        var originalOut = Console.Out;
-        var sw = new StringWriter();
-        Console.SetOut(sw);
-        try
-        {
-            await command.InvokeAsync(new[] { "doors", "--param", "Mark", "--value", "D-01", "--dry-run" });
-            var output = sw.ToString();
+        var exitCode = await command.InvokeAsync(new[] { "doors", "--param", "Mark", "--value", "X", "--id", "abc" });
 
-            Assert.Equal(0, Environment.ExitCode);
-            Assert.Equal(1, handler.CallCount);
-            // Dry-run output proves the flag was parsed and passed through
-            Assert.Contains("dry run", output.ToLower());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-        }
-    }
-
-    // ==========================================================
-    // Handler wiring: correct endpoints called
-    // ==========================================================
-
-    [Fact]
-    public async Task Status_ViaParser_CallsStatusEndpoint()
-    {
-        var status = new StatusInfo { RevitVersion = "2025", DocumentName = "Test.rvt" };
-        var response = ApiResponse<StatusInfo>.Ok(status);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
-        var command = StatusCommand.Create(client);
-
-        await command.InvokeAsync(Array.Empty<string>());
-
-        Assert.Equal(0, Environment.ExitCode);
-        Assert.Equal(1, handler.CallCount);
-        Assert.Contains("/api/status", handler.LastRequestUri!);
-    }
-
-    [Fact]
-    public async Task Query_WithId_CallsElementByIdEndpoint()
-    {
-        var element = new ElementInfo { Id = 42, Name = "Element 42" };
-        var response = ApiResponse<ElementInfo>.Ok(element);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
-        var command = QueryCommand.Create(client, new CliConfig());
-
-        await command.InvokeAsync(new[] { "--id", "42" });
-
-        Assert.Equal(0, Environment.ExitCode);
-        Assert.Equal(1, handler.CallCount);
-        Assert.Contains("/api/elements/42", handler.LastRequestUri!);
-    }
-
-    [Fact]
-    public async Task Query_WithCategory_CallsElementsEndpoint()
-    {
-        var elements = Array.Empty<ElementInfo>();
-        var response = ApiResponse<ElementInfo[]>.Ok(elements);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
-        var command = QueryCommand.Create(client, new CliConfig());
-
-        await command.InvokeAsync(new[] { "walls" });
-
-        Assert.Equal(0, Environment.ExitCode);
-        Assert.Equal(1, handler.CallCount);
-        Assert.Contains("category=walls", handler.LastRequestUri!);
-    }
-
-    [Fact]
-    public async Task Export_WithFormat_CallsExportEndpoint()
-    {
-        var progress = new ExportProgress { TaskId = "t1", Status = "completed", Progress = 100 };
-        var response = ApiResponse<ExportProgress>.Ok(progress);
-        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
-        var command = ExportCommand.Create(client, new CliConfig());
-
-        await command.InvokeAsync(new[] { "--format", "dwg" });
-
-        Assert.Equal(0, Environment.ExitCode);
-        Assert.Equal(1, handler.CallCount);
-        Assert.Contains("/api/export", handler.LastRequestUri!);
-    }
-
-    // ==========================================================
-    // Error propagation: server down → non-zero exit
-    // ==========================================================
-
-    [Fact]
-    public async Task Status_ServerDown_SetsExitCode1()
-    {
-        var (client, handler) = CreateClientWithHandler(throwException: true);
-        var command = StatusCommand.Create(client);
-
-        await command.InvokeAsync(Array.Empty<string>());
-
-        Assert.Equal(1, Environment.ExitCode);
-        Assert.Equal(1, handler.CallCount); // handler DID execute, just failed
+        Assert.NotEqual(0, exitCode);
+        Assert.Equal(0, handler.CallCount);
     }
 
     // ==========================================================
@@ -231,6 +124,18 @@ public class ParserLevelTests : IDisposable
     public async Task Completions_MissingShellArg_ParserRejects()
     {
         var command = CompletionsCommand.Create();
+        var (_, stderr) = CaptureConsole();
+
+        var exitCode = await command.InvokeAsync(Array.Empty<string>());
+
+        Assert.NotEqual(0, exitCode);
+    }
+
+    [Fact]
+    public async Task Batch_MissingFileArg_ParserRejects()
+    {
+        var (client, _) = CreateClientWithHandler();
+        var command = BatchCommand.Create(client, new CliConfig());
 
         var exitCode = await command.InvokeAsync(Array.Empty<string>());
 
@@ -251,5 +156,130 @@ public class ParserLevelTests : IDisposable
 
         Assert.NotEqual(0, exitCode);
         Assert.Equal(0, handler.CallCount);
+    }
+
+    // ==========================================================
+    // Default values correctly bound (verified via output content)
+    // ==========================================================
+
+    [Fact]
+    public async Task Query_DefaultOutput_UsesConfigValue()
+    {
+        var elements = new[] { new ElementInfo { Id = 1, Name = "Wall 1", Category = "Walls" } };
+        var response = ApiResponse<ElementInfo[]>.Ok(elements);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var config = new CliConfig { DefaultOutput = "json" };
+        var command = QueryCommand.Create(client, config);
+        var (stdout, _) = CaptureConsole();
+
+        await command.InvokeAsync(new[] { "walls" });
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        // JSON output proves config.DefaultOutput = "json" was bound by parser
+        Assert.Contains("\"id\":", stdout.ToString());
+    }
+
+    [Fact]
+    public async Task Set_DryRunFlag_PassedInRequestBody()
+    {
+        var result = new SetResult { Affected = 0 };
+        var response = ApiResponse<SetResult>.Ok(result);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var command = SetCommand.Create(client);
+        CaptureConsole();
+
+        await command.InvokeAsync(new[] { "doors", "--param", "Mark", "--value", "D-01", "--dry-run" });
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        // Verify the request body actually contains dryRun:true
+        Assert.NotNull(handler.LastRequestBody);
+        Assert.Contains("\"dryRun\":true", handler.LastRequestBody!.Replace(" ", ""));
+    }
+
+    // ==========================================================
+    // Handler wiring: correct endpoints called
+    // ==========================================================
+
+    [Fact]
+    public async Task Status_CallsStatusEndpoint()
+    {
+        var status = new StatusInfo { RevitVersion = "2025", DocumentName = "Test.rvt" };
+        var response = ApiResponse<StatusInfo>.Ok(status);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var command = StatusCommand.Create(client);
+        CaptureConsole();
+
+        await command.InvokeAsync(Array.Empty<string>());
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Contains("/api/status", handler.LastRequestUri!);
+    }
+
+    [Fact]
+    public async Task Query_WithId_CallsElementByIdEndpoint()
+    {
+        var element = new ElementInfo { Id = 42, Name = "Element 42" };
+        var response = ApiResponse<ElementInfo>.Ok(element);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var command = QueryCommand.Create(client, new CliConfig());
+        CaptureConsole();
+
+        await command.InvokeAsync(new[] { "--id", "42" });
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Contains("/api/elements/42", handler.LastRequestUri!);
+    }
+
+    [Fact]
+    public async Task Query_WithCategory_CallsElementsEndpoint()
+    {
+        var elements = Array.Empty<ElementInfo>();
+        var response = ApiResponse<ElementInfo[]>.Ok(elements);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var command = QueryCommand.Create(client, new CliConfig());
+        CaptureConsole();
+
+        await command.InvokeAsync(new[] { "walls" });
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Contains("category=walls", handler.LastRequestUri!);
+    }
+
+    [Fact]
+    public async Task Export_WithFormat_CallsExportEndpoint()
+    {
+        var progress = new ExportProgress { TaskId = "t1", Status = "completed", Progress = 100 };
+        var response = ApiResponse<ExportProgress>.Ok(progress);
+        var (client, handler) = CreateClientWithHandler(JsonSerializer.Serialize(response));
+        var command = ExportCommand.Create(client, new CliConfig());
+        CaptureConsole();
+
+        await command.InvokeAsync(new[] { "--format", "dwg" });
+
+        Assert.Equal(0, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Contains("/api/export", handler.LastRequestUri!);
+    }
+
+    // ==========================================================
+    // Error propagation: server down → exit code 1
+    // ==========================================================
+
+    [Fact]
+    public async Task Status_ServerDown_SetsExitCode1()
+    {
+        var (client, handler) = CreateClientWithHandler(throwException: true);
+        var command = StatusCommand.Create(client);
+        CaptureConsole();
+
+        await command.InvokeAsync(Array.Empty<string>());
+
+        Assert.Equal(1, Environment.ExitCode);
+        Assert.Equal(1, handler.CallCount); // handler DID execute, just got connection error
     }
 }
