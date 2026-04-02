@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Linq;
 using RevitCli.Config;
 using Spectre.Console;
 
@@ -43,9 +44,20 @@ public static class ConfigCommand
                     config.ServerUrl = value;
                     break;
                 case "defaultoutput":
-                    config.DefaultOutput = value;
+                    var validFormats = new[] { "table", "json", "csv" };
+                    if (!validFormats.Contains(value.ToLower()))
+                    {
+                        AnsiConsole.MarkupLine($"[red]Invalid format:[/] must be one of: {string.Join(", ", validFormats)}");
+                        return;
+                    }
+                    config.DefaultOutput = value.ToLower();
                     break;
                 case "exportdir":
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        AnsiConsole.MarkupLine("[red]Invalid directory:[/] cannot be empty");
+                        return;
+                    }
                     config.ExportDir = value;
                     break;
                 default:

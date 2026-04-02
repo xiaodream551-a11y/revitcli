@@ -105,7 +105,7 @@ public static class CompletionsCommand
                         _describe 'command' commands
                         ;;
                     args)
-                        case $words[1] in
+                        case $words[2] in
                             query)
                                 _arguments \
                                     '--filter[Filter expression]:filter:' \
