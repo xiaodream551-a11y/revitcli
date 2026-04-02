@@ -41,7 +41,7 @@ public static class CompletionsCommand
         return """
             _revitcli_completions() {
                 local cur="${COMP_WORDS[COMP_CWORD]}"
-                local commands="status query export set config audit completions"
+                local commands="status query export set config audit completions batch"
 
                 if [ $COMP_CWORD -eq 1 ]; then
                     COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -94,6 +94,7 @@ public static class CompletionsCommand
                     'config:View or modify CLI configuration'
                     'audit:Run model checking rules'
                     'completions:Generate shell completion script'
+                    'batch:Execute commands from a JSON batch file'
                 )
 
                 _arguments -C \
@@ -160,6 +161,7 @@ public static class CompletionsCommand
                     'config' = 'View or modify CLI configuration'
                     'audit' = 'Run model checking rules'
                     'completions' = 'Generate shell completion script'
+                    'batch' = 'Execute commands from a JSON batch file'
                 }
 
                 $tokens = $commandAst.ToString().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)

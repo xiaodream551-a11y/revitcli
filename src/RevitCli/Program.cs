@@ -40,4 +40,5 @@ rootCommand.AddCommand(AuditCommand.Create(client));
 rootCommand.AddCommand(CompletionsCommand.Create());
 rootCommand.AddCommand(InteractiveCommand.Create(client, config));
 rootCommand.AddCommand(DoctorCommand.Create(client, config));
+rootCommand.AddCommand(BatchCommand.Create(client, config));
 return await rootCommand.InvokeAsync(args);
