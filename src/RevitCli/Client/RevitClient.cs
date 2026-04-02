@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using RevitCli.Config;
 using RevitCli.Shared;
 
 namespace RevitCli.Client;
@@ -23,6 +25,23 @@ public class RevitClient
     public RevitClient(string baseUrl = "http://localhost:17839")
     {
         _http = new HttpClient { BaseAddress = new System.Uri(baseUrl) };
+    }
+
+    public static string DiscoverServerUrl(string configuredUrl)
+    {
+        try
+        {
+            var serverInfoPath = CliConfig.ServerInfoPath;
+            if (File.Exists(serverInfoPath))
+            {
+                var json = File.ReadAllText(serverInfoPath);
+                var info = JsonSerializer.Deserialize<ServerInfo>(json);
+                if (info != null)
+                    return $"http://localhost:{info.Port}";
+            }
+        }
+        catch { }
+        return configuredUrl;
     }
 
     public async Task<ApiResponse<StatusInfo>> GetStatusAsync()
