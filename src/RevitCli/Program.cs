@@ -8,4 +8,4 @@ rootCommand.AddCommand(StatusCommand.Create(client));
 rootCommand.AddCommand(QueryCommand.Create(client));
 rootCommand.AddCommand(ExportCommand.Create(client));
 rootCommand.AddCommand(SetCommand.Create(client));
-await rootCommand.InvokeAsync(args);
+return await rootCommand.InvokeAsync(args);

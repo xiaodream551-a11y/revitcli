@@ -10,9 +10,9 @@ namespace RevitCli.Addin.Handlers;
 
 public class StatusController : WebApiController
 {
-    private readonly Func<Action<object?>, Task<object?>> _revitInvoke;
+    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
 
-    public StatusController(Func<Action<object?>, Task<object?>> revitInvoke)
+    public StatusController(Func<Action<Action<object?>>, Task<object?>> revitInvoke)
     {
         _revitInvoke = revitInvoke;
     }
@@ -20,13 +20,17 @@ public class StatusController : WebApiController
     [Route(HttpVerbs.Get, "/status")]
     public async Task GetStatus()
     {
-        var result = await _revitInvoke(_ => { });
-
-        var status = result as StatusInfo ?? new StatusInfo
+        var result = await _revitInvoke(setResult =>
         {
-            RevitVersion = "2025",
-            DocumentName = "Placeholder.rvt"
-        };
+            // Placeholder: real implementation reads from Revit Application object
+            setResult(new StatusInfo
+            {
+                RevitVersion = "2025",
+                DocumentName = "Placeholder.rvt"
+            });
+        });
+
+        var status = (StatusInfo)result!;
 
         var response = ApiResponse<StatusInfo>.Ok(status);
         HttpContext.Response.ContentType = "application/json";

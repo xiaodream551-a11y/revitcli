@@ -39,13 +39,20 @@ public static class OutputFormatter
 
         foreach (var el in elements)
         {
-            sb.Append($"{el.Id},{el.Name},{el.Category},{el.TypeName}");
+            sb.Append($"{el.Id},{CsvEscape(el.Name)},{CsvEscape(el.Category)},{CsvEscape(el.TypeName)}");
             foreach (var key in allParamKeys)
-                sb.Append($",{(el.Parameters.TryGetValue(key, out var v) ? v : "")}");
+                sb.Append($",{CsvEscape(el.Parameters.TryGetValue(key, out var v) ? v : "")}");
             sb.AppendLine();
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static string CsvEscape(string value)
+    {
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        return value;
     }
 
     private static string FormatTable(ElementInfo[] elements)

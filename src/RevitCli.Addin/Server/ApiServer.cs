@@ -13,9 +13,9 @@ public class ApiServer : IDisposable
     private WebServer? _server;
     private CancellationTokenSource? _cts;
     private readonly int _port;
-    private readonly Func<Action<object?>, Task<object?>> _revitInvoke;
+    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
 
-    public ApiServer(int port, Func<Action<object?>, Task<object?>> revitInvoke)
+    public ApiServer(int port, Func<Action<Action<object?>>, Task<object?>> revitInvoke)
     {
         _port = port;
         _revitInvoke = revitInvoke;

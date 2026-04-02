@@ -22,11 +22,7 @@ public class RevitCliApp
     {
         _bridge = new RevitBridge();
 
-        // Adapt RevitBridge.InvokeOnMainThreadAsync(Action<Action<object?>>) to
-        // the Func<Action<object?>, Task<object?>> delegate ApiServer expects.
-        // The callback passed by ApiServer is the result-setter; we wrap it so
-        // the bridge's outer action receives it properly.
-        _server = new ApiServer(DefaultPort, callback => _bridge.InvokeOnMainThreadAsync(setResult => callback(setResult)));
+        _server = new ApiServer(DefaultPort, _bridge.InvokeOnMainThreadAsync);
         _server.Start();
 
         Console.WriteLine($"[RevitCli] Server started on port {DefaultPort}");

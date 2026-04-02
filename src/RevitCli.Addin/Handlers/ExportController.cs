@@ -10,9 +10,9 @@ namespace RevitCli.Addin.Handlers;
 
 public class ExportController : WebApiController
 {
-    private readonly Func<Action<object?>, Task<object?>> _revitInvoke;
+    private readonly Func<Action<Action<object?>>, Task<object?>> _revitInvoke;
 
-    public ExportController(Func<Action<object?>, Task<object?>> revitInvoke)
+    public ExportController(Func<Action<Action<object?>>, Task<object?>> revitInvoke)
     {
         _revitInvoke = revitInvoke;
     }
@@ -23,14 +23,18 @@ public class ExportController : WebApiController
         var body = await HttpContext.GetRequestBodyAsStringAsync();
         var request = JsonSerializer.Deserialize<ExportRequest>(body);
 
-        var result = await _revitInvoke(_ => { });
-
-        var progress = result as ExportProgress ?? new ExportProgress
+        var result = await _revitInvoke(setResult =>
         {
-            TaskId = Guid.NewGuid().ToString("N")[..8],
-            Status = "completed",
-            Progress = 100
-        };
+            // Placeholder: real implementation initiates export via Revit API
+            setResult(new ExportProgress
+            {
+                TaskId = Guid.NewGuid().ToString("N")[..8],
+                Status = "completed",
+                Progress = 100
+            });
+        });
+
+        var progress = (ExportProgress)result!;
 
         var response = ApiResponse<ExportProgress>.Ok(progress);
         HttpContext.Response.ContentType = "application/json";

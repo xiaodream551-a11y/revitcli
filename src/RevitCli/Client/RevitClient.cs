@@ -37,6 +37,10 @@ public class RevitClient
         {
             return ApiResponse<StatusInfo>.Fail("Revit is not running or plugin is not loaded.");
         }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<StatusInfo>.Fail($"Communication error: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<ElementInfo[]>> QueryElementsAsync(string? category, string? filter)
@@ -56,6 +60,10 @@ public class RevitClient
         {
             return ApiResponse<ElementInfo[]>.Fail("Revit is not running or plugin is not loaded.");
         }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ElementInfo[]>.Fail($"Communication error: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<ElementInfo>> QueryElementByIdAsync(int id)
@@ -69,6 +77,10 @@ public class RevitClient
         catch (HttpRequestException)
         {
             return ApiResponse<ElementInfo>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ElementInfo>.Fail($"Communication error: {ex.Message}");
         }
     }
 
@@ -88,6 +100,10 @@ public class RevitClient
         {
             return ApiResponse<ExportProgress>.Fail("Revit is not running or plugin is not loaded.");
         }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ExportProgress>.Fail($"Communication error: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<ExportProgress>> GetExportProgressAsync(string taskId)
@@ -101,6 +117,10 @@ public class RevitClient
         catch (HttpRequestException)
         {
             return ApiResponse<ExportProgress>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ExportProgress>.Fail($"Communication error: {ex.Message}");
         }
     }
 
@@ -119,6 +139,10 @@ public class RevitClient
         catch (HttpRequestException)
         {
             return ApiResponse<SetResult>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<SetResult>.Fail($"Communication error: {ex.Message}");
         }
     }
 }
