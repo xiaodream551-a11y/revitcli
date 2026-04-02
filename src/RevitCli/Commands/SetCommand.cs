@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Shared;
+using Spectre.Console;
 
 namespace RevitCli.Commands;
 
@@ -24,7 +25,60 @@ public static class SetCommand
 
         command.SetHandler(async (category, filter, id, param, value, dryRun) =>
         {
-            await ExecuteAsync(client, category, filter, id, param, value, dryRun, Console.Out);
+            if (string.IsNullOrEmpty(param))
+            {
+                AnsiConsole.MarkupLine("[red]Error:[/] --param is required.");
+                return;
+            }
+
+            if (category == null && !id.HasValue)
+            {
+                AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id to target elements.");
+                return;
+            }
+
+            var request = new SetRequest
+            {
+                Category = category,
+                ElementId = id,
+                Filter = filter,
+                Param = param,
+                Value = value,
+                DryRun = dryRun
+            };
+
+            var result = await client.SetParameterAsync(request);
+
+            if (!result.Success)
+            {
+                AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                return;
+            }
+
+            var data = result.Data!;
+
+            if (dryRun)
+            {
+                AnsiConsole.MarkupLine($"[yellow]Dry run:[/] {data.Affected} element(s) would be modified.");
+                if (data.Preview.Count > 0)
+                {
+                    var previewTable = new Table().Border(TableBorder.Rounded);
+                    previewTable.AddColumn("[bold]Id[/]");
+                    previewTable.AddColumn("[bold]Name[/]");
+                    previewTable.AddColumn("[bold]Old Value[/]");
+                    previewTable.AddColumn("[bold]New Value[/]");
+                    foreach (var item in data.Preview)
+                        previewTable.AddRow(
+                            item.Id.ToString(),
+                            Markup.Escape(item.Name),
+                            $"[red]{Markup.Escape(item.OldValue ?? "")}[/]",
+                            $"[green]{Markup.Escape(item.NewValue)}[/]");
+                    AnsiConsole.Write(previewTable);
+                }
+                return;
+            }
+
+            AnsiConsole.MarkupLine($"Modified [green]{data.Affected}[/] element(s).");
         }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt);
 
         return command;

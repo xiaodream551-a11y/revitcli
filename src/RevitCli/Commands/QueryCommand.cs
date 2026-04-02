@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Output;
 using RevitCli.Shared;
+using Spectre.Console;
 
 namespace RevitCli.Commands;
 
@@ -23,7 +24,32 @@ public static class QueryCommand
 
         command.SetHandler(async (category, filter, id, output) =>
         {
-            await ExecuteAsync(client, category, filter, id, output, Console.Out);
+            if (id.HasValue)
+            {
+                var result = await client.QueryElementByIdAsync(id.Value);
+                if (!result.Success)
+                {
+                    AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(result.Error ?? "Unknown error")}");
+                    return;
+                }
+                OutputFormatter.WriteElementsToConsole(new[] { result.Data! }, output);
+                return;
+            }
+
+            if (category == null)
+            {
+                AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id");
+                return;
+            }
+
+            var queryResult = await client.QueryElementsAsync(category, filter);
+            if (!queryResult.Success)
+            {
+                AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(queryResult.Error ?? "Unknown error")}");
+                return;
+            }
+
+            OutputFormatter.WriteElementsToConsole(queryResult.Data!, output);
         }, categoryArg, filterOpt, idOpt, outputOpt);
 
         return command;
