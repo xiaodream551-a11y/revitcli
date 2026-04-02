@@ -7,4 +7,5 @@ var rootCommand = new RootCommand("RevitCli - Command-line interface for Autodes
 rootCommand.AddCommand(StatusCommand.Create(client));
 rootCommand.AddCommand(QueryCommand.Create(client));
 rootCommand.AddCommand(ExportCommand.Create(client));
+rootCommand.AddCommand(SetCommand.Create(client));
 await rootCommand.InvokeAsync(args);
