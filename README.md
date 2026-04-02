@@ -77,6 +77,26 @@ Dry run: 12 element(s) would be modified.
 ╰──────┴──────────┴───────────┴───────────╯
 ```
 
+### Run model audit
+
+```
+$ revitcli audit --list
+╭───────────────────┬─────────────────────────────────────────╮
+│ Rule              │ Description                             │
+├───────────────────┼─────────────────────────────────────────┤
+│ naming            │ Check element naming conventions        │
+│ clash             │ Detect element clashes/intersections    │
+│ room-bounds       │ Verify all rooms are properly bounded   │
+│ level-consistency │ Check level naming and elevation        │
+│ unplaced-rooms    │ Find unplaced room elements             │
+╰───────────────────┴─────────────────────────────────────────╯
+
+$ revitcli audit --rules "naming,clash"
+Audit complete: 3 passed, 2 failed
+  [ERROR] naming: Wall has no mark [Element 201]
+  [WARN] clash: Overlap detected [Element 305]
+```
+
 ## Architecture
 
 ```
@@ -90,7 +110,7 @@ RevitCli consists of two components:
 - **CLI** — A standalone .NET 8 console app that sends commands
 - **Revit Add-in** — A plugin that runs inside Revit, embedding an HTTP server (EmbedIO) to receive and execute commands via the Revit API
 
-## Features (MVP)
+## Features
 
 | Command | Description |
 |---------|-------------|
@@ -98,6 +118,9 @@ RevitCli consists of two components:
 | `revitcli query <category>` | Query elements with optional `--filter`, `--id`, `--output` (table/json/csv) |
 | `revitcli export --format <fmt>` | Batch export sheets (DWG, PDF, IFC) |
 | `revitcli set <category> --param <name> --value <val>` | Modify parameters with `--dry-run` preview |
+| `revitcli config show/set` | View or modify CLI configuration |
+| `revitcli audit` | Run model checking rules |
+| `revitcli completions <shell>` | Generate shell completion script |
 
 ## Requirements
 
@@ -116,6 +139,12 @@ dotnet test
 ### CLI
 
 ```bash
+dotnet tool install --global RevitCli
+```
+
+Or build from source:
+
+```bash
 dotnet publish src/RevitCli -c Release -o ./publish
 ```
 
@@ -128,13 +157,38 @@ Add the `publish` directory to your PATH.
    - `%APPDATA%\Autodesk\Revit\Addins\<version>\`
 3. Restart Revit
 
+## Configuration
+
+RevitCli stores settings in `~/.revitcli/config.json`.
+
+```bash
+revitcli config show                          # View current settings
+revitcli config set serverUrl http://localhost:9999
+revitcli config set defaultOutput json         # Default output format for query
+revitcli config set exportDir ./my-exports     # Default export directory
+```
+
+## Shell Completions
+
+```bash
+# Bash
+revitcli completions bash >> ~/.bashrc
+
+# Zsh
+revitcli completions zsh >> ~/.zshrc
+
+# PowerShell
+revitcli completions powershell >> $PROFILE
+```
+
 ## Project Structure
 
 ```
 src/RevitCli/              # CLI console app
+src/RevitCli/Config/       # Configuration management
 src/RevitCli.Addin/        # Revit add-in with embedded HTTP server
 shared/RevitCli.Shared/    # Shared DTOs
-tests/                     # Unit tests (32 tests)
+tests/                     # Unit tests (40 tests)
 ```
 
 ## License

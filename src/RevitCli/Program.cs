@@ -13,4 +13,5 @@ rootCommand.AddCommand(ExportCommand.Create(client, config));
 rootCommand.AddCommand(SetCommand.Create(client));
 rootCommand.AddCommand(ConfigCommand.Create());
 rootCommand.AddCommand(AuditCommand.Create(client));
+rootCommand.AddCommand(CompletionsCommand.Create());
 return await rootCommand.InvokeAsync(args);
