@@ -1,7 +1,9 @@
+using System;
 using System.CommandLine;
 using System.IO;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Output;
 using RevitCli.Shared;
 using Spectre.Console;
 
@@ -25,6 +27,12 @@ public static class SetCommand
 
         command.SetHandler(async (category, filter, id, param, value, dryRun) =>
         {
+            if (!ConsoleHelper.IsInteractive)
+            {
+                await ExecuteAsync(client, category, filter, id, param, value, dryRun, Console.Out);
+                return;
+            }
+
             if (string.IsNullOrEmpty(param))
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] --param is required.");

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Output;
 using RevitCli.Shared;
 using Spectre.Console;
 
@@ -27,6 +28,12 @@ public static class AuditCommand
         {
             if (list)
             {
+                if (!ConsoleHelper.IsInteractive)
+                {
+                    Console.WriteLine("Available rules: naming, clash, room-bounds, level-consistency, unplaced-rooms");
+                    return;
+                }
+
                 var table = new Table().Border(TableBorder.Rounded);
                 table.AddColumn("[bold]Rule[/]");
                 table.AddColumn("[bold]Description[/]");

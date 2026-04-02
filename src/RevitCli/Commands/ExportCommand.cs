@@ -1,9 +1,11 @@
+using System;
 using System.CommandLine;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Config;
+using RevitCli.Output;
 using RevitCli.Shared;
 using Spectre.Console;
 
@@ -26,6 +28,12 @@ public static class ExportCommand
 
         command.SetHandler(async (format, sheets, outputDir) =>
         {
+            if (!ConsoleHelper.IsInteractive)
+            {
+                await ExecuteAsync(client, format, sheets, outputDir, Console.Out);
+                return;
+            }
+
             if (string.IsNullOrEmpty(format) || !ValidFormats.Contains(format.ToLower()))
             {
                 AnsiConsole.MarkupLine($"[red]Error:[/] --format must be one of: {string.Join(", ", ValidFormats)}");

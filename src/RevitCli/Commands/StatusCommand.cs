@@ -1,7 +1,9 @@
+using System;
 using System.CommandLine;
 using System.IO;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Output;
 using Spectre.Console;
 
 namespace RevitCli.Commands;
@@ -13,6 +15,12 @@ public static class StatusCommand
         var command = new Command("status", "Check if Revit plugin is online");
         command.SetHandler(async () =>
         {
+            if (!ConsoleHelper.IsInteractive)
+            {
+                await ExecuteAsync(client, Console.Out);
+                return;
+            }
+
             var result = await client.GetStatusAsync();
             if (!result.Success)
             {

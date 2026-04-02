@@ -25,6 +25,12 @@ public static class QueryCommand
 
         command.SetHandler(async (category, filter, id, output) =>
         {
+            if (!ConsoleHelper.IsInteractive)
+            {
+                await ExecuteAsync(client, category, filter, id, output, Console.Out);
+                return;
+            }
+
             if (id.HasValue)
             {
                 var result = await client.QueryElementByIdAsync(id.Value);
