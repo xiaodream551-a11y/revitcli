@@ -41,7 +41,7 @@ public static class CompletionsCommand
         return """
             _revitcli_completions() {
                 local cur="${COMP_WORDS[COMP_CWORD]}"
-                local commands="status query export set config audit completions batch"
+                local commands="status query export set config audit completions batch doctor interactive"
 
                 if [ $COMP_CWORD -eq 1 ]; then
                     COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -95,6 +95,8 @@ public static class CompletionsCommand
                     'audit:Run model checking rules'
                     'completions:Generate shell completion script'
                     'batch:Execute commands from a JSON batch file'
+                    'doctor:Check RevitCli setup and diagnose issues'
+                    'interactive:Enter interactive REPL mode'
                 )
 
                 _arguments -C \
@@ -162,6 +164,8 @@ public static class CompletionsCommand
                     'audit' = 'Run model checking rules'
                     'completions' = 'Generate shell completion script'
                     'batch' = 'Execute commands from a JSON batch file'
+                    'doctor' = 'Check RevitCli setup and diagnose issues'
+                    'interactive' = 'Enter interactive REPL mode'
                 }
 
                 $tokens = $commandAst.ToString().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)

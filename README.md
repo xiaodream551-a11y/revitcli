@@ -3,7 +3,7 @@
 Command-line interface for Autodesk Revit. Query elements, batch export, and modify parameters — all from your terminal.
 
 > **Status: Early Development (v0.1.0-alpha)**
-> CLI framework and add-in architecture are complete. Revit API integration is pending — all add-in handlers currently return placeholder data. See [Roadmap](#roadmap) for next steps.
+> CLI skeleton is complete; add-in protocol scaffold exists, but Revit lifecycle and thread integration are unfinished. All add-in handlers currently return placeholder data. See [Roadmap](#roadmap) for next steps.
 
 ```bash
 revitcli status
@@ -33,10 +33,10 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP Server)
 | `revitcli set` | Yes | Placeholder |
 | `revitcli audit` | Yes | Placeholder |
 | `revitcli config show/set` | Yes | N/A |
-| `revitcli doctor` | Yes | N/A |
-| `revitcli batch <file>` | Yes | N/A |
+| `revitcli doctor` | Yes | Tests add-in connection |
+| `revitcli batch <file>` | Yes | Depends on subcommands |
 | `revitcli completions <shell>` | Yes | N/A |
-| `revitcli interactive` / `-i` | Yes | N/A |
+| `revitcli interactive` / `-i` | Yes | Depends on invoked commands |
 
 "Placeholder" means the CLI command works end-to-end, but the add-in returns hardcoded test data instead of real Revit model data.
 
@@ -47,7 +47,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP Server)
 - Pipe-friendly output (auto TTY detection)
 - Configuration system (`~/.revitcli/config.json`)
 - Port discovery (`~/.revitcli/server.json` with PID validation)
-- Shell completions (bash/zsh/PowerShell)
+- Shell completions (bash/zsh/PowerShell, partial — `doctor` and `interactive` not yet included)
 - Interactive REPL mode
 - Batch execution from JSON files
 - Non-zero exit codes on errors
@@ -120,7 +120,7 @@ revitcli completions powershell >> $PROFILE
 
 ## Roadmap
 
-See [docs/revitcli-shortest-roadmap.md](docs/revitcli-shortest-roadmap.md) for the full plan.
+See [docs/superpowers/plans/2026-04-02-revitcli.md](docs/superpowers/plans/2026-04-02-revitcli.md) for the implementation plan.
 
 **Next milestone: v0.1.0 (Real Revit Integration)**
 
@@ -137,8 +137,8 @@ src/RevitCli/              # CLI console app (net8.0)
 src/RevitCli/Config/       # Configuration management
 src/RevitCli.Addin/        # Revit add-in with embedded HTTP server
 shared/RevitCli.Shared/    # Shared DTOs (netstandard2.0)
-tests/RevitCli.Tests/      # CLI unit tests (38 tests)
-tests/RevitCli.Addin.Tests/ # Add-in + integration tests (14 tests + 6 e2e)
+tests/RevitCli.Tests/      # CLI unit tests (44 tests)
+tests/RevitCli.Addin.Tests/ # Add-in + integration tests (14 tests, including 6 e2e)
 ```
 
 ## Publishing
