@@ -63,7 +63,8 @@ public class ApiServer : IDisposable
                 .WithController(() => new StatusController(_revitInvoke))
                 .WithController(() => new ElementsController(_revitInvoke))
                 .WithController(() => new ExportController(_revitInvoke))
-                .WithController(() => new SetController(_revitInvoke)))
+                .WithController(() => new SetController(_revitInvoke))
+                .WithController(() => new AuditController(_revitInvoke)))
             .WithModule(new ActionModule("/", HttpVerbs.Any, ctx =>
             {
                 ctx.Response.StatusCode = 404;

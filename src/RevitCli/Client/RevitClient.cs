@@ -164,4 +164,26 @@ public class RevitClient
             return ApiResponse<SetResult>.Fail($"Communication error: {ex.Message}");
         }
     }
+
+    public async Task<ApiResponse<AuditResult>> AuditAsync(AuditRequest request)
+    {
+        try
+        {
+            var content = new StringContent(
+                JsonSerializer.Serialize(request),
+                Encoding.UTF8,
+                "application/json");
+            var response = await _http.PostAsync("/api/audit", content);
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<ApiResponse<AuditResult>>(json, JsonOptions)!;
+        }
+        catch (HttpRequestException)
+        {
+            return ApiResponse<AuditResult>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<AuditResult>.Fail($"Communication error: {ex.Message}");
+        }
+    }
 }
