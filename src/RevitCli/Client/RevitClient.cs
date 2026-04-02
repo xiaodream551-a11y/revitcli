@@ -17,6 +17,18 @@ public class RevitClient
         PropertyNameCaseInsensitive = true
     };
 
+    public static bool Verbose { get; set; }
+
+    private async Task<string> SendAndRead(HttpResponseMessage response, string method, string url)
+    {
+        var json = await response.Content.ReadAsStringAsync();
+        if (Verbose)
+        {
+            Console.Error.WriteLine($"[HTTP] {method} {url} -> {(int)response.StatusCode}");
+        }
+        return json;
+    }
+
     public RevitClient(HttpClient http)
     {
         _http = http;
@@ -57,12 +69,14 @@ public class RevitClient
     {
         try
         {
-            var response = await _http.GetAsync("/api/status");
-            var json = await response.Content.ReadAsStringAsync();
+            var url = "/api/status";
+            var response = await _http.GetAsync(url);
+            var json = await SendAndRead(response, "GET", url);
             return JsonSerializer.Deserialize<ApiResponse<StatusInfo>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<StatusInfo>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -78,14 +92,15 @@ public class RevitClient
             var parts = new List<string>();
             if (category != null) parts.Add($"category={System.Uri.EscapeDataString(category)}");
             if (filter != null) parts.Add($"filter={System.Uri.EscapeDataString(filter)}");
-            var query = $"/api/elements?{string.Join("&", parts)}";
+            var url = $"/api/elements?{string.Join("&", parts)}";
 
-            var response = await _http.GetAsync(query.ToString());
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await _http.GetAsync(url);
+            var json = await SendAndRead(response, "GET", url);
             return JsonSerializer.Deserialize<ApiResponse<ElementInfo[]>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<ElementInfo[]>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -98,12 +113,14 @@ public class RevitClient
     {
         try
         {
-            var response = await _http.GetAsync($"/api/elements/{id}");
-            var json = await response.Content.ReadAsStringAsync();
+            var url = $"/api/elements/{id}";
+            var response = await _http.GetAsync(url);
+            var json = await SendAndRead(response, "GET", url);
             return JsonSerializer.Deserialize<ApiResponse<ElementInfo>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<ElementInfo>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -116,16 +133,18 @@ public class RevitClient
     {
         try
         {
+            var url = "/api/export";
             var content = new StringContent(
                 JsonSerializer.Serialize(request),
                 Encoding.UTF8,
                 "application/json");
-            var response = await _http.PostAsync("/api/export", content);
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await _http.PostAsync(url, content);
+            var json = await SendAndRead(response, "POST", url);
             return JsonSerializer.Deserialize<ApiResponse<ExportProgress>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<ExportProgress>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -138,12 +157,14 @@ public class RevitClient
     {
         try
         {
-            var response = await _http.GetAsync($"/api/tasks/{taskId}");
-            var json = await response.Content.ReadAsStringAsync();
+            var url = $"/api/tasks/{taskId}";
+            var response = await _http.GetAsync(url);
+            var json = await SendAndRead(response, "GET", url);
             return JsonSerializer.Deserialize<ApiResponse<ExportProgress>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<ExportProgress>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -156,16 +177,18 @@ public class RevitClient
     {
         try
         {
+            var url = "/api/elements/set";
             var content = new StringContent(
                 JsonSerializer.Serialize(request),
                 Encoding.UTF8,
                 "application/json");
-            var response = await _http.PostAsync("/api/elements/set", content);
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await _http.PostAsync(url, content);
+            var json = await SendAndRead(response, "POST", url);
             return JsonSerializer.Deserialize<ApiResponse<SetResult>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<SetResult>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
@@ -178,16 +201,18 @@ public class RevitClient
     {
         try
         {
+            var url = "/api/audit";
             var content = new StringContent(
                 JsonSerializer.Serialize(request),
                 Encoding.UTF8,
                 "application/json");
-            var response = await _http.PostAsync("/api/audit", content);
-            var json = await response.Content.ReadAsStringAsync();
+            var response = await _http.PostAsync(url, content);
+            var json = await SendAndRead(response, "POST", url);
             return JsonSerializer.Deserialize<ApiResponse<AuditResult>>(json, JsonOptions)!;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
             return ApiResponse<AuditResult>.Fail("Revit is not running or plugin is not loaded.");
         }
         catch (Exception ex) when (ex is TaskCanceledException or JsonException)
