@@ -9,6 +9,74 @@ revitcli export --format dwg --sheets "A1*" --output-dir ./exports
 revitcli set doors --param "Fire Rating" --value "60min" --dry-run
 ```
 
+## Demo
+
+### Check connection status
+
+```
+$ revitcli status
+╭─────────────────┬──────────────────╮
+│ Property        │ Value            │
+├─────────────────┼──────────────────┤
+│ Revit Version   │ 2025             │
+│ Document        │ MyProject.rvt    │
+│ Path            │ C:\Projects\...  │
+╰─────────────────┴──────────────────╯
+```
+
+### Query elements
+
+```
+$ revitcli query walls --filter "height > 3000"
+╭──────┬─────────────┬───────┬──────────────────┬────────╮
+│   Id │ Name        │ Cat.  │ Type             │ Height │
+├──────┼─────────────┼───────┼──────────────────┼────────┤
+│  201 │ Wall 1      │ Walls │ Generic - 200mm  │ 3600   │
+│  305 │ Wall 2      │ Walls │ Generic - 300mm  │ 4200   │
+╰──────┴─────────────┴───────┴──────────────────┴────────╯
+(2 element(s))
+```
+
+```
+$ revitcli query doors --id 1024 --output json
+[
+  {
+    "id": 1024,
+    "name": "Door 1",
+    "category": "Doors",
+    "typeName": "Single-Flush 900x2100mm",
+    "parameters": {
+      "Fire Rating": "60min",
+      "Mark": "D-01"
+    }
+  }
+]
+```
+
+### Batch export
+
+```
+$ revitcli export --format pdf --sheets "A1*" --output-dir ./exports
+Export started. Task ID: a3f8c012
+Progress: 33%
+Progress: 66%
+Export completed.
+```
+
+### Modify parameters (with dry-run preview)
+
+```
+$ revitcli set doors --param "Fire Rating" --value "90min" --dry-run
+Dry run: 12 element(s) would be modified.
+╭──────┬──────────┬───────────┬───────────╮
+│ Id   │ Name     │ Old Value │ New Value │
+├──────┼──────────┼───────────┼───────────┤
+│  401 │ Door 1   │ 60min     │ 90min     │
+│  402 │ Door 2   │ 60min     │ 90min     │
+│  ... │ ...      │ ...       │ ...       │
+╰──────┴──────────┴───────────┴───────────╯
+```
+
 ## Architecture
 
 ```
@@ -66,7 +134,7 @@ Add the `publish` directory to your PATH.
 src/RevitCli/              # CLI console app
 src/RevitCli.Addin/        # Revit add-in with embedded HTTP server
 shared/RevitCli.Shared/    # Shared DTOs
-tests/                     # Unit tests (24 tests)
+tests/                     # Unit tests (32 tests)
 ```
 
 ## License
