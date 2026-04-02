@@ -66,22 +66,26 @@ public static class ExportCommand
                     var task = ctx.AddTask($"[cyan]Exporting {format.ToUpper()}[/]", maxValue: 100);
                     task.Value = progress.Progress;
 
+                    var pollFailed = false;
                     while (progress.Status != "completed" && progress.Status != "failed")
                     {
                         await Task.Delay(1000);
                         var pollResult = await client.GetExportProgressAsync(progress.TaskId);
-                        if (!pollResult.Success) break;
+                        if (!pollResult.Success) { pollFailed = true; break; }
                         progress = pollResult.Data!;
                         task.Value = progress.Progress;
                     }
 
-                    task.Value = 100;
+                    if (!pollFailed)
+                        task.Value = 100;
                 });
 
             if (progress.Status == "completed")
                 AnsiConsole.MarkupLine("[green]Export completed.[/]");
             else if (progress.Status == "failed")
                 AnsiConsole.MarkupLine($"[red]Export failed:[/] {Markup.Escape(progress.Message ?? "Unknown error")}");
+            else
+                AnsiConsole.MarkupLine("[red]Export status unknown:[/] lost connection to Revit.");
         }, formatOpt, sheetsOpt, outputDirOpt);
 
         return command;

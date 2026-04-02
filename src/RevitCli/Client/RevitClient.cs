@@ -36,8 +36,17 @@ public class RevitClient
             {
                 var json = File.ReadAllText(serverInfoPath);
                 var info = JsonSerializer.Deserialize<ServerInfo>(json);
-                if (info != null)
-                    return $"http://localhost:{info.Port}";
+                if (info != null && info.Port > 0)
+                {
+                    // Verify the process is still alive
+                    try
+                    {
+                        using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
+                        if (!proc.HasExited)
+                            return $"http://localhost:{info.Port}";
+                    }
+                    catch (System.ArgumentException) { /* process not found */ }
+                }
             }
         }
         catch { }

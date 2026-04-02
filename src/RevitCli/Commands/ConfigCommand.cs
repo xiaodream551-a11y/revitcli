@@ -37,6 +37,12 @@ public static class ConfigCommand
             switch (key.ToLower())
             {
                 case "serverurl":
+                    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                        (uri.Scheme != "http" && uri.Scheme != "https"))
+                    {
+                        AnsiConsole.MarkupLine($"[red]Invalid URL:[/] {Markup.Escape(value)}");
+                        return;
+                    }
                     config.ServerUrl = value;
                     break;
                 case "defaultoutput":
