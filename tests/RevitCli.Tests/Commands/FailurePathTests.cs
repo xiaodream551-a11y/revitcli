@@ -43,13 +43,13 @@ public class FailurePathTests
     }
 
     [Fact]
-    public async Task Query_EmptyCategory_ReturnsError()
+    public async Task Query_EmptyStringCategory_ReturnsError()
     {
         var client = CreateClient();
         var writer = new StringWriter();
-        // Empty string category with no --id should still trigger the "provide category" error
-        var exitCode = await QueryCommand.ExecuteAsync(client, null, null, null, "table", writer);
+        var exitCode = await QueryCommand.ExecuteAsync(client, "", null, null, "table", writer);
         Assert.Equal(1, exitCode);
+        Assert.Contains("category", writer.ToString().ToLower());
     }
 
     [Fact]

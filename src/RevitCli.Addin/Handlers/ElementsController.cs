@@ -30,9 +30,16 @@ public class ElementsController : WebApiController
     public async Task GetElement(int id)
     {
         var element = await _operations.GetElementByIdAsync(id);
-        var response = ApiResponse<ElementInfo?>.Ok(element);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();
-        await writer.WriteAsync(JsonSerializer.Serialize(response));
+
+        if (element == null)
+        {
+            HttpContext.Response.StatusCode = 404;
+            await writer.WriteAsync(JsonSerializer.Serialize(ApiResponse<ElementInfo>.Fail($"Element {id} not found")));
+            return;
+        }
+
+        await writer.WriteAsync(JsonSerializer.Serialize(ApiResponse<ElementInfo>.Ok(element)));
     }
 }

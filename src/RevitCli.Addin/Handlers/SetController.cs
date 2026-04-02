@@ -20,7 +20,28 @@ public class SetController : WebApiController
     public async Task SetParameter()
     {
         var body = await HttpContext.GetRequestBodyAsStringAsync();
-        var request = JsonSerializer.Deserialize<SetRequest>(body)!;
+        SetRequest? request;
+        try
+        {
+            request = JsonSerializer.Deserialize<SetRequest>(body);
+        }
+        catch (JsonException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<SetResult>.Fail($"Invalid JSON: {ex.Message}")));
+            return;
+        }
+
+        if (request == null)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<SetResult>.Fail("Request body is required")));
+            return;
+        }
 
         var data = await _operations.SetParametersAsync(request);
         var response = ApiResponse<SetResult>.Ok(data);

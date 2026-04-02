@@ -20,7 +20,28 @@ public class ExportController : WebApiController
     public async Task Export()
     {
         var body = await HttpContext.GetRequestBodyAsStringAsync();
-        var request = JsonSerializer.Deserialize<ExportRequest>(body)!;
+        ExportRequest? request;
+        try
+        {
+            request = JsonSerializer.Deserialize<ExportRequest>(body);
+        }
+        catch (JsonException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<ExportProgress>.Fail($"Invalid JSON: {ex.Message}")));
+            return;
+        }
+
+        if (request == null)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<ExportProgress>.Fail("Request body is required")));
+            return;
+        }
 
         var progress = await _operations.ExportAsync(request);
         var response = ApiResponse<ExportProgress>.Ok(progress);

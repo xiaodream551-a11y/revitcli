@@ -45,7 +45,7 @@ public static class QueryCommand
                 return;
             }
 
-            if (category == null)
+            if (string.IsNullOrWhiteSpace(category))
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id");
                 Environment.ExitCode = 1;
@@ -81,7 +81,7 @@ public static class QueryCommand
             return 0;
         }
 
-        if (category == null)
+        if (string.IsNullOrWhiteSpace(category))
         {
             await output.WriteLineAsync("Error: provide a category or --id");
             return 1;

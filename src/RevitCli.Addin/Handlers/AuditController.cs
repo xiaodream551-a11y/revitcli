@@ -20,7 +20,28 @@ public class AuditController : WebApiController
     public async Task RunAudit()
     {
         var body = await HttpContext.GetRequestBodyAsStringAsync();
-        var request = JsonSerializer.Deserialize<AuditRequest>(body)!;
+        AuditRequest? request;
+        try
+        {
+            request = JsonSerializer.Deserialize<AuditRequest>(body);
+        }
+        catch (JsonException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<AuditResult>.Fail($"Invalid JSON: {ex.Message}")));
+            return;
+        }
+
+        if (request == null)
+        {
+            HttpContext.Response.StatusCode = 400;
+            HttpContext.Response.ContentType = "application/json";
+            await using var errWriter = HttpContext.OpenResponseText();
+            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<AuditResult>.Fail("Request body is required")));
+            return;
+        }
 
         var auditResult = await _operations.RunAuditAsync(request);
         var response = ApiResponse<AuditResult>.Ok(auditResult);

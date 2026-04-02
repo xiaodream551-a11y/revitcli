@@ -3,7 +3,11 @@ using RevitCli.Shared;
 
 namespace RevitCli.Addin.Tests.Handlers;
 
-public class HandlerIntegrationTests
+/// <summary>
+/// Tests PlaceholderRevitOperations directly. Does NOT test HTTP handlers or controller delegation.
+/// Controller-level tests are covered by ProtocolTests which hit real HTTP endpoints.
+/// </summary>
+public class PlaceholderOperationsTests
 {
     private readonly PlaceholderRevitOperations _operations = new();
 
