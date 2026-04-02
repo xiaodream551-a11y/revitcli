@@ -191,6 +191,20 @@ shared/RevitCli.Shared/    # Shared DTOs
 tests/                     # Unit tests (40 tests)
 ```
 
+## Publishing
+
+To publish a new version:
+
+1. Update the version in `src/RevitCli/RevitCli.csproj`
+2. Create and push a tag:
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+3. GitHub Actions will automatically build, test, and publish to NuGet.org
+
+> Note: Requires `NUGET_API_KEY` secret configured in the repository settings.
+
 ## License
 
 MIT
