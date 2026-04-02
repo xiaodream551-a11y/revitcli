@@ -5,7 +5,20 @@
     <RootNamespace>RevitCli</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>revitcli</ToolCommandName>
+    <PackageId>RevitCli</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>RevitCli Contributors</Authors>
+    <Description>Command-line interface for Autodesk Revit</Description>
+    <PackageProjectUrl>https://github.com/xiaodream551-a11y/revitcli</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/xiaodream551-a11y/revitcli</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
     <PackageReference Include="Spectre.Console" Version="0.49.1" />
