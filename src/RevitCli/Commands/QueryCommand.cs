@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Output;
@@ -10,8 +9,6 @@ namespace RevitCli.Commands;
 
 public static class QueryCommand
 {
-    private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
-
     public static Command Create(RevitClient client)
     {
         var categoryArg = new Argument<string?>("category", () => null, "Element category (e.g. walls, doors, windows)");

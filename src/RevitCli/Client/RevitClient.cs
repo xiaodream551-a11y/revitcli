@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -42,9 +43,10 @@ public class RevitClient
     {
         try
         {
-            var query = new StringBuilder("/api/elements?");
-            if (category != null) query.Append($"category={category}");
-            if (filter != null) query.Append($"&filter={System.Uri.EscapeDataString(filter)}");
+            var parts = new List<string>();
+            if (category != null) parts.Add($"category={System.Uri.EscapeDataString(category)}");
+            if (filter != null) parts.Add($"filter={System.Uri.EscapeDataString(filter)}");
+            var query = $"/api/elements?{string.Join("&", parts)}";
 
             var response = await _http.GetAsync(query.ToString());
             var json = await response.Content.ReadAsStringAsync();

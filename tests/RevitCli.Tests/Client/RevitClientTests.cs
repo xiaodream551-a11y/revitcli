@@ -53,8 +53,9 @@ public class RevitClientTests
         var result = await client.QueryElementsAsync("walls", null);
 
         Assert.True(result.Success);
-        Assert.Single(result.Data!);
-        Assert.Equal("Wall 1", result.Data[0].Name);
+        var data = result.Data!;
+        Assert.Single(data);
+        Assert.Equal("Wall 1", data[0].Name);
         Assert.Contains("category=walls", handler.LastRequestUri!);
     }
 }
