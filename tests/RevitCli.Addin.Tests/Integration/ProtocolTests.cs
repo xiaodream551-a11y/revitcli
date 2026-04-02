@@ -10,13 +10,19 @@ using Xunit;
 
 namespace RevitCli.Addin.Tests.Integration;
 
-public class EndToEndTests : IDisposable
+/// <summary>
+/// Verifies the HTTP protocol layer: request routing, JSON serialization/deserialization,
+/// and server lifecycle. Uses PlaceholderRevitOperations — does NOT test real Revit API.
+/// These become true integration tests when PlaceholderRevitOperations is swapped
+/// for RealRevitOperations on Windows + Revit.
+/// </summary>
+public class ProtocolTests : IDisposable
 {
     private readonly ApiServer _server;
     private readonly RevitClient _client;
     private readonly int _port;
 
-    public EndToEndTests()
+    public ProtocolTests()
     {
         _port = GetAvailablePort();
         var bridge = new RevitBridge();
