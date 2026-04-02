@@ -51,7 +51,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP Server)
 - Interactive REPL mode
 - Batch execution from JSON files
 - Non-zero exit codes on errors
-- 58 unit and integration tests
+- 82 unit, integration, and protocol tests
 - GitHub Actions CI + NuGet publish workflow
 
 ## What Doesn't Work Yet
@@ -137,8 +137,8 @@ src/RevitCli/              # CLI console app (net8.0)
 src/RevitCli/Config/       # Configuration management
 src/RevitCli.Addin/        # Revit add-in with embedded HTTP server
 shared/RevitCli.Shared/    # Shared DTOs (netstandard2.0)
-tests/RevitCli.Tests/      # CLI unit tests (44 tests)
-tests/RevitCli.Addin.Tests/ # Add-in + integration tests (14 tests, including 6 e2e)
+tests/RevitCli.Tests/      # CLI unit + failure path tests (65 tests)
+tests/RevitCli.Addin.Tests/ # Add-in + protocol tests (17 tests, including 6 protocol)
 ```
 
 ## Publishing
