@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Text.Json;
 using RevitCli.Config;
 using Spectre.Console;
 
@@ -7,8 +6,6 @@ namespace RevitCli.Commands;
 
 public static class ConfigCommand
 {
-    private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
-
     public static Command Create()
     {
         var command = new Command("config", "View or modify CLI configuration");

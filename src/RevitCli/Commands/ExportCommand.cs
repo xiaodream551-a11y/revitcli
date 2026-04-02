@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Config;
 using RevitCli.Shared;
 using Spectre.Console;
 
@@ -12,11 +13,11 @@ public static class ExportCommand
 {
     private static readonly string[] ValidFormats = { "dwg", "pdf", "ifc" };
 
-    public static Command Create(RevitClient client)
+    public static Command Create(RevitClient client, CliConfig config)
     {
         var formatOpt = new Option<string>("--format", "Export format: dwg, pdf, ifc") { IsRequired = true };
         var sheetsOpt = new Option<string[]>("--sheets", () => System.Array.Empty<string>(), "Sheet name patterns (e.g. \"A1*\", \"all\")");
-        var outputDirOpt = new Option<string>("--output-dir", () => ".", "Output directory for exported files");
+        var outputDirOpt = new Option<string>("--output-dir", () => config.ExportDir, "Output directory for exported files");
 
         var command = new Command("export", "Export sheets or views from the Revit model")
         {

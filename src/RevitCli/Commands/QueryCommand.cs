@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.IO;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Config;
 using RevitCli.Output;
 using RevitCli.Shared;
 using Spectre.Console;
@@ -10,12 +11,12 @@ namespace RevitCli.Commands;
 
 public static class QueryCommand
 {
-    public static Command Create(RevitClient client)
+    public static Command Create(RevitClient client, CliConfig config)
     {
         var categoryArg = new Argument<string?>("category", () => null, "Element category (e.g. walls, doors, windows)");
         var filterOpt = new Option<string?>("--filter", "Filter expression (e.g. \"height > 3000\")");
         var idOpt = new Option<int?>("--id", "Query a specific element by ID");
-        var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, csv");
+        var outputOpt = new Option<string>("--output", () => config.DefaultOutput, "Output format: table, json, csv");
 
         var command = new Command("query", "Query elements from the Revit model")
         {
