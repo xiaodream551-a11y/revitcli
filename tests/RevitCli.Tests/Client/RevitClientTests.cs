@@ -65,6 +65,8 @@ public class FakeHttpHandler : HttpMessageHandler
     private readonly string? _response;
     private readonly bool _throwException;
     public string? LastRequestUri { get; private set; }
+    public int CallCount { get; private set; }
+    public string? LastRequestBody { get; private set; }
 
     public FakeHttpHandler(string? response = null, bool throwException = false)
     {
@@ -72,16 +74,19 @@ public class FakeHttpHandler : HttpMessageHandler
         _throwException = throwException;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        CallCount++;
         LastRequestUri = request.RequestUri?.ToString();
+        if (request.Content != null)
+            LastRequestBody = await request.Content.ReadAsStringAsync();
 
         if (_throwException)
             throw new HttpRequestException("Connection refused");
 
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(_response ?? "{}")
-        });
+        };
     }
 }
