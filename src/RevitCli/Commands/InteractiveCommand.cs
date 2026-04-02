@@ -87,6 +87,7 @@ public static class InteractiveCommand
         root.AddCommand(SetCommand.Create(client));
         root.AddCommand(ConfigCommand.Create());
         root.AddCommand(AuditCommand.Create(client));
+        root.AddCommand(DoctorCommand.Create(client, config));
         return root;
     }
 

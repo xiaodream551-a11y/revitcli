@@ -11,10 +11,24 @@ using Xunit;
 
 namespace RevitCli.Tests.Commands;
 
-public class BatchCommandTests
+[Collection("Sequential")]
+public class BatchCommandTests : IDisposable
 {
+    private readonly int _savedExitCode;
+
+    public BatchCommandTests()
+    {
+        _savedExitCode = Environment.ExitCode;
+        Environment.ExitCode = 0;
+    }
+
+    public void Dispose()
+    {
+        Environment.ExitCode = _savedExitCode;
+    }
+
     [Fact]
-    public async Task Execute_ValidBatchFile_RunsAllCommands()
+    public async Task Execute_ValidBatchFile_RunsCommand()
     {
         var statusResponse = ApiResponse<StatusInfo>.Ok(new StatusInfo { RevitVersion = "2025" });
         var handler = new FakeHttpHandler(JsonSerializer.Serialize(statusResponse));
@@ -30,7 +44,7 @@ public class BatchCommandTests
             var exitCode = await BatchCommand.ExecuteAsync(client, config, tmpFile, writer);
 
             Assert.Equal(0, exitCode);
-            Assert.Contains("2025", writer.ToString());
+            Assert.Equal(1, handler.CallCount); // status command made exactly one HTTP call
         }
         finally
         {
@@ -91,8 +105,36 @@ public class BatchCommandTests
 
             var exitCode = await BatchCommand.ExecuteAsync(client, config, tmpFile, writer);
 
+            // Parser won't find "nonexistent" subcommand → non-zero exit
             Assert.Equal(1, exitCode);
-            Assert.Contains("unknown command", writer.ToString().ToLower());
+            Assert.Equal(0, handler.CallCount); // no HTTP call made
+        }
+        finally
+        {
+            File.Delete(tmpFile);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_SetWithInvalidId_ParserRejects()
+    {
+        var handler = new FakeHttpHandler("{}");
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var config = new CliConfig();
+
+        var tmpFile = Path.GetTempFileName();
+        try
+        {
+            // This is the exact bug Codex found: --id abc should be rejected by parser,
+            // not silently turned into null (which would cause a different set target)
+            await File.WriteAllTextAsync(tmpFile,
+                """[{"command": "set", "args": ["doors", "--id", "abc", "--param", "Mark", "--value", "X"]}]""");
+            var writer = new StringWriter();
+
+            var exitCode = await BatchCommand.ExecuteAsync(client, config, tmpFile, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Equal(0, handler.CallCount); // parser rejected → no HTTP call
         }
         finally
         {

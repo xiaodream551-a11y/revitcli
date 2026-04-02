@@ -78,7 +78,7 @@ public static class BatchCommand
             var item = items[i];
             await output.WriteLineAsync($"[{i + 1}/{items.Count}] {item.Command} {string.Join(" ", item.Args)}");
 
-            var exitCode = await DispatchCommand(client, config, item, output);
+            var exitCode = await DispatchViaParser(client, config, item);
             if (exitCode != 0) hasError = true;
 
             await output.WriteLineAsync();
@@ -121,7 +121,7 @@ public static class BatchCommand
             var item = items[i];
             AnsiConsole.MarkupLine($"[bold cyan][{i + 1}/{items.Count}][/] {Markup.Escape(item.Command)} {Markup.Escape(string.Join(" ", item.Args))}");
 
-            var exitCode = await DispatchCommand(client, config, item, Console.Out);
+            var exitCode = await DispatchViaParser(client, config, item);
             if (exitCode != 0) hasError = true;
 
             AnsiConsole.WriteLine();
@@ -131,65 +131,31 @@ public static class BatchCommand
             Environment.ExitCode = 1;
     }
 
-    private static async Task<int> DispatchCommand(RevitClient client, CliConfig config, BatchItem item, TextWriter output)
+    /// <summary>
+    /// Dispatch batch items through the same System.CommandLine parser/handler as the real CLI.
+    /// This guarantees batch and interactive CLI have identical validation, type binding, and error behavior.
+    /// </summary>
+    private static async Task<int> DispatchViaParser(RevitClient client, CliConfig config, BatchItem item)
     {
-        return item.Command.ToLower() switch
-        {
-            "status" => await StatusCommand.ExecuteAsync(client, output),
-            "query" => await DispatchQuery(client, config, item.Args, output),
-            "export" => await DispatchExport(client, config, item.Args, output),
-            "set" => await DispatchSet(client, item.Args, output),
-            "audit" => await AuditCommand.ExecuteAsync(client, ParseNamedArg(item.Args, "--rules"), output),
-            "doctor" => await DoctorCommand.ExecuteAsync(client, config, output),
-            _ => await WriteError(output, $"Unknown command: {item.Command}")
-        };
+        var root = BuildRootCommand(client, config);
+
+        // Prepend the command name to the args array, same as if typed on the CLI
+        var fullArgs = new List<string> { item.Command };
+        fullArgs.AddRange(item.Args);
+
+        return await root.InvokeAsync(fullArgs.ToArray());
     }
 
-    private static async Task<int> DispatchQuery(RevitClient client, CliConfig config, List<string> args, TextWriter output)
+    private static RootCommand BuildRootCommand(RevitClient client, CliConfig config)
     {
-        string? category = args.Count > 0 && !args[0].StartsWith("-") ? args[0] : null;
-        string? filter = ParseNamedArg(args, "--filter");
-        int? id = int.TryParse(ParseNamedArg(args, "--id"), out var parsedId) ? parsedId : null;
-        string outputFormat = ParseNamedArg(args, "--output") ?? config.DefaultOutput;
-
-        return await QueryCommand.ExecuteAsync(client, category, filter, id, outputFormat, output);
-    }
-
-    private static async Task<int> DispatchExport(RevitClient client, CliConfig config, List<string> args, TextWriter output)
-    {
-        string format = ParseNamedArg(args, "--format") ?? "";
-        string outputDir = ParseNamedArg(args, "--output-dir") ?? config.ExportDir;
-
-        var sheets = new List<string>();
-        var sheetsArg = ParseNamedArg(args, "--sheets");
-        if (sheetsArg != null) sheets.Add(sheetsArg);
-
-        return await ExportCommand.ExecuteAsync(client, format, sheets.ToArray(), outputDir, output);
-    }
-
-    private static async Task<int> DispatchSet(RevitClient client, List<string> args, TextWriter output)
-    {
-        string? category = args.Count > 0 && !args[0].StartsWith("-") ? args[0] : null;
-        string? filter = ParseNamedArg(args, "--filter");
-        int? id = int.TryParse(ParseNamedArg(args, "--id"), out var parsedId) ? parsedId : null;
-        string param = ParseNamedArg(args, "--param") ?? "";
-        string value = ParseNamedArg(args, "--value") ?? "";
-        bool dryRun = args.Contains("--dry-run");
-
-        return await SetCommand.ExecuteAsync(client, category, filter, id, param, value, dryRun, output);
-    }
-
-    private static string? ParseNamedArg(List<string> args, string name)
-    {
-        var idx = args.IndexOf(name);
-        if (idx >= 0 && idx + 1 < args.Count)
-            return args[idx + 1];
-        return null;
-    }
-
-    private static async Task<int> WriteError(TextWriter output, string message)
-    {
-        await output.WriteLineAsync($"Error: {message}");
-        return 1;
+        var root = new RootCommand();
+        root.AddCommand(StatusCommand.Create(client));
+        root.AddCommand(QueryCommand.Create(client, config));
+        root.AddCommand(ExportCommand.Create(client, config));
+        root.AddCommand(SetCommand.Create(client));
+        root.AddCommand(ConfigCommand.Create());
+        root.AddCommand(AuditCommand.Create(client));
+        root.AddCommand(DoctorCommand.Create(client, config));
+        return root;
     }
 }
