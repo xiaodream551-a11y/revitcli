@@ -110,6 +110,9 @@ public sealed class RevitBridge : IExternalEventHandler, IDisposable
     /// </summary>
     public Task<T> InvokeAsync<T>(Func<UIApplication, T> work)
     {
+        if (work == null)
+            return Task.FromException<T>(new ArgumentNullException(nameof(work)));
+
         var request = new QueuedRequest<T>(work);
 
         lock (_lock)

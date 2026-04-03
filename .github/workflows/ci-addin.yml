@@ -1,0 +1,52 @@
+name: CI - Addin (Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      revit_install_dir:
+        description: 'Revit 2026 install directory'
+        required: false
+        default: 'C:\Program Files\Autodesk\Revit 2026'
+
+jobs:
+  build-addin:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Check Revit API DLLs
+        shell: pwsh
+        run: |
+          $dir = "${{ github.event.inputs.revit_install_dir }}"
+          if (-not (Test-Path "$dir\RevitAPI.dll")) {
+            Write-Host "::error::RevitAPI.dll not found at $dir"
+            Write-Host "This workflow requires a self-hosted runner with Revit 2026 installed,"
+            Write-Host "or manually placed RevitAPI.dll and RevitAPIUI.dll."
+            exit 1
+          }
+          Write-Host "Found Revit API at $dir"
+
+      - name: Restore
+        run: dotnet restore
+        env:
+          Revit2026InstallDir: ${{ github.event.inputs.revit_install_dir }}
+
+      - name: Build Addin
+        run: dotnet build src/RevitCli.Addin --no-restore
+        env:
+          Revit2026InstallDir: ${{ github.event.inputs.revit_install_dir }}
+
+      - name: Build Addin Tests
+        run: dotnet build tests/RevitCli.Addin.Tests --no-restore
+        env:
+          Revit2026InstallDir: ${{ github.event.inputs.revit_install_dir }}
+
+      - name: Run Addin Tests
+        run: dotnet test tests/RevitCli.Addin.Tests --no-build --verbosity normal
+        env:
+          Revit2026InstallDir: ${{ github.event.inputs.revit_install_dir }}

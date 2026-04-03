@@ -144,4 +144,15 @@ public class RevitBridgeTests
         var ex2 = await Assert.ThrowsAsync<InvalidOperationException>(() => t2);
         Assert.Contains("UIApplication is null", ex2.Message);
     }
+
+    [Fact]
+    public async Task InvokeAsync_NullWork_ReturnsFaultedTask()
+    {
+        var bridge = CreateBridge(out var fake);
+
+        var task = bridge.InvokeAsync<string>(null!);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => task);
+        Assert.Equal(0, fake.RaiseCount);
+    }
 }
