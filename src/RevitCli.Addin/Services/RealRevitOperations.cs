@@ -311,8 +311,14 @@ public sealed class RealRevitOperations : IRevitOperations
                 throw new ArgumentException(
                     $"Operator '{filter.Operator}' cannot be used with string field '{filter.Property}'.");
 
-            if (NumericPseudoFields.Contains(filter.Property) && filterRhsNumeric.HasValue)
+            // Numeric pseudo fields require numeric RHS for ALL operators
+            if (NumericPseudoFields.Contains(filter.Property))
+            {
+                if (!filterRhsNumeric.HasValue)
+                    throw new ArgumentException(
+                        $"Field '{filter.Property}' requires a numeric value, got: '{filter.Value}'.");
                 return CompareNumeric(ToCliElementId(element.Id), filterRhsNumeric.Value, filter.Operator);
+            }
 
             var val = GetPseudoFieldValue(doc, element, filter.Property);
             if (val == null)
