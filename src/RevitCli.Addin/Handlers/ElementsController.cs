@@ -20,11 +20,33 @@ public class ElementsController : WebApiController
     [Route(HttpVerbs.Get, "/elements")]
     public async Task QueryElements([QueryField] string? category, [QueryField] string? filter)
     {
-        var elements = await _operations.QueryElementsAsync(category, filter);
-        var response = ApiResponse<ElementInfo[]>.Ok(elements);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();
-        await writer.WriteAsync(JsonSerializer.Serialize(response));
+
+        try
+        {
+            var elements = await _operations.QueryElementsAsync(category, filter);
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo[]>.Ok(elements)));
+        }
+        catch (ArgumentException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo[]>.Fail(ex.Message)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            HttpContext.Response.StatusCode = 409;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo[]>.Fail(ex.Message)));
+        }
+        catch (Exception ex)
+        {
+            HttpContext.Response.StatusCode = 500;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo[]>.Fail(ex.Message)));
+        }
     }
 
     [Route(HttpVerbs.Get, "/elements/{id}")]

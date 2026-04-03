@@ -8,17 +8,26 @@ public class ElementFilter
 
     public static ElementFilter? Parse(string expression)
     {
+        if (string.IsNullOrWhiteSpace(expression))
+            return null;
+
         string[] operators = { ">=", "<=", "!=", ">", "<", "=" };
         foreach (var op in operators)
         {
             var idx = expression.IndexOf(op);
             if (idx > 0)
             {
+                var property = expression.Substring(0, idx).Trim();
+                var value = expression.Substring(idx + op.Length).Trim();
+
+                if (string.IsNullOrEmpty(property) || string.IsNullOrEmpty(value))
+                    return null;
+
                 return new ElementFilter
                 {
-                    Property = expression.Substring(0, idx).Trim(),
+                    Property = property,
                     Operator = op,
-                    Value = expression.Substring(idx + op.Length).Trim()
+                    Value = value
                 };
             }
         }

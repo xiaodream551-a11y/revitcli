@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -144,10 +145,276 @@ public sealed class RealRevitOperations : IRevitOperations
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrEmpty(s) ? null : s;
 
-    // Remaining methods keep placeholder behavior until implemented
+    private const int MaxMatches = 200;
+
+    // ── Category alias table (level 1) ──────────────────────────
+
+    private static readonly Dictionary<string, BuiltInCategory> CategoryAliases = BuildCategoryAliases();
+
+    private static Dictionary<string, BuiltInCategory> BuildCategoryAliases()
+    {
+        var map = new Dictionary<string, BuiltInCategory>(StringComparer.OrdinalIgnoreCase);
+        void Add(BuiltInCategory cat, params string[] names)
+        {
+            foreach (var n in names) map[Normalize(n)] = cat;
+        }
+        Add(BuiltInCategory.OST_Walls, "walls", "wall", "墙", "墙体");
+        Add(BuiltInCategory.OST_Doors, "doors", "door", "门");
+        Add(BuiltInCategory.OST_Windows, "windows", "window", "窗", "窗户");
+        Add(BuiltInCategory.OST_Floors, "floors", "floor", "楼板");
+        Add(BuiltInCategory.OST_Roofs, "roofs", "roof", "屋顶");
+        Add(BuiltInCategory.OST_Columns, "columns", "column", "柱");
+        Add(BuiltInCategory.OST_StructuralColumns, "structuralcolumns", "结构柱");
+        Add(BuiltInCategory.OST_Levels, "levels", "level", "标高");
+        Add(BuiltInCategory.OST_Rooms, "rooms", "room", "房间");
+        Add(BuiltInCategory.OST_Furniture, "furniture", "家具");
+        Add(BuiltInCategory.OST_Ceilings, "ceilings", "ceiling", "天花板");
+        Add(BuiltInCategory.OST_Stairs, "stairs", "stair", "楼梯");
+        return map;
+    }
+
+    private static string Normalize(string s) =>
+        s.Trim().ToLowerInvariant().Replace(" ", "").Replace("_", "").Replace("-", "");
+
+    private static BuiltInCategory ResolveCategory(Document doc, string category)
+    {
+        var key = Normalize(category);
+
+        // Level 1: alias table
+        if (CategoryAliases.TryGetValue(key, out var resolved))
+            return resolved;
+
+        // Level 2: scan document categories by localized name
+        foreach (Category cat in doc.Settings.Categories)
+        {
+            if (cat.Id.Value < 0 && Normalize(cat.Name) == key)
+                return (BuiltInCategory)cat.Id.Value;
+        }
+
+        throw new ArgumentException($"Unknown category: '{category}'");
+    }
+
+    // ── Filter matching ─────────────────────────────────────────
+    // Display values (FormatParameterValue) are for DTO output only.
+    // Filtering uses raw AsDouble/AsInteger with unit conversion.
+
+    private static readonly HashSet<string> PseudoFields = new(StringComparer.OrdinalIgnoreCase)
+        { "id", "name", "category", "type", "typename" };
+
+    private static bool IsNumericOperator(string op) =>
+        op is ">" or "<" or ">=" or "<=";
+
+    /// <summary>
+    /// Find a parameter by filter name, supporting "Foo [2]" duplicate suffix.
+    /// Uses same counting convention as ReadVisibleParameters output.
+    /// </summary>
+    private static Parameter? FindParameterByFilterName(Element element, string filterName)
+    {
+        var baseName = filterName;
+        var targetIndex = 1;
+
+        // Parse "Foo [N]" syntax
+        var bracketStart = filterName.LastIndexOf('[');
+        if (bracketStart > 0 && filterName.EndsWith("]"))
+        {
+            var indexStr = filterName.Substring(bracketStart + 1, filterName.Length - bracketStart - 2).Trim();
+            if (int.TryParse(indexStr, out var parsed) && parsed >= 2)
+            {
+                baseName = filterName.Substring(0, bracketStart).TrimEnd();
+                targetIndex = parsed;
+            }
+        }
+
+        var count = 0;
+        foreach (var param in element.GetOrderedParameters())
+        {
+            if (!string.Equals(param.Definition.Name, baseName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            count++;
+            if (count == targetIndex)
+                return param;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Get a pseudo field's string value for filtering.
+    /// </summary>
+    private static string? GetPseudoFieldValue(Document doc, Element element, string field)
+    {
+        return field.ToLowerInvariant() switch
+        {
+            "id" => ToCliElementId(element.Id).ToString(),
+            "name" => element.Name,
+            "category" => element.Category?.Name,
+            "type" or "typename" => ResolveTypeName(doc, element),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Compare numeric values: raw AsDouble/AsInteger with unit conversion for the filter RHS.
+    /// </summary>
+    private static bool CompareNumeric(double actual, double compareTo, string op)
+    {
+        return op switch
+        {
+            "=" => Math.Abs(actual - compareTo) < 0.001,
+            "!=" => Math.Abs(actual - compareTo) >= 0.001,
+            ">" => actual > compareTo,
+            "<" => actual < compareTo,
+            ">=" => actual >= compareTo,
+            "<=" => actual <= compareTo,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Convert filter RHS from project display units to Revit internal units for a given parameter.
+    /// </summary>
+    private static double ConvertFilterValueToInternal(Document doc, Parameter param, double filterValue)
+    {
+        if (param.StorageType != StorageType.Double)
+            return filterValue;
+
+        try
+        {
+            var specTypeId = param.Definition.GetDataType();
+            var formatOptions = doc.GetUnits().GetFormatOptions(specTypeId);
+            var unitTypeId = formatOptions.GetUnitTypeId();
+            return UnitUtils.ConvertToInternalUnits(filterValue, unitTypeId);
+        }
+        catch
+        {
+            // Dimensionless or unsupported — compare raw
+            return filterValue;
+        }
+    }
+
+    /// <summary>
+    /// Match a single element against a parsed filter. Sets fieldFound=true if the field exists.
+    /// </summary>
+    private static bool MatchesFilter(Document doc, Element element, ElementFilter filter,
+        double? filterRhsNumeric, ref bool fieldFound)
+    {
+        // ── Pseudo fields (always string comparison) ──
+        if (PseudoFields.Contains(filter.Property))
+        {
+            fieldFound = true;
+            var val = GetPseudoFieldValue(doc, element, filter.Property);
+            if (val == null)
+                return false;
+
+            if (filterRhsNumeric.HasValue && filter.Property.Equals("id", StringComparison.OrdinalIgnoreCase))
+            {
+                return CompareNumeric(ToCliElementId(element.Id), filterRhsNumeric.Value, filter.Operator);
+            }
+
+            return filter.Operator switch
+            {
+                "=" => string.Equals(val, filter.Value, StringComparison.OrdinalIgnoreCase),
+                "!=" => !string.Equals(val, filter.Value, StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+        }
+
+        // ── Parameter fields ──
+        var param = FindParameterByFilterName(element, filter.Property);
+        if (param == null || !param.HasValue)
+            return false;
+
+        fieldFound = true;
+
+        // Numeric comparison path (>, <, >=, <=, =, !=) for Integer/Double params
+        if (filterRhsNumeric.HasValue &&
+            param.StorageType is StorageType.Integer or StorageType.Double)
+        {
+            double actual = param.StorageType == StorageType.Integer
+                ? param.AsInteger()
+                : param.AsDouble();
+
+            var compareTo = ConvertFilterValueToInternal(doc, param, filterRhsNumeric.Value);
+            return CompareNumeric(actual, compareTo, filter.Operator);
+        }
+
+        // String comparison path (= and != only)
+        var displayVal = FormatParameterValue(doc, param);
+        if (displayVal == null)
+            return false;
+
+        return filter.Operator switch
+        {
+            "=" => string.Equals(displayVal, filter.Value, StringComparison.OrdinalIgnoreCase),
+            "!=" => !string.Equals(displayVal, filter.Value, StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    // ── QueryElementsAsync ──────────────────────────────────────
 
     public Task<ElementInfo[]> QueryElementsAsync(string? category, string? filter)
-        => Task.FromResult(Array.Empty<ElementInfo>());
+    {
+        if (string.IsNullOrWhiteSpace(category))
+            throw new ArgumentException("Category is required.");
+
+        ElementFilter? parsedFilter = null;
+        double? filterRhsNumeric = null;
+
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            parsedFilter = ElementFilter.Parse(filter);
+            if (parsedFilter == null)
+                throw new ArgumentException($"Invalid filter expression: '{filter}'");
+
+            // Pre-parse RHS as numeric if possible
+            if (double.TryParse(parsedFilter.Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var num))
+                filterRhsNumeric = num;
+
+            // Numeric operators require numeric RHS
+            if (IsNumericOperator(parsedFilter.Operator) && !filterRhsNumeric.HasValue)
+                throw new ArgumentException(
+                    $"Operator '{parsedFilter.Operator}' requires a numeric value, got: '{parsedFilter.Value}'");
+        }
+
+        return _bridge.InvokeAsync(app =>
+        {
+            var doc = app.ActiveUIDocument?.Document
+                ?? throw new InvalidOperationException("No active document is open.");
+
+            var builtInCat = ResolveCategory(doc, category!);
+
+            var collector = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfCategory(builtInCat);
+
+            var results = new List<ElementInfo>();
+            var fieldFound = parsedFilter == null; // no filter → always "found"
+
+            foreach (var element in collector)
+            {
+                if (parsedFilter != null)
+                {
+                    if (!MatchesFilter(doc, element, parsedFilter, filterRhsNumeric, ref fieldFound))
+                        continue;
+                }
+
+                if (results.Count >= MaxMatches)
+                    throw new InvalidOperationException(
+                        $"Query matched more than {MaxMatches} elements. Narrow the category or add --filter.");
+
+                results.Add(MapElement(doc, element));
+            }
+
+            // If filter field never existed on any element → typo or wrong field name
+            if (!fieldFound)
+                throw new ArgumentException(
+                    $"Filter field '{parsedFilter!.Property}' not found on any {category} element.");
+
+            results.Sort((a, b) => a.Id.CompareTo(b.Id));
+            return results.ToArray();
+        });
+    }
 
     public Task<ExportProgress> ExportAsync(ExportRequest request)
         => Task.FromResult(new ExportProgress
