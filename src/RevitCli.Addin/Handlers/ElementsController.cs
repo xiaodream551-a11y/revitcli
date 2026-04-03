@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EmbedIO;
@@ -29,17 +30,41 @@ public class ElementsController : WebApiController
     [Route(HttpVerbs.Get, "/elements/{id}")]
     public async Task GetElement(int id)
     {
-        var element = await _operations.GetElementByIdAsync(id);
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();
 
-        if (element == null)
+        try
         {
-            HttpContext.Response.StatusCode = 404;
-            await writer.WriteAsync(JsonSerializer.Serialize(ApiResponse<ElementInfo>.Fail($"Element {id} not found")));
-            return;
-        }
+            var element = await _operations.GetElementByIdAsync(id);
 
-        await writer.WriteAsync(JsonSerializer.Serialize(ApiResponse<ElementInfo>.Ok(element)));
+            if (element == null)
+            {
+                HttpContext.Response.StatusCode = 404;
+                await writer.WriteAsync(JsonSerializer.Serialize(
+                    ApiResponse<ElementInfo>.Fail($"Element {id} not found")));
+                return;
+            }
+
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo>.Ok(element)));
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo>.Fail(ex.Message)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            HttpContext.Response.StatusCode = 409;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo>.Fail(ex.Message)));
+        }
+        catch (Exception ex)
+        {
+            HttpContext.Response.StatusCode = 500;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<ElementInfo>.Fail(ex.Message)));
+        }
     }
 }

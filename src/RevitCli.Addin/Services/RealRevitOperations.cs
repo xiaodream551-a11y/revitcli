@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading.Tasks;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using RevitCli.Addin.Bridge;
 using RevitCli.Shared;
 
@@ -30,13 +33,118 @@ public sealed class RealRevitOperations : IRevitOperations
         });
     }
 
+    public Task<ElementInfo?> GetElementByIdAsync(int id)
+    {
+        if (id <= 0)
+            throw new ArgumentOutOfRangeException(nameof(id), "Element id must be a positive integer.");
+
+        return _bridge.InvokeAsync<ElementInfo?>(app =>
+        {
+            var doc = app.ActiveUIDocument?.Document
+                ?? throw new InvalidOperationException("No active document is open.");
+
+            var element = doc.GetElement(new ElementId(id));
+            if (element == null)
+                return null;
+
+            return MapElement(doc, element);
+        });
+    }
+
+    private static ElementInfo MapElement(Document doc, Element element)
+    {
+        return new ElementInfo
+        {
+            Id = element.Id.IntegerValue,
+            Name = !string.IsNullOrWhiteSpace(element.Name) ? element.Name : element.GetType().Name,
+            Category = element.Category?.Name ?? "",
+            TypeName = ResolveTypeName(doc, element),
+            Parameters = ReadVisibleParameters(doc, element)
+        };
+    }
+
+    private static string ResolveTypeName(Document doc, Element element)
+    {
+        if (element is ElementType)
+            return element.Name;
+
+        var typeId = element.GetTypeId();
+        if (typeId == ElementId.InvalidElementId)
+            return "";
+
+        var typeElement = doc.GetElement(typeId) as ElementType;
+        return typeElement?.Name ?? "";
+    }
+
+    private static Dictionary<string, string> ReadVisibleParameters(Document doc, Element element)
+    {
+        var result = new Dictionary<string, string>();
+        var nameCounts = new Dictionary<string, int>();
+
+        foreach (var param in element.GetOrderedParameters())
+        {
+            if (!param.HasValue)
+                continue;
+
+            var value = FormatParameterValue(doc, param);
+            if (value == null)
+                continue;
+
+            var baseName = param.Definition.Name;
+
+            // Handle duplicate parameter names
+            if (!nameCounts.TryGetValue(baseName, out var count))
+            {
+                nameCounts[baseName] = 1;
+                result[baseName] = value;
+            }
+            else
+            {
+                nameCounts[baseName] = count + 1;
+                result[$"{baseName} [{count + 1}]"] = value;
+            }
+        }
+
+        return result;
+    }
+
+    private static string? FormatParameterValue(Document doc, Parameter parameter)
+    {
+        // Prefer AsValueString — closest to Revit UI display
+        var valueString = parameter.AsValueString();
+        if (!string.IsNullOrEmpty(valueString))
+            return valueString;
+
+        // Fallback by storage type
+        return parameter.StorageType switch
+        {
+            StorageType.String => NullIfEmpty(parameter.AsString()),
+            StorageType.Integer => parameter.AsInteger().ToString(),
+            StorageType.Double => null, // Skip raw internal doubles — no reliable unit formatting without AsValueString
+            StorageType.ElementId => FormatElementIdValue(doc, parameter.AsElementId()),
+            _ => null
+        };
+    }
+
+    private static string? FormatElementIdValue(Document doc, ElementId refId)
+    {
+        if (refId == ElementId.InvalidElementId)
+            return null;
+
+        var refElement = doc.GetElement(refId);
+        if (refElement != null)
+            return $"{refId.IntegerValue}: {refElement.Name}";
+
+        return refId.IntegerValue.ToString();
+    }
+
+    private static string? NullIfEmpty(string? s) =>
+        string.IsNullOrEmpty(s) ? null : s;
+
     // Remaining methods keep placeholder behavior until implemented
 
     public Task<ElementInfo[]> QueryElementsAsync(string? category, string? filter)
         => Task.FromResult(Array.Empty<ElementInfo>());
-
-    public Task<ElementInfo?> GetElementByIdAsync(int id)
-        => Task.FromResult<ElementInfo?>(new ElementInfo { Id = id, Name = $"Element {id}" });
 
     public Task<ExportProgress> ExportAsync(ExportRequest request)
         => Task.FromResult(new ExportProgress
