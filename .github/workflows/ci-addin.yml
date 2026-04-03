@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-addin:
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, revit2026]
     steps:
       - uses: actions/checkout@v4
 
@@ -23,13 +23,16 @@ jobs:
         shell: pwsh
         run: |
           $dir = "${{ github.event.inputs.revit_install_dir }}"
-          if (-not (Test-Path "$dir\RevitAPI.dll")) {
-            Write-Host "::error::RevitAPI.dll not found at $dir"
-            Write-Host "This workflow requires a self-hosted runner with Revit 2026 installed,"
-            Write-Host "or manually placed RevitAPI.dll and RevitAPIUI.dll."
+          $missing = @()
+          foreach ($dll in @('RevitAPI.dll', 'RevitAPIUI.dll')) {
+            if (-not (Test-Path "$dir\$dll")) { $missing += $dll }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "::error::Missing DLLs at ${dir}: $($missing -join ', ')"
+            Write-Host "This workflow requires a self-hosted runner with Revit 2026 installed."
             exit 1
           }
-          Write-Host "Found Revit API at $dir"
+          Write-Host "Found RevitAPI.dll and RevitAPIUI.dll at $dir"
 
       - name: Restore
         run: dotnet restore
