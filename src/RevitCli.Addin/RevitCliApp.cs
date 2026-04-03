@@ -1,37 +1,55 @@
 using System;
+using Autodesk.Revit.UI;
+using RevitCli.Addin.Bridge;
 using RevitCli.Addin.Server;
 using RevitCli.Addin.Services;
+using RevitCli.Shared;
 
 namespace RevitCli.Addin;
 
-/// <summary>
-/// Revit add-in entry point.
-///
-/// In the real Revit environment, this implements IExternalApplication
-/// with OnStartup/OnShutdown methods. The Revit API types are omitted
-/// here to allow cross-platform development; they will be added when
-/// targeting net48 with Revit API references on Windows.
-/// </summary>
-public class RevitCliApp
+public sealed class RevitCliApp : IExternalApplication
 {
     private ApiServer? _server;
+    private RevitBridge? _bridge;
+    private IRevitOperations? _operations;
     private const int DefaultPort = 17839;
 
-    public void OnStartup()
+    public Result OnStartup(UIControlledApplication application)
     {
-        var operations = new PlaceholderRevitOperations();
+        try
+        {
+            _bridge = new RevitBridge();
+            _operations = new RealRevitOperations(_bridge);
+            _server = new ApiServer(DefaultPort, _operations);
+            _server.Start();
+            return Result.Succeeded;
+        }
+        catch
+        {
+            try { _server?.Stop(); }
+            catch { /* cleanup failure must not mask startup error */ }
+            finally { _server = null; }
 
-        _server = new ApiServer(DefaultPort, operations);
-        _server.Start();
+            try { _bridge?.Dispose(); }
+            catch { /* cleanup failure must not mask startup error */ }
+            finally { _bridge = null; }
 
-        Console.WriteLine($"[RevitCli] Server started on port {DefaultPort}");
+            _operations = null;
+            return Result.Failed;
+        }
     }
 
-    public void OnShutdown()
+    public Result OnShutdown(UIControlledApplication application)
     {
-        _server?.Stop();
-        _server = null;
+        try { _server?.Stop(); }
+        catch { /* Server cleanup failure must not block bridge disposal */ }
+        finally { _server = null; }
 
-        Console.WriteLine("[RevitCli] Server stopped");
+        try { _bridge?.Dispose(); }
+        catch { /* Bridge cleanup failure must not crash Revit on exit */ }
+        finally { _bridge = null; }
+
+        _operations = null;
+        return Result.Succeeded;
     }
 }

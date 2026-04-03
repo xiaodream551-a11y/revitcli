@@ -1,14 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RootNamespace>RevitCli.Addin</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Revit2026InstallDir Condition="'$(Revit2026InstallDir)' == ''">C:\Program Files\Autodesk\Revit 2026</Revit2026InstallDir>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
     <PackageReference Include="EmbedIO" Version="3.5.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(Revit2026InstallDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(Revit2026InstallDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="RevitCli.Addin.Tests" />
+  </ItemGroup>
+
+  <!-- Generate deployment-ready .addin with absolute DLL path after build (Windows only) -->
+  <Target Name="GenerateDeployManifest" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Copy SourceFiles="RevitCli.addin" DestinationFiles="$(OutputPath)RevitCli.addin" />
+    <XmlPoke XmlInputPath="$(OutputPath)RevitCli.addin"
+             Query="/RevitAddIns/AddIn/Assembly"
+             Value="$(TargetPath)" />
+  </Target>
 </Project>
