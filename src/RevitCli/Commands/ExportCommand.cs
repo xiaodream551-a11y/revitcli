@@ -13,7 +13,7 @@ namespace RevitCli.Commands;
 
 public static class ExportCommand
 {
-    private static readonly string[] ValidFormats = { "dwg", "pdf", "ifc" };
+    internal static readonly string[] ValidFormats = { "dwg", "pdf", "ifc" };
 
     public static Command Create(RevitClient client, CliConfig config)
     {

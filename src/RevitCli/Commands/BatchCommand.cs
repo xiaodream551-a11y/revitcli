@@ -148,14 +148,10 @@ public static class BatchCommand
 
     private static RootCommand BuildRootCommand(RevitClient client, CliConfig config)
     {
-        var root = new RootCommand();
-        root.AddCommand(StatusCommand.Create(client));
-        root.AddCommand(QueryCommand.Create(client, config));
-        root.AddCommand(ExportCommand.Create(client, config));
-        root.AddCommand(SetCommand.Create(client));
-        root.AddCommand(ConfigCommand.Create());
-        root.AddCommand(AuditCommand.Create(client));
-        root.AddCommand(DoctorCommand.Create(client, config));
-        return root;
+        return CliCommandCatalog.CreateRootCommand(
+            client,
+            config,
+            includeInteractiveCommand: false,
+            includeBatchCommand: false);
     }
 }

@@ -66,29 +66,21 @@ public static class InteractiveCommand
         var table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("[bold]Command[/]");
         table.AddColumn("[bold]Description[/]");
-        table.AddRow("status", "Check if Revit plugin is online");
-        table.AddRow("query <category>", "Query elements (--filter, --id, --output)");
-        table.AddRow("export --format <fmt>", "Export sheets (--sheets, --output-dir)");
-        table.AddRow("set <category>", "Modify parameters (--param, --value, --dry-run)");
-        table.AddRow("config show/set", "View or modify configuration");
-        table.AddRow("audit", "Run model checking rules (--rules, --list)");
-        table.AddRow("clear", "Clear the screen");
-        table.AddRow("exit", "Exit interactive mode");
+
+        foreach (var (command, description) in CliCommandCatalog.InteractiveHelpEntries)
+            table.AddRow(command, description);
+
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine();
     }
 
     private static RootCommand BuildRootCommand(RevitClient client, CliConfig config)
     {
-        var root = new RootCommand();
-        root.AddCommand(StatusCommand.Create(client));
-        root.AddCommand(QueryCommand.Create(client, config));
-        root.AddCommand(ExportCommand.Create(client, config));
-        root.AddCommand(SetCommand.Create(client));
-        root.AddCommand(ConfigCommand.Create());
-        root.AddCommand(AuditCommand.Create(client));
-        root.AddCommand(DoctorCommand.Create(client, config));
-        return root;
+        return CliCommandCatalog.CreateRootCommand(
+            client,
+            config,
+            includeInteractiveCommand: false,
+            includeBatchCommand: true);
     }
 
     /// <summary>

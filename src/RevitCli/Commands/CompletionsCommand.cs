@@ -1,13 +1,19 @@
 using System.CommandLine;
+using System.Linq;
 using Spectre.Console;
 
 namespace RevitCli.Commands;
 
 public static class CompletionsCommand
 {
+    private static readonly string[] QueryOptions = { "--filter", "--id", "--output" };
+    private static readonly string[] ExportOptions = { "--format", "--sheets", "--output-dir" };
+    private static readonly string[] SetOptions = { "--filter", "--id", "--param", "--value", "--dry-run" };
+    private static readonly string[] AuditOptions = { "--rules", "--list" };
+
     public static Command Create()
     {
-        var shellArg = new Argument<string>("shell", "Shell type: bash, zsh, powershell");
+        var shellArg = new Argument<string>("shell", $"Shell type: {string.Join(", ", CliCommandCatalog.Shells)}");
 
         var command = new Command("completions", "Generate shell completion script")
         {
@@ -16,7 +22,7 @@ public static class CompletionsCommand
 
         command.SetHandler((shell) =>
         {
-            var script = shell.ToLower() switch
+            var script = shell.ToLowerInvariant() switch
             {
                 "bash" => GenerateBash(),
                 "zsh" => GenerateZsh(),
@@ -38,143 +44,348 @@ public static class CompletionsCommand
 
     private static string GenerateBash()
     {
-        return """
-            _revitcli_completions() {
-                local cur="${COMP_WORDS[COMP_CWORD]}"
-                local commands="status query export set config audit completions batch doctor interactive"
+        var commands = JoinWords(CliCommandCatalog.TopLevelCommandNames);
+        var queryOptions = JoinWords(QueryOptions);
+        var exportOptions = JoinWords(ExportOptions);
+        var setOptions = JoinWords(SetOptions);
+        var auditOptions = JoinWords(AuditOptions);
+        var configSubcommands = JoinWords(CliCommandCatalog.ConfigSubcommands);
+        var configKeys = JoinWords(ConfigCommand.ValidKeys);
+        var outputFormats = JoinWords(QueryCommand.ValidOutputFormats);
+        var exportFormats = JoinWords(ExportCommand.ValidFormats);
+        var auditRules = JoinWords(AuditCommand.AvailableRules);
+        var shells = JoinWords(CliCommandCatalog.Shells);
 
-                if [ $COMP_CWORD -eq 1 ]; then
-                    COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-                    return
-                fi
-
-                case "${COMP_WORDS[1]}" in
-                    query)
-                        local opts="--filter --id --output"
-                        COMPREPLY=($(compgen -W "$opts" -- "$cur"))
-                        ;;
-                    export)
-                        local opts="--format --sheets --output-dir"
-                        COMPREPLY=($(compgen -W "$opts" -- "$cur"))
-                        ;;
-                    set)
-                        local opts="--filter --id --param --value --dry-run"
-                        COMPREPLY=($(compgen -W "$opts" -- "$cur"))
-                        ;;
-                    audit)
-                        local opts="--rules --list"
-                        COMPREPLY=($(compgen -W "$opts" -- "$cur"))
-                        ;;
-                    config)
-                        local subcmds="show set"
-                        COMPREPLY=($(compgen -W "$subcmds" -- "$cur"))
-                        ;;
-                    completions)
-                        local shells="bash zsh powershell"
-                        COMPREPLY=($(compgen -W "$shells" -- "$cur"))
-                        ;;
-                esac
-            }
-            complete -F _revitcli_completions revitcli
-            """;
+        return JoinLines(
+            "_revitcli_completions() {",
+            "    local prev cmd subcmd",
+            "    local cur=\"${COMP_WORDS[COMP_CWORD]}\"",
+            "    prev=\"\"",
+            "    if [ $COMP_CWORD -gt 0 ]; then",
+            "        prev=\"${COMP_WORDS[COMP_CWORD-1]}\"",
+            "    fi",
+            "    cmd=\"${COMP_WORDS[1]}\"",
+            "    subcmd=\"${COMP_WORDS[2]}\"",
+            "",
+            "    if [ $COMP_CWORD -eq 1 ]; then",
+            $"        COMPREPLY=($(compgen -W \"{commands}\" -- \"$cur\"))",
+            "        return",
+            "    fi",
+            "",
+            "    case \"$cmd\" in",
+            "        query)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{outputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            $"            COMPREPLY=($(compgen -W \"{queryOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        export)",
+            "            case \"$prev\" in",
+            "                --format)",
+            $"                    COMPREPLY=($(compgen -W \"{exportFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --output-dir)",
+            "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            $"            COMPREPLY=($(compgen -W \"{exportOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        set)",
+            $"            COMPREPLY=($(compgen -W \"{setOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        audit)",
+            "            case \"$prev\" in",
+            "                --rules)",
+            $"                    COMPREPLY=($(compgen -W \"{auditRules}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            $"            COMPREPLY=($(compgen -W \"{auditOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        config)",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{configSubcommands}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            "            if [ \"$subcmd\" = \"set\" ]; then",
+            "                if [ $COMP_CWORD -eq 3 ]; then",
+            $"                    COMPREPLY=($(compgen -W \"{configKeys}\" -- \"$cur\"))",
+            "                    return",
+            "                fi",
+            "                if [ $COMP_CWORD -eq 4 ]; then",
+            "                    case \"${COMP_WORDS[3]}\" in",
+            "                        defaultOutput)",
+            $"                            COMPREPLY=($(compgen -W \"{outputFormats}\" -- \"$cur\"))",
+            "                            return",
+            "                            ;;",
+            "                        exportDir)",
+            "                            COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                            return",
+            "                            ;;",
+            "                    esac",
+            "                fi",
+            "            fi",
+            "            ;;",
+            "        completions)",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{shells}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            "            ;;",
+            "        batch)",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            "                COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                return",
+            "            fi",
+            "            ;;",
+            "        status|doctor|interactive)",
+            "            COMPREPLY=()",
+            "            ;;",
+            "    esac",
+            "}",
+            "complete -F _revitcli_completions revitcli");
     }
 
     private static string GenerateZsh()
     {
-        return """
-            #compdef revitcli
+        var commandLines = CliCommandCatalog.TopLevelCommands
+            .Select(command => $"        '{command.Name}:{command.Description}'");
+        var outputFormats = JoinWords(QueryCommand.ValidOutputFormats);
+        var exportFormats = JoinWords(ExportCommand.ValidFormats);
+        var configSubcommands = JoinWords(CliCommandCatalog.ConfigSubcommands);
+        var configKeys = JoinWords(ConfigCommand.ValidKeys);
+        var shells = JoinWords(CliCommandCatalog.Shells);
+        var auditRules = JoinWords(AuditCommand.AvailableRules);
 
-            _revitcli() {
-                local -a commands
-                commands=(
-                    'status:Check if Revit plugin is online'
-                    'query:Query elements from the Revit model'
-                    'export:Export sheets or views'
-                    'set:Modify element parameters'
-                    'config:View or modify CLI configuration'
-                    'audit:Run model checking rules'
-                    'completions:Generate shell completion script'
-                    'batch:Execute commands from a JSON batch file'
-                    'doctor:Check RevitCli setup and diagnose issues'
-                    'interactive:Enter interactive REPL mode'
-                )
-
-                _arguments -C \
-                    '1:command:->cmds' \
-                    '*::arg:->args'
-
-                case "$state" in
-                    cmds)
-                        _describe 'command' commands
-                        ;;
-                    args)
-                        case $words[2] in
-                            query)
-                                _arguments \
-                                    '--filter[Filter expression]:filter:' \
-                                    '--id[Element ID]:id:' \
-                                    '--output[Output format]:format:(table json csv)'
-                                ;;
-                            export)
-                                _arguments \
-                                    '--format[Export format]:format:(dwg pdf ifc)' \
-                                    '--sheets[Sheet patterns]:sheets:' \
-                                    '--output-dir[Output directory]:dir:_directories'
-                                ;;
-                            set)
-                                _arguments \
-                                    '--filter[Filter expression]:filter:' \
-                                    '--id[Element ID]:id:' \
-                                    '--param[Parameter name]:param:' \
-                                    '--value[New value]:value:' \
-                                    '--dry-run[Preview changes]'
-                                ;;
-                            audit)
-                                _arguments \
-                                    '--rules[Comma-separated rules]:rules:' \
-                                    '--list[List available rules]'
-                                ;;
-                            config)
-                                _arguments '1:subcommand:(show set)'
-                                ;;
-                            completions)
-                                _arguments '1:shell:(bash zsh powershell)'
-                                ;;
-                        esac
-                        ;;
-                esac
-            }
-
-            _revitcli
-            """;
+        return JoinLines(
+            "#compdef revitcli",
+            "",
+            "_revitcli() {",
+            "    local -a commands",
+            "    commands=(",
+            commandLines,
+            "    )",
+            "",
+            "    _arguments -C \\",
+            "        '1:command:->cmds' \\",
+            "        '*::arg:->args'",
+            "",
+            "    case \"$state\" in",
+            "        cmds)",
+            "            _describe 'command' commands",
+            "            ;;",
+            "        args)",
+            "            case $words[2] in",
+            "                query)",
+            "                    _arguments \\",
+            "                        '--filter[Filter expression]:filter:' \\",
+            "                        '--id[Element ID]:id:' \\",
+            $"                        '--output[Output format]:format:({outputFormats})'",
+            "                    ;;",
+            "                export)",
+            "                    _arguments \\",
+            $"                        '--format[Export format]:format:({exportFormats})' \\",
+            "                        '--sheets[Sheet patterns]:sheets:' \\",
+            "                        '--output-dir[Output directory]:dir:_directories'",
+            "                    ;;",
+            "                set)",
+            "                    _arguments \\",
+            "                        '--filter[Filter expression]:filter:' \\",
+            "                        '--id[Element ID]:id:' \\",
+            "                        '--param[Parameter name]:param:' \\",
+            "                        '--value[New value]:value:' \\",
+            "                        '--dry-run[Preview changes]'",
+            "                    ;;",
+            "                audit)",
+            "                    _arguments \\",
+            $"                        '--rules[Comma-separated rules]:rules:({auditRules})' \\",
+            "                        '--list[List available rules]'",
+            "                    ;;",
+            "                config)",
+            "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {configSubcommands}",
+            "                    elif [[ \"$words[3]\" == \"set\" ]]; then",
+            "                        if (( CURRENT == 4 )); then",
+            $"                            _values 'setting' {configKeys}",
+            "                        elif (( CURRENT == 5 )); then",
+            "                            case \"$words[4]\" in",
+            "                                defaultOutput)",
+            $"                                    _values 'format' {outputFormats}",
+            "                                    ;;",
+            "                                exportDir)",
+            "                                    _directories",
+            "                                    ;;",
+            "                            esac",
+            "                        fi",
+            "                    fi",
+            "                    ;;",
+            "                completions)",
+            $"                    _arguments '1:shell:({shells})'",
+            "                    ;;",
+            "                batch)",
+            "                    _arguments '1:file:_files'",
+            "                    ;;",
+            "            esac",
+            "            ;;",
+            "    esac",
+            "}",
+            "",
+            "_revitcli");
     }
 
     private static string GeneratePowerShell()
     {
-        return """
-            Register-ArgumentCompleter -CommandName revitcli -Native -ScriptBlock {
-                param($wordToComplete, $commandAst, $cursorPosition)
+        var commandLines = CliCommandCatalog.TopLevelCommands
+            .Select(command => $"        '{command.Name}' = '{command.Description}'");
+        var queryOptions = FormatPowerShellArray(QueryOptions);
+        var exportOptions = FormatPowerShellArray(ExportOptions);
+        var setOptions = FormatPowerShellArray(SetOptions);
+        var auditOptions = FormatPowerShellArray(AuditOptions);
+        var outputFormats = FormatPowerShellArray(QueryCommand.ValidOutputFormats);
+        var exportFormats = FormatPowerShellArray(ExportCommand.ValidFormats);
+        var configSubcommands = FormatPowerShellArray(CliCommandCatalog.ConfigSubcommands);
+        var configKeys = FormatPowerShellArray(ConfigCommand.ValidKeys);
+        var shells = FormatPowerShellArray(CliCommandCatalog.Shells);
+        var auditRules = FormatPowerShellArray(AuditCommand.AvailableRules);
 
-                $commands = @{
-                    'status' = 'Check if Revit plugin is online'
-                    'query' = 'Query elements from the Revit model'
-                    'export' = 'Export sheets or views'
-                    'set' = 'Modify element parameters'
-                    'config' = 'View or modify CLI configuration'
-                    'audit' = 'Run model checking rules'
-                    'completions' = 'Generate shell completion script'
-                    'batch' = 'Execute commands from a JSON batch file'
-                    'doctor' = 'Check RevitCli setup and diagnose issues'
-                    'interactive' = 'Enter interactive REPL mode'
-                }
-
-                $tokens = $commandAst.ToString().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
-
-                if ($tokens.Count -le 1 -or ($tokens.Count -eq 2 -and $wordToComplete)) {
-                    $commands.GetEnumerator() | Where-Object { $_.Key -like "$wordToComplete*" } |
-                        ForEach-Object { [System.Management.Automation.CompletionResult]::new($_.Key, $_.Key, 'ParameterValue', $_.Value) }
-                }
-            }
-            """;
+        return JoinLines(
+            "Register-ArgumentCompleter -CommandName revitcli -Native -ScriptBlock {",
+            "    param($wordToComplete, $commandAst, $cursorPosition)",
+            "",
+            "    $commands = @{",
+            commandLines,
+            "    }",
+            "",
+            "    $commandOptions = @{",
+            $"        'query' = @({queryOptions})",
+            $"        'export' = @({exportOptions})",
+            $"        'set' = @({setOptions})",
+            $"        'audit' = @({auditOptions})",
+            "    }",
+            "",
+            $"    $outputFormats = @({outputFormats})",
+            $"    $exportFormats = @({exportFormats})",
+            $"    $configSubcommands = @({configSubcommands})",
+            $"    $configKeys = @({configKeys})",
+            $"    $shells = @({shells})",
+            $"    $auditRules = @({auditRules})",
+            "",
+            "    function New-RevitCliCompletionResults {",
+            "        param(",
+            "            [string[]]$Values,",
+            "            [string]$ToolTip",
+            "        )",
+            "",
+            "        $Values |",
+            "            Where-Object { $_ -like \"$wordToComplete*\" } |",
+            "            ForEach-Object {",
+            "                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $ToolTip)",
+            "            }",
+            "    }",
+            "",
+            "    $text = $commandAst.ToString()",
+            "    $tokens = $text.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)",
+            "    $endsWithSpace = $text.EndsWith(' ')",
+            "    $command = if ($tokens.Count -gt 1) { $tokens[1] } else { $null }",
+            "    $previous = if ($endsWithSpace) {",
+            "        if ($tokens.Count -gt 0) { $tokens[-1] } else { $null }",
+            "    } elseif ($tokens.Count -gt 1) {",
+            "        $tokens[-2]",
+            "    } else {",
+            "        $null",
+            "    }",
+            "",
+            "    if (-not $command) {",
+            "        $commands.GetEnumerator() | Where-Object { $_.Key -like \"$wordToComplete*\" } |",
+            "            Sort-Object Key |",
+            "            ForEach-Object { [System.Management.Automation.CompletionResult]::new($_.Key, $_.Key, 'ParameterValue', $_.Value) }",
+            "        return",
+            "    }",
+            "",
+            "    switch ($command) {",
+            "        'query' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $outputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['query'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'export' {",
+            "            if ($previous -eq '--format') {",
+            "                New-RevitCliCompletionResults -Values $exportFormats -ToolTip 'Export format'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['export'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'set' {",
+            "            New-RevitCliCompletionResults -Values $commandOptions['set'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'audit' {",
+            "            if ($previous -eq '--rules') {",
+            "                New-RevitCliCompletionResults -Values $auditRules -ToolTip 'Audit rule'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['audit'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'config' {",
+            "            if ($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) {",
+            "                New-RevitCliCompletionResults -Values $configSubcommands -ToolTip 'Config subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            if ($tokens.Count -ge 3 -and $tokens[2] -eq 'set') {",
+            "                if (($tokens.Count -eq 3 -and $endsWithSpace) -or ($tokens.Count -eq 4 -and -not $endsWithSpace)) {",
+            "                    New-RevitCliCompletionResults -Values $configKeys -ToolTip 'Config key'",
+            "                    return",
+            "                }",
+            "",
+            "                if (($tokens.Count -eq 4 -and $endsWithSpace) -or ($tokens.Count -eq 5 -and -not $endsWithSpace)) {",
+            "                    switch ($tokens[3]) {",
+            "                        'defaultOutput' {",
+            "                            New-RevitCliCompletionResults -Values $outputFormats -ToolTip 'Output format'",
+            "                            return",
+            "                        }",
+            "                    }",
+            "                }",
+            "            }",
+            "            return",
+            "        }",
+            "        'completions' {",
+            "            if ($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) {",
+            "                New-RevitCliCompletionResults -Values $shells -ToolTip 'Shell'",
+            "                return",
+            "            }",
+            "            return",
+            "        }",
+            "    }",
+            "}");
     }
+
+    private static string JoinWords(IEnumerable<string> values) =>
+        string.Join(" ", values);
+
+    private static string JoinLines(params object[] parts) =>
+        string.Join(
+            Environment.NewLine,
+            parts.SelectMany(part => part switch
+            {
+                string line => new[] { line },
+                IEnumerable<string> lines => lines,
+                _ => throw new InvalidOperationException($"Unsupported line group: {part.GetType().FullName}")
+            })) + Environment.NewLine;
+
+    private static string FormatPowerShellArray(IEnumerable<string> values) =>
+        string.Join(", ", values.Select(value => $"'{value}'"));
 }

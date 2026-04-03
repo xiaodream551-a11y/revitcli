@@ -47,7 +47,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP Server)
 - Pipe-friendly output (auto TTY detection)
 - Configuration system (`~/.revitcli/config.json`)
 - Port discovery (`~/.revitcli/server.json` with PID validation)
-- Shell completions (bash/zsh/PowerShell, partial — `doctor` and `interactive` not yet included)
+- Shell completions (bash/zsh/PowerShell, all shipped commands plus common option values)
 - Interactive REPL mode
 - Batch execution from JSON files
 - Non-zero exit codes on errors

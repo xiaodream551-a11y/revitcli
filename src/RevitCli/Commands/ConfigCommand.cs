@@ -7,6 +7,8 @@ namespace RevitCli.Commands;
 
 public static class ConfigCommand
 {
+    internal static readonly string[] ValidKeys = { "serverUrl", "defaultOutput", "exportDir" };
+
     public static Command Create()
     {
         var command = new Command("config", "View or modify CLI configuration");
@@ -25,7 +27,7 @@ public static class ConfigCommand
         });
 
         var setCommand = new Command("set", "Set a configuration value");
-        var keyArg = new Argument<string>("key", "Setting name (serverUrl, defaultOutput, exportDir)");
+        var keyArg = new Argument<string>("key", $"Setting name ({string.Join(", ", ValidKeys)})");
         var valueArg = new Argument<string>("value", "New value");
         setCommand.AddArgument(keyArg);
         setCommand.AddArgument(valueArg);
@@ -44,13 +46,12 @@ public static class ConfigCommand
                     config.ServerUrl = value;
                     break;
                 case "defaultoutput":
-                    var validFormats = new[] { "table", "json", "csv" };
-                    if (!validFormats.Contains(value.ToLower()))
+                    if (!QueryCommand.ValidOutputFormats.Contains(value.ToLowerInvariant()))
                     {
-                        AnsiConsole.MarkupLine($"[red]Invalid format:[/] must be one of: {string.Join(", ", validFormats)}");
+                        AnsiConsole.MarkupLine($"[red]Invalid format:[/] must be one of: {string.Join(", ", QueryCommand.ValidOutputFormats)}");
                         return;
                     }
-                    config.DefaultOutput = value.ToLower();
+                    config.DefaultOutput = value.ToLowerInvariant();
                     break;
                 case "exportdir":
                     if (string.IsNullOrWhiteSpace(value))

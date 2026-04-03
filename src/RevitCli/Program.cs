@@ -30,15 +30,9 @@ if (args.Contains("--verbose"))
 var config = CliConfig.Load();
 var serverUrl = RevitClient.DiscoverServerUrl(config.ServerUrl);
 var client = new RevitClient(serverUrl);
-var rootCommand = new RootCommand("RevitCli - Command-line interface for Autodesk Revit");
-rootCommand.AddCommand(StatusCommand.Create(client));
-rootCommand.AddCommand(QueryCommand.Create(client, config));
-rootCommand.AddCommand(ExportCommand.Create(client, config));
-rootCommand.AddCommand(SetCommand.Create(client));
-rootCommand.AddCommand(ConfigCommand.Create());
-rootCommand.AddCommand(AuditCommand.Create(client));
-rootCommand.AddCommand(CompletionsCommand.Create());
-rootCommand.AddCommand(InteractiveCommand.Create(client, config));
-rootCommand.AddCommand(DoctorCommand.Create(client, config));
-rootCommand.AddCommand(BatchCommand.Create(client, config));
+var rootCommand = CliCommandCatalog.CreateRootCommand(
+    client,
+    config,
+    includeInteractiveCommand: true,
+    includeBatchCommand: true);
 return await rootCommand.InvokeAsync(args);
