@@ -55,7 +55,7 @@ public sealed class RealRevitOperations : IRevitOperations
     {
         return new ElementInfo
         {
-            Id = element.Id.IntegerValue,
+            Id = ToCliElementId(element.Id),
             Name = !string.IsNullOrWhiteSpace(element.Name) ? element.Name : element.GetType().Name,
             Category = element.Category?.Name ?? "",
             TypeName = ResolveTypeName(doc, element),
@@ -133,10 +133,13 @@ public sealed class RealRevitOperations : IRevitOperations
 
         var refElement = doc.GetElement(refId);
         if (refElement != null)
-            return $"{refId.IntegerValue}: {refElement.Name}";
+            return $"{refId.Value}: {refElement.Name}";
 
-        return refId.IntegerValue.ToString();
+        return refId.Value.ToString();
     }
+
+    private static int ToCliElementId(ElementId elementId) =>
+        checked((int)elementId.Value);
 
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrEmpty(s) ? null : s;
