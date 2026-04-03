@@ -201,14 +201,18 @@ public sealed class RealRevitOperations : IRevitOperations
     private static readonly HashSet<string> PseudoFields = new(StringComparer.OrdinalIgnoreCase)
         { "id", "name", "category", "type", "typename" };
 
+    private static readonly HashSet<string> NumericPseudoFields = new(StringComparer.OrdinalIgnoreCase)
+        { "id" };
+
     private static bool IsNumericOperator(string op) =>
         op is ">" or "<" or ">=" or "<=";
 
     /// <summary>
-    /// Find a parameter by filter name, supporting "Foo [2]" duplicate suffix.
-    /// Uses same counting convention as ReadVisibleParameters output.
+    /// Find a parameter by filter name, using the SAME visibility+counting rules as ReadVisibleParameters.
+    /// Only parameters with HasValue and non-null FormatParameterValue are counted.
+    /// Supports "Foo [2]" duplicate suffix syntax.
     /// </summary>
-    private static Parameter? FindParameterByFilterName(Element element, string filterName)
+    private static Parameter? FindParameterByFilterName(Document doc, Element element, string filterName)
     {
         var baseName = filterName;
         var targetIndex = 1;
@@ -225,10 +229,15 @@ public sealed class RealRevitOperations : IRevitOperations
             }
         }
 
+        // Count only visible parameters (same rule as ReadVisibleParameters)
         var count = 0;
         foreach (var param in element.GetOrderedParameters())
         {
+            if (!param.HasValue)
+                continue;
             if (!string.Equals(param.Definition.Name, baseName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (FormatParameterValue(doc, param) == null)
                 continue;
             count++;
             if (count == targetIndex)
@@ -252,9 +261,6 @@ public sealed class RealRevitOperations : IRevitOperations
         };
     }
 
-    /// <summary>
-    /// Compare numeric values: raw AsDouble/AsInteger with unit conversion for the filter RHS.
-    /// </summary>
     private static bool CompareNumeric(double actual, double compareTo, string op)
     {
         return op switch
@@ -269,9 +275,6 @@ public sealed class RealRevitOperations : IRevitOperations
         };
     }
 
-    /// <summary>
-    /// Convert filter RHS from project display units to Revit internal units for a given parameter.
-    /// </summary>
     private static double ConvertFilterValueToInternal(Document doc, Parameter param, double filterValue)
     {
         if (param.StorageType != StorageType.Double)
@@ -286,29 +289,34 @@ public sealed class RealRevitOperations : IRevitOperations
         }
         catch
         {
-            // Dimensionless or unsupported — compare raw
             return filterValue;
         }
     }
 
     /// <summary>
-    /// Match a single element against a parsed filter. Sets fieldFound=true if the field exists.
+    /// Match a single element against a parsed filter.
+    /// Tracks whether the field was found on any element AND whether any element was seen.
+    /// Throws ArgumentException if operator is incompatible with field type.
     /// </summary>
     private static bool MatchesFilter(Document doc, Element element, ElementFilter filter,
         double? filterRhsNumeric, ref bool fieldFound)
     {
-        // ── Pseudo fields (always string comparison) ──
+        // ── Pseudo fields ──
         if (PseudoFields.Contains(filter.Property))
         {
             fieldFound = true;
+
+            // Validate: numeric operators on string pseudo fields
+            if (IsNumericOperator(filter.Operator) && !NumericPseudoFields.Contains(filter.Property))
+                throw new ArgumentException(
+                    $"Operator '{filter.Operator}' cannot be used with string field '{filter.Property}'.");
+
+            if (NumericPseudoFields.Contains(filter.Property) && filterRhsNumeric.HasValue)
+                return CompareNumeric(ToCliElementId(element.Id), filterRhsNumeric.Value, filter.Operator);
+
             var val = GetPseudoFieldValue(doc, element, filter.Property);
             if (val == null)
                 return false;
-
-            if (filterRhsNumeric.HasValue && filter.Property.Equals("id", StringComparison.OrdinalIgnoreCase))
-            {
-                return CompareNumeric(ToCliElementId(element.Id), filterRhsNumeric.Value, filter.Operator);
-            }
 
             return filter.Operator switch
             {
@@ -319,13 +327,19 @@ public sealed class RealRevitOperations : IRevitOperations
         }
 
         // ── Parameter fields ──
-        var param = FindParameterByFilterName(element, filter.Property);
-        if (param == null || !param.HasValue)
+        var param = FindParameterByFilterName(doc, element, filter.Property);
+        if (param == null)
             return false;
 
         fieldFound = true;
 
-        // Numeric comparison path (>, <, >=, <=, =, !=) for Integer/Double params
+        // Validate: numeric operators on non-numeric parameters
+        if (IsNumericOperator(filter.Operator) &&
+            param.StorageType is not (StorageType.Integer or StorageType.Double))
+            throw new ArgumentException(
+                $"Operator '{filter.Operator}' cannot be used with non-numeric parameter '{filter.Property}'.");
+
+        // Numeric comparison path
         if (filterRhsNumeric.HasValue &&
             param.StorageType is StorageType.Integer or StorageType.Double)
         {
@@ -366,12 +380,10 @@ public sealed class RealRevitOperations : IRevitOperations
             if (parsedFilter == null)
                 throw new ArgumentException($"Invalid filter expression: '{filter}'");
 
-            // Pre-parse RHS as numeric if possible
             if (double.TryParse(parsedFilter.Value, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out var num))
                 filterRhsNumeric = num;
 
-            // Numeric operators require numeric RHS
             if (IsNumericOperator(parsedFilter.Operator) && !filterRhsNumeric.HasValue)
                 throw new ArgumentException(
                     $"Operator '{parsedFilter.Operator}' requires a numeric value, got: '{parsedFilter.Value}'");
@@ -389,10 +401,13 @@ public sealed class RealRevitOperations : IRevitOperations
                 .OfCategory(builtInCat);
 
             var results = new List<ElementInfo>();
-            var fieldFound = parsedFilter == null; // no filter → always "found"
+            var sawAnyElement = false;
+            var fieldFound = parsedFilter == null;
 
             foreach (var element in collector)
             {
+                sawAnyElement = true;
+
                 if (parsedFilter != null)
                 {
                     if (!MatchesFilter(doc, element, parsedFilter, filterRhsNumeric, ref fieldFound))
@@ -406,8 +421,8 @@ public sealed class RealRevitOperations : IRevitOperations
                 results.Add(MapElement(doc, element));
             }
 
-            // If filter field never existed on any element → typo or wrong field name
-            if (!fieldFound)
+            // Only report field-not-found if category had elements but none had the field
+            if (sawAnyElement && !fieldFound)
                 throw new ArgumentException(
                     $"Filter field '{parsedFilter!.Property}' not found on any {category} element.");
 
