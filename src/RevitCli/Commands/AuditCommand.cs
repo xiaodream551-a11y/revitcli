@@ -12,7 +12,7 @@ namespace RevitCli.Commands;
 
 public static class AuditCommand
 {
-    internal static readonly string[] AvailableRules = { "naming", "room-bounds", "level-consistency", "unplaced-rooms" };
+    internal static readonly string[] AvailableRules = { "naming", "room-bounds", "level-consistency", "unplaced-rooms", "views-not-on-sheets", "imported-dwg", "in-place-families" };
 
     public static Command Create(RevitClient client)
     {
@@ -41,6 +41,9 @@ public static class AuditCommand
                 table.AddRow("room-bounds", "Verify all rooms are properly bounded");
                 table.AddRow("level-consistency", "Check level naming and elevation consistency");
                 table.AddRow("unplaced-rooms", "Find unplaced room elements");
+                table.AddRow("views-not-on-sheets", "Find printable views not placed on any sheet");
+                table.AddRow("imported-dwg", "Detect imported (not linked) CAD files");
+                table.AddRow("in-place-families", "Find in-place families that should be loadable");
                 AnsiConsole.Write(table);
                 return;
             }

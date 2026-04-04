@@ -746,6 +746,9 @@ public sealed class RealRevitOperations : IRevitOperations
             ["room-bounds"] = AuditRoomBounds,
             ["level-consistency"] = AuditLevelConsistency,
             ["naming"] = AuditNaming,
+            ["views-not-on-sheets"] = AuditViewsNotOnSheets,
+            ["imported-dwg"] = AuditImportedDwg,
+            ["in-place-families"] = AuditInPlaceFamilies,
         };
 
     public Task<AuditResult> RunAuditAsync(AuditRequest request)
@@ -1051,13 +1054,62 @@ public sealed class RealRevitOperations : IRevitOperations
 
     // ── Audit rule: naming ──────────────────────────────────────
 
-    private static readonly Regex DefaultNamePattern = new(@"^.+\s+\d+$", RegexOptions.Compiled);
+    // Known Revit default view name prefixes (English + Chinese + other locales)
+    // These are system-generated and should be flagged as default names.
+    private static readonly string[] DefaultViewPrefixes =
+    {
+        // English
+        "Floor Plan", "Ceiling Plan", "Structural Plan",
+        "Section", "Callout", "Detail", "Elevation",
+        "3D View", "Drafting View", "Legend",
+        "{3D}", "Copy of",
+        // Chinese
+        "楼层平面", "天花板平面", "结构平面",
+        "剖面", "详图索引", "详图", "立面",
+        "三维视图", "起草视图", "图例",
+    };
+
+    // System-generated names that are NOT user-fixable (level/grid names used as view names)
+    private static readonly HashSet<string> SystemNamePrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Level names commonly used as plan view names — these are fine
+        "标高", "Level", "Ebene", "Niveau",
+        // Grid-based names
+        "Grid", "轴网",
+    };
+
+    private static bool IsDefaultViewName(string name)
+    {
+        // Skip system-generated names (level plans, etc.) — these are normal
+        foreach (var sys in SystemNamePrefixes)
+        {
+            if (name.StartsWith(sys, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        // Check against known default prefixes
+        foreach (var prefix in DefaultViewPrefixes)
+        {
+            // Match "Section 1", "Elevation 2", "3D View 5", etc.
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var remainder = name.Substring(prefix.Length).TrimStart();
+                // Exact prefix match (e.g. "{3D}") or prefix + number
+                if (remainder.Length == 0 || int.TryParse(remainder, out _))
+                    return true;
+                // "Copy of X" pattern
+                if (prefix == "Copy of")
+                    return true;
+            }
+        }
+
+        return false;
+    }
 
     private static List<AuditIssue> AuditNaming(Document doc)
     {
         var issues = new List<AuditIssue>();
 
-        // Check views for default names like "Section 1", "3D View 2"
         var views = new FilteredElementCollector(doc)
             .WhereElementIsNotElementType()
             .OfClass(typeof(View))
@@ -1066,7 +1118,7 @@ public sealed class RealRevitOperations : IRevitOperations
 
         foreach (var view in views)
         {
-            if (DefaultNamePattern.IsMatch(view.Name))
+            if (IsDefaultViewName(view.Name))
             {
                 issues.Add(new AuditIssue
                 {
@@ -1076,9 +1128,119 @@ public sealed class RealRevitOperations : IRevitOperations
                     ElementId = ToCliElementId(view.Id)
                 });
 
-                // Cap at 50 naming issues per rule to avoid flooding
                 if (issues.Count >= 50)
                     break;
+            }
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: views-not-on-sheets ────────────────────────
+
+    private static List<AuditIssue> AuditViewsNotOnSheets(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+
+        // Collect all viewport-placed view IDs
+        var placedViewIds = new HashSet<ElementId>();
+        var viewports = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(Viewport));
+
+        foreach (Viewport vp in viewports)
+            placedViewIds.Add(vp.ViewId);
+
+        // Check all non-template, non-sheet views
+        var views = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .Where(v => !v.IsTemplate && v is not ViewSheet && v.CanBePrinted);
+
+        foreach (var view in views)
+        {
+            if (!placedViewIds.Contains(view.Id))
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "views-not-on-sheets",
+                    Severity = "warning",
+                    Message = $"View '{view.Name}' ({view.ViewType}) is not placed on any sheet.",
+                    ElementId = ToCliElementId(view.Id)
+                });
+
+                if (issues.Count >= 50)
+                    break;
+            }
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: imported-dwg ────────────────────────────────
+
+    private static List<AuditIssue> AuditImportedDwg(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+
+        var importInstances = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(ImportInstance));
+
+        foreach (ImportInstance import in importInstances)
+        {
+            // Linked DWGs are also ImportInstance but with IsLinked = true
+            if (!import.IsLinked)
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "imported-dwg",
+                    Severity = "warning",
+                    Message = $"Imported (not linked) CAD file detected: '{import.Name}'. Consider using Link CAD instead.",
+                    ElementId = ToCliElementId(import.Id)
+                });
+
+                if (issues.Count >= 30)
+                    break;
+            }
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: in-place-families ────────────────────────────
+
+    private static List<AuditIssue> AuditInPlaceFamilies(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+
+        var familyInstances = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>();
+
+        var seenFamilies = new HashSet<string>();
+
+        foreach (var fi in familyInstances)
+        {
+            var family = fi.Symbol?.Family;
+            if (family != null && family.IsInPlace)
+            {
+                var familyName = family.Name;
+                if (seenFamilies.Add(familyName))
+                {
+                    issues.Add(new AuditIssue
+                    {
+                        Rule = "in-place-families",
+                        Severity = "warning",
+                        Message = $"In-place family '{familyName}' found. Consider converting to a loadable family.",
+                        ElementId = ToCliElementId(fi.Id)
+                    });
+
+                    if (issues.Count >= 30)
+                        break;
+                }
             }
         }
 
