@@ -1,0 +1,79 @@
+# RevitCli Starter Profile: Architectural Issue Gate
+# Use this for architectural projects before issuing drawings.
+#
+# Usage:
+#   cp profiles/architectural-issue.yml .revitcli.yml
+#   revitcli check
+#   revitcli publish
+
+version: 1
+
+defaults:
+  outputDir: ./deliverables
+
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: room-bounds
+      - rule: unplaced-rooms
+      - rule: duplicate-room-numbers
+      - rule: room-metadata
+      - rule: views-not-on-sheets
+      - rule: sheets-missing-info
+      - rule: naming
+    requiredParameters:
+      - category: rooms
+        parameter: Number
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Name
+        requireNonEmpty: true
+        severity: error
+      - category: doors
+        parameter: Fire Rating
+        requireNonEmpty: true
+        severity: warning
+
+  pre-issue:
+    failOn: warning
+    auditRules:
+      - rule: room-bounds
+      - rule: unplaced-rooms
+      - rule: duplicate-room-numbers
+      - rule: views-not-on-sheets
+      - rule: sheets-missing-info
+      - rule: imported-dwg
+      - rule: in-place-families
+    requiredParameters:
+      - category: rooms
+        parameter: Number
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Name
+        requireNonEmpty: true
+        severity: error
+      - category: doors
+        parameter: Fire Rating
+        requireNonEmpty: true
+        severity: error
+
+exports:
+  issue-dwg:
+    format: dwg
+    sheets: [all]
+    outputDir: ./deliverables/dwg
+
+  issue-pdf:
+    format: pdf
+    sheets: [all]
+    outputDir: ./deliverables/pdf
+
+publish:
+  default:
+    precheck: pre-issue
+    presets:
+      - issue-dwg
+      - issue-pdf

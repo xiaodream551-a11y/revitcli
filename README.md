@@ -132,23 +132,57 @@ revitcli completions zsh >> ~/.zshrc
 revitcli completions powershell >> $PROFILE
 ```
 
+## Quick Start (5 minutes)
+
+```bash
+# 1. Install CLI + Add-in (see Install section above)
+
+# 2. Verify connection
+revitcli doctor
+
+# 3. Copy a starter profile to your project
+cp profiles/general-publish.yml .revitcli.yml
+
+# 4. Run checks
+revitcli check
+
+# 5. Generate HTML report
+revitcli check --report report.html
+
+# 6. Publish deliverables
+revitcli publish --dry-run    # preview first
+revitcli publish              # export for real
+```
+
+## Starter Profiles
+
+Ready-to-use profiles in the `profiles/` directory:
+
+| Profile                   | Use Case                                                               |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `architectural-issue.yml` | Architectural projects — room data, sheet completeness, pre-issue gate |
+| `interior-room-data.yml`  | Interior design / FM handover — room metadata, naming, department      |
+| `general-publish.yml`     | Any project — basic health checks + DWG/PDF/IFC export pipelines       |
+
+Copy one to your project root as `.revitcli.yml` and customize.
+
 ## Project Structure
 
 ```
 src/RevitCli/              # CLI console app (net8.0)
 src/RevitCli.Addin/        # Revit add-in with HTTP server + ExternalEvent bridge
 shared/RevitCli.Shared/    # Shared DTOs and interface (netstandard2.0)
-tests/RevitCli.Tests/      # CLI tests (86 tests)
+tests/RevitCli.Tests/      # CLI tests (122 tests)
 tests/RevitCli.Addin.Tests/ # Add-in + protocol tests
+profiles/                  # Starter project profiles
 ```
 
 ## Roadmap
 
-- [ ] One-click add-in installer
-- [ ] Revit 2024/2025 compatibility (net48 multi-target)
-- [ ] Capability/version negotiation between CLI and add-in
-- [ ] Async export with real progress tracking
-- [ ] More audit rules (clash detection, unused families)
+- [ ] Documentation website
+- [ ] Cross-model coordination checks
+- [ ] Autodesk App Store listing
+- [ ] Auto-fix playbooks (batch rename, template assign)
 
 ## Publishing
 

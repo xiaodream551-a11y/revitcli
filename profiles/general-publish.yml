@@ -1,0 +1,59 @@
+# RevitCli Starter Profile: General Publish Pipeline
+# A minimal profile for any project that needs consistent export output.
+# Includes basic model health checks and DWG/PDF/IFC export presets.
+#
+# Usage:
+#   cp profiles/general-publish.yml .revitcli.yml
+#   revitcli check
+#   revitcli publish              # DWG + PDF
+#   revitcli publish full         # DWG + PDF + IFC
+
+version: 1
+
+defaults:
+  outputDir: ./deliverables
+
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: sheets-missing-info
+      - rule: views-not-on-sheets
+      - rule: imported-dwg
+      - rule: in-place-families
+      - rule: naming
+
+  quick:
+    failOn: error
+    auditRules:
+      - rule: sheets-missing-info
+      - rule: imported-dwg
+
+exports:
+  dwg:
+    format: dwg
+    sheets: [all]
+    outputDir: ./deliverables/dwg
+
+  pdf:
+    format: pdf
+    sheets: [all]
+    outputDir: ./deliverables/pdf
+
+  ifc:
+    format: ifc
+    outputDir: ./deliverables/ifc
+
+publish:
+  default:
+    precheck: quick
+    presets:
+      - dwg
+      - pdf
+
+  full:
+    precheck: default
+    presets:
+      - dwg
+      - pdf
+      - ifc

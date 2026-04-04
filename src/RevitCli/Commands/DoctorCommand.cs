@@ -100,6 +100,22 @@ public static class DoctorCommand
             var msg = $"No {ProfileLoader.FileName} found in directory tree";
             spectreWrite?.Invoke($"  [blue]\u25cb[/] {msg}");
             plainWrite?.Invoke($"INFO: {msg}");
+
+            // Quickstart guidance
+            spectreWrite?.Invoke("");
+            spectreWrite?.Invoke("  [yellow]Quick start:[/]");
+            spectreWrite?.Invoke("    1. Copy a starter profile to your project root:");
+            spectreWrite?.Invoke("       [dim]cp profiles/architectural-issue.yml .revitcli.yml[/]");
+            spectreWrite?.Invoke("       [dim]cp profiles/interior-room-data.yml .revitcli.yml[/]");
+            spectreWrite?.Invoke("       [dim]cp profiles/general-publish.yml .revitcli.yml[/]");
+            spectreWrite?.Invoke("    2. Run: [white]revitcli check[/]");
+            spectreWrite?.Invoke("    3. Run: [white]revitcli publish --dry-run[/]");
+
+            plainWrite?.Invoke("");
+            plainWrite?.Invoke("Quick start:");
+            plainWrite?.Invoke("  1. Copy a starter profile: cp profiles/general-publish.yml .revitcli.yml");
+            plainWrite?.Invoke("  2. Run: revitcli check");
+            plainWrite?.Invoke("  3. Run: revitcli publish --dry-run");
             return;
         }
 

@@ -1,0 +1,61 @@
+# RevitCli Starter Profile: Interior / Room Data Quality
+# Use this for interior design projects or FM handover preparation.
+# Focused on room data completeness and naming quality.
+#
+# Usage:
+#   cp profiles/interior-room-data.yml .revitcli.yml
+#   revitcli check
+
+version: 1
+
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: room-bounds
+      - rule: unplaced-rooms
+      - rule: duplicate-room-numbers
+      - rule: room-metadata
+      - rule: level-consistency
+    requiredParameters:
+      - category: rooms
+        parameter: Number
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Name
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Department
+        requireNonEmpty: true
+        severity: warning
+    naming:
+      - target: rooms
+        pattern: "^[A-Z0-9]"
+        severity: warning
+
+  handover:
+    failOn: warning
+    auditRules:
+      - rule: room-bounds
+      - rule: unplaced-rooms
+      - rule: duplicate-room-numbers
+      - rule: room-metadata
+    requiredParameters:
+      - category: rooms
+        parameter: Number
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Name
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Department
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Occupancy
+        requireNonEmpty: true
+        severity: warning
