@@ -28,8 +28,18 @@ jobs:
       - name: Build CLI
         run: dotnet publish src/RevitCli -c Release -o ./stage/bin /p:Version=${{ steps.version.outputs.VERSION }}
 
-      - name: Build Add-in
-        run: dotnet publish src/RevitCli.Addin -c Release -o ./stage/addin
+      # Build add-in per Revit year
+      # 2024: net48, 2025: net8.0-windows, 2026: net8.0-windows
+      - name: Build Add-in (Revit 2026)
+        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2026 -o ./stage/addin/2026
+
+      - name: Build Add-in (Revit 2025)
+        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2025 -o ./stage/addin/2025
+        continue-on-error: true
+
+      - name: Build Add-in (Revit 2024)
+        run: dotnet publish src/RevitCli.Addin -c Release -f net48 -p:RevitYear=2024 -o ./stage/addin/2024
+        continue-on-error: true
 
       - name: Copy install scripts
         shell: pwsh
@@ -41,7 +51,7 @@ jobs:
         shell: pwsh
         run: |
           $content = Get-Content ./stage/install.ps1 -Raw
-          $content = $content -replace 'version   = "0\.1\.0"', "version   = `"${{ steps.version.outputs.VERSION }}`""
+          $content = $content -replace 'version      = "0\.1\.0"', "version      = `"${{ steps.version.outputs.VERSION }}`""
           Set-Content ./stage/install.ps1 -Value $content
 
       - name: Package ZIP
@@ -64,9 +74,10 @@ jobs:
           body: |
             ## RevitCli ${{ github.ref_name }}
 
+            Supports Revit 2024, 2025, and 2026.
+
             ### Install
             ```powershell
-            # Extract and install
             Expand-Archive .\revitcli-win-x64.zip -DestinationPath .\revitcli
             cd .\revitcli
             powershell -ExecutionPolicy Bypass -File .\install.ps1

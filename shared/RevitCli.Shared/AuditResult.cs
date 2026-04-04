@@ -27,5 +27,5 @@ public class AuditIssue
     public string Message { get; set; } = "";
 
     [JsonPropertyName("elementId")]
-    public int? ElementId { get; set; }
+    public long? ElementId { get; set; }
 }

@@ -32,8 +32,8 @@ public sealed class RealRevitOperations : IRevitOperations
             ?? throw new InvalidOperationException("No active document is open.");
     }
 
-    private static int ToCliElementId(ElementId elementId) =>
-        checked((int)elementId.Value);
+    private static long ToCliElementId(ElementId elementId) =>
+        elementId.Value;
 
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrEmpty(s) ? null : s;
@@ -486,7 +486,7 @@ public sealed class RealRevitOperations : IRevitOperations
     //  query
     // ═══════════════════════════════════════════════════════════════
 
-    public Task<ElementInfo?> GetElementByIdAsync(int id)
+    public Task<ElementInfo?> GetElementByIdAsync(long id)
     {
         if (id <= 0)
             throw new ArgumentOutOfRangeException(nameof(id), "Element id must be a positive integer.");

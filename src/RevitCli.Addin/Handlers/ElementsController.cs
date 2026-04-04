@@ -50,7 +50,7 @@ public class ElementsController : WebApiController
     }
 
     [Route(HttpVerbs.Get, "/elements/{id}")]
-    public async Task GetElement(int id)
+    public async Task GetElement(long id)
     {
         HttpContext.Response.ContentType = "application/json";
         await using var writer = HttpContext.OpenResponseText();

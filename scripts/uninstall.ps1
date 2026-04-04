@@ -13,23 +13,25 @@ $ErrorActionPreference = "Stop"
 
 $InstallRoot = Join-Path $env:LOCALAPPDATA "RevitCli"
 $MetadataPath = Join-Path $InstallRoot "install.json"
+$BinDir = Join-Path $InstallRoot "bin"
 $ConfigDir = Join-Path $env:USERPROFILE ".revitcli"
 
 Write-Host "RevitCli Uninstaller" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Read install metadata ───────────────────────────────────────
-$revitYear = "2026"
+$revitYears = @("2024", "2025", "2026")
 if (Test-Path $MetadataPath) {
     $meta = Get-Content $MetadataPath -Raw | ConvertFrom-Json
-    $revitYear = $meta.revitYear
-    Write-Host "Found installation: v$($meta.version), Revit $revitYear"
+    if ($meta.revitYears) {
+        $revitYears = @($meta.revitYears)
+    } elseif ($meta.revitYear) {
+        $revitYears = @($meta.revitYear)
+    }
+    Write-Host "Found installation: v$($meta.version), Revit $($revitYears -join ', ')"
 } else {
-    Write-Host "No install metadata found, using defaults." -ForegroundColor Yellow
+    Write-Host "No install metadata found, cleaning up all known years." -ForegroundColor Yellow
 }
-
-$BinDir = Join-Path $InstallRoot "bin"
-$ManifestPath = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$revitYear\RevitCli.addin"
 
 # ── Warn if Revit is running ───────────────────────────────────
 $revitProcess = Get-Process Revit -ErrorAction SilentlyContinue
@@ -37,12 +39,13 @@ if ($revitProcess) {
     Write-Host "WARNING: Revit is running. Close Revit first for a clean uninstall." -ForegroundColor Yellow
 }
 
-# ── Remove Revit manifest ──────────────────────────────────────
-if (Test-Path $ManifestPath) {
-    Remove-Item $ManifestPath -Force
-    Write-Host "Removed Revit manifest: $ManifestPath" -ForegroundColor Green
-} else {
-    Write-Host "No Revit manifest found." -ForegroundColor DarkGray
+# ── Remove Revit manifests ─────────────────────────────────────
+foreach ($year in $revitYears) {
+    $manifestPath = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$year\RevitCli.addin"
+    if (Test-Path $manifestPath) {
+        Remove-Item $manifestPath -Force
+        Write-Host "Removed Revit $year manifest" -ForegroundColor Green
+    }
 }
 
 # ── Remove from PATH ───────────────────────────────────────────
@@ -57,8 +60,6 @@ if ($userPath -like "*$BinDir*") {
 if (Test-Path $InstallRoot) {
     Remove-Item $InstallRoot -Recurse -Force
     Write-Host "Removed installation: $InstallRoot" -ForegroundColor Green
-} else {
-    Write-Host "No installation directory found." -ForegroundColor DarkGray
 }
 
 # ── Purge config ────────────────────────────────────────────────

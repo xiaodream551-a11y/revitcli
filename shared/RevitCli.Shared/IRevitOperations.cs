@@ -6,7 +6,7 @@ public interface IRevitOperations
 {
     Task<StatusInfo> GetStatusAsync();
     Task<ElementInfo[]> QueryElementsAsync(string? category, string? filter);
-    Task<ElementInfo?> GetElementByIdAsync(int id);
+    Task<ElementInfo?> GetElementByIdAsync(long id);
     Task<ExportProgress> ExportAsync(ExportRequest request);
     Task<ExportProgress> GetExportProgressAsync(string taskId);
     Task<SetResult> SetParametersAsync(SetRequest request);

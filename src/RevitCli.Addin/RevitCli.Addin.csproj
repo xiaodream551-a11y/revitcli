@@ -1,31 +1,54 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RootNamespace>RevitCli.Addin</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Revit2026InstallDir Condition="'$(Revit2026InstallDir)' == ''">C:\Program Files\Autodesk\Revit 2026</Revit2026InstallDir>
+    <LangVersion>latest</LangVersion>
+
+    <!-- RevitYear: 2024 (net48), 2025 (net8.0-windows), 2026 (net8.0-windows) -->
+    <RevitYear Condition="'$(RevitYear)' == ''">2026</RevitYear>
+
+    <!-- Revit install directories per year -->
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2024'">C:\Program Files\Autodesk\Revit 2024</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2025'">C:\Program Files\Autodesk\Revit 2025</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2026'">C:\Program Files\Autodesk\Revit 2026</RevitInstallDir>
+
+    <!-- Per-year define constants -->
+    <DefineConstants>$(DefineConstants);REVIT$(RevitYear)</DefineConstants>
+
+    <!-- Separate output per year so builds don't overwrite each other -->
+    <OutputPath>bin\$(Configuration)\$(RevitYear)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
-  <ItemGroup>
+
+  <!-- net8.0-windows needs FrameworkReference -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="EmbedIO" Version="3.5.2" />
   </ItemGroup>
+
   <ItemGroup>
     <Reference Include="RevitAPI">
-      <HintPath>$(Revit2026InstallDir)\RevitAPI.dll</HintPath>
+      <HintPath>$(RevitInstallDir)\RevitAPI.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="RevitAPIUI">
-      <HintPath>$(Revit2026InstallDir)\RevitAPIUI.dll</HintPath>
+      <HintPath>$(RevitInstallDir)\RevitAPIUI.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
   </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="RevitCli.Addin.Tests" />
   </ItemGroup>

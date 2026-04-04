@@ -109,7 +109,7 @@ public class RevitClient
         }
     }
 
-    public async Task<ApiResponse<ElementInfo>> QueryElementByIdAsync(int id)
+    public async Task<ApiResponse<ElementInfo>> QueryElementByIdAsync(long id)
     {
         try
         {

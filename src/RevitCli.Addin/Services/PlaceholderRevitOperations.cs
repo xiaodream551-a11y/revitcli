@@ -21,7 +21,7 @@ public class PlaceholderRevitOperations : IRevitOperations
         return Task.FromResult(Array.Empty<ElementInfo>());
     }
 
-    public Task<ElementInfo?> GetElementByIdAsync(int id)
+    public Task<ElementInfo?> GetElementByIdAsync(long id)
     {
         return Task.FromResult<ElementInfo?>(new ElementInfo { Id = id, Name = $"Element {id}" });
     }

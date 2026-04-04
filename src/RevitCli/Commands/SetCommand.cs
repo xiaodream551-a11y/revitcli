@@ -15,7 +15,7 @@ public static class SetCommand
     {
         var categoryArg = new Argument<string?>("category", () => null, "Element category (e.g. doors, walls)");
         var filterOpt = new Option<string?>("--filter", "Filter expression (e.g. \"height > 3000\")");
-        var idOpt = new Option<int?>("--id", "Target a specific element by ID");
+        var idOpt = new Option<long?>("--id", "Target a specific element by ID");
         var paramOpt = new Option<string>("--param", "Parameter name to modify") { IsRequired = true };
         var valueOpt = new Option<string>("--value", "New parameter value") { IsRequired = true };
         var dryRunOpt = new Option<bool>("--dry-run", "Preview changes without applying");
@@ -95,7 +95,7 @@ public static class SetCommand
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string param, string value, bool dryRun, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string param, string value, bool dryRun, TextWriter output)
     {
         if (string.IsNullOrEmpty(param))
         {

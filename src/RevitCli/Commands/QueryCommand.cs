@@ -18,7 +18,7 @@ public static class QueryCommand
     {
         var categoryArg = new Argument<string?>("category", () => null, "Element category (e.g. walls, doors, windows)");
         var filterOpt = new Option<string?>("--filter", "Filter expression (e.g. \"height > 3000\")");
-        var idOpt = new Option<int?>("--id", "Query a specific element by ID");
+        var idOpt = new Option<long?>("--id", "Query a specific element by ID");
         var outputOpt = new Option<string>("--output", () => config.DefaultOutput, $"Output format: {string.Join(", ", ValidOutputFormats)}");
 
         var command = new Command("query", "Query elements from the Revit model")
@@ -68,7 +68,7 @@ public static class QueryCommand
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, int? id, string outputFormat, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string outputFormat, TextWriter output)
     {
         if (id.HasValue)
         {

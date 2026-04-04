@@ -8,7 +8,7 @@ public class SetRequest
     public string? Category { get; set; }
 
     [JsonPropertyName("elementId")]
-    public int? ElementId { get; set; }
+    public long? ElementId { get; set; }
 
     [JsonPropertyName("filter")]
     public string? Filter { get; set; }
