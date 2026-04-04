@@ -122,36 +122,26 @@ public class OutputContractTests
         Assert.Contains(">1<", html); // suppressed count
     }
 
-    // ── Exit code contract ──────────────────────────────────────
-
-    [Fact]
-    public void ExitCode_CheckPassReturnsZero()
-    {
-        // Covered by CheckCommandTests.Check_PassesAuditRules_ReturnsZero
-        // This is a documentation test for the contract
-        // exit 0 = all checks passed (per failOn level)
-        Assert.True(true);
-    }
-
-    [Fact]
-    public void ExitCode_CheckFailReturnsOne()
-    {
-        // Covered by CheckCommandTests.Check_FailsOnError_ReturnsOne
-        // exit 1 = at least one check failed at or above failOn level
-        Assert.True(true);
-    }
-
     // ── Severity values contract ────────────────────────────────
 
     [Fact]
-    public void Severity_OnlyThreeValues()
+    public void Severity_ProfileRejectsInvalidValues()
     {
-        // Contract: severity is always one of: "error", "warning", "info"
-        var validSeverities = new HashSet<string> { "error", "warning", "info" };
-
-        // Verify all built-in audit rules use valid severities
-        // (This is enforced by ProfileLoader.ValidateProfile for profile-defined checks)
-        Assert.Equal(3, validSeverities.Count);
+        // Contract: severity must be error/warning/info — enforced at load time
+        var yaml = @"
+version: 1
+checks:
+  default:
+    failOn: error
+    requiredParameters:
+      - category: doors
+        parameter: Mark
+        severity: critical
+";
+        var path = Path.Combine(Path.GetTempPath(), $"contract_{Guid.NewGuid():N}.yml");
+        File.WriteAllText(path, yaml);
+        Assert.Throws<InvalidOperationException>(() => RevitCli.Profile.ProfileLoader.Load(path));
+        File.Delete(path);
     }
 
     // ── Stored result contract ──────────────────────────────────

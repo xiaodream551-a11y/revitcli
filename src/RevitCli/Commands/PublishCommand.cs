@@ -142,7 +142,10 @@ public static class PublishCommand
             }
             else
             {
-                await output.WriteLineAsync($"  Failed: {result.Error ?? result.Data?.Message ?? "Unknown error"}");
+                var errMsg = result.Error ?? result.Data?.Message ?? "Unknown error";
+                await output.WriteLineAsync($"  Failed: {errMsg}");
+                if (errMsg.Contains("not running"))
+                    await output.WriteLineAsync("  Run 'revitcli doctor' to diagnose connection issues.");
                 failed++;
             }
         }

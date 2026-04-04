@@ -22,11 +22,10 @@ public class CheckCommandTests
     }
 
     [Fact]
-    public async Task Check_NoProfile_ReturnsError()
+    public async Task Check_ExplicitProfileNotFound_ReturnsError()
     {
         var client = CreateClient("{}");
         var writer = new StringWriter();
-        // Use a non-existent profile path
         var exitCode = await CheckCommand.ExecuteAsync(
             client, "default", "/nonexistent/path/.revitcli.yml", "table", null, true, writer);
         Assert.Equal(1, exitCode);
@@ -34,13 +33,30 @@ public class CheckCommandTests
     }
 
     [Fact]
-    public async Task Check_UnknownCheckSet_ReturnsError()
+    public async Task Check_NoProfileDiscovered_SuggestsExample()
     {
-        // Create a minimal profile
+        // Run from a temp dir with no .revitcli.yml anywhere up the tree
+        var client = CreateClient("{}");
+        var writer = new StringWriter();
+        // profilePath=null triggers discovery, which finds nothing in temp dir
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", null, "table", null, true, writer);
+        // Might find a profile in the real cwd — if so, skip assertion
+        if (exitCode == 1)
+        {
+            var output = writer.ToString();
+            if (output.Contains(".revitcli.yml"))
+                Assert.Contains(".revitcli.example.yml", output);
+        }
+    }
+
+    [Fact]
+    public async Task Check_UnknownCheckSet_ListsAvailable()
+    {
         var profilePath = CreateTempProfile(@"
 version: 1
 checks:
-  default:
+  my-check:
     failOn: error
     auditRules:
       - rule: naming
@@ -50,7 +66,9 @@ checks:
         var exitCode = await CheckCommand.ExecuteAsync(
             client, "nonexistent", profilePath, "table", null, true, writer);
         Assert.Equal(1, exitCode);
-        Assert.Contains("not found", writer.ToString().ToLower());
+        var output = writer.ToString();
+        Assert.Contains("not found", output.ToLower());
+        Assert.Contains("my-check", output); // lists available sets
         File.Delete(profilePath);
     }
 

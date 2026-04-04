@@ -79,25 +79,81 @@ public class SetCommandTests
     }
 
     [Fact]
-    public void QueryJsonOutput_ParseIds_ExtractsCorrectly()
+    public async Task IdsFrom_JsonArray_WorksEndToEnd()
     {
-        // Simulates query --output json piped to set --ids-from
-        var queryOutput = @"[
-            {""id"": 337596, ""name"": ""Wall 1"", ""category"": ""Walls""},
-            {""id"": 337601, ""name"": ""Wall 2"", ""category"": ""Walls""}
-        ]";
+        // Write query-style JSON to temp file
+        var tmpFile = Path.Combine(Path.GetTempPath(), $"ids_test_{Guid.NewGuid():N}.json");
+        File.WriteAllText(tmpFile, @"[{""id"": 337596, ""name"": ""Wall 1""}, {""id"": 337601, ""name"": ""Wall 2""}]");
 
-        var elements = JsonSerializer.Deserialize<List<JsonElement>>(queryOutput);
-        Assert.NotNull(elements);
-        var ids = new List<long>();
-        foreach (var elem in elements!)
+        var setResult = new SetResult { Affected = 2, Preview = new List<SetPreviewItem>
         {
-            if (elem.TryGetProperty("id", out var idProp))
-                ids.Add(idProp.GetInt64());
-        }
-        Assert.Equal(2, ids.Count);
-        Assert.Equal(337596, ids[0]);
-        Assert.Equal(337601, ids[1]);
+            new() { Id = 337596, Name = "Wall 1", OldValue = "", NewValue = "TEST" },
+            new() { Id = 337601, Name = "Wall 2", OldValue = "", NewValue = "TEST" }
+        }};
+        var response = ApiResponse<SetResult>.Ok(setResult);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await SetCommand.ExecuteAsync(client, null, null, null, "Mark", "TEST", true, false, tmpFile, writer);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("2 element(s)", writer.ToString());
+        // Verify the request body contains elementIds
+        Assert.Contains("337596", handler.LastRequestBody);
+        Assert.Contains("337601", handler.LastRequestBody);
+        File.Delete(tmpFile);
+    }
+
+    [Fact]
+    public async Task IdsFrom_PlainText_WorksEndToEnd()
+    {
+        var tmpFile = Path.Combine(Path.GetTempPath(), $"ids_test_{Guid.NewGuid():N}.txt");
+        File.WriteAllText(tmpFile, "100\n200\n300\n");
+
+        var setResult = new SetResult { Affected = 3 };
+        var response = ApiResponse<SetResult>.Ok(setResult);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await SetCommand.ExecuteAsync(client, null, null, null, "Mark", "X", false, false, tmpFile, writer);
+        Assert.Equal(0, exitCode);
+        Assert.Contains("100", handler.LastRequestBody);
+        File.Delete(tmpFile);
+    }
+
+    [Fact]
+    public async Task IdsFrom_MalformedItem_ReturnsError()
+    {
+        var tmpFile = Path.Combine(Path.GetTempPath(), $"ids_test_{Guid.NewGuid():N}.txt");
+        File.WriteAllText(tmpFile, "100\nnot_a_number\n300\n");
+
+        var handler = new FakeHttpHandler("{}");
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await SetCommand.ExecuteAsync(client, null, null, null, "Mark", "X", false, false, tmpFile, writer);
+        Assert.Equal(1, exitCode);
+        Assert.Contains("not_a_number", writer.ToString());
+        File.Delete(tmpFile);
+    }
+
+    [Fact]
+    public async Task IdsFrom_MixedWithCategory_ReturnsError()
+    {
+        var tmpFile = Path.Combine(Path.GetTempPath(), $"ids_test_{Guid.NewGuid():N}.txt");
+        File.WriteAllText(tmpFile, "100\n");
+
+        var handler = new FakeHttpHandler("{}");
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        // --ids-from + category should be rejected
+        var exitCode = await SetCommand.ExecuteAsync(client, "walls", null, null, "Mark", "X", false, false, tmpFile, writer);
+        Assert.Equal(1, exitCode);
+        Assert.Contains("cannot be combined", writer.ToString().ToLower());
+        File.Delete(tmpFile);
     }
 
     [Fact]

@@ -141,10 +141,18 @@ public static class SetCommand
             DryRun = dryRun
         };
 
-        if (!string.IsNullOrEmpty(idsFromFile))
-            request.ElementIds = ReadIdsFromFile(idsFromFile);
-        else if (fromStdin)
-            request.ElementIds = ReadIdsFromStdin();
+        try
+        {
+            if (!string.IsNullOrEmpty(idsFromFile))
+                request.ElementIds = ReadIdsFromFile(idsFromFile);
+            else if (fromStdin)
+                request.ElementIds = ReadIdsFromStdin();
+        }
+        catch (Exception ex)
+        {
+            await output.WriteLineAsync($"Error: {ex.Message}");
+            return 1;
+        }
 
         var result = await client.SetParameterAsync(request);
 
