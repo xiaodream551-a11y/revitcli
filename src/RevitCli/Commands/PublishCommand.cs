@@ -143,6 +143,39 @@ public static class PublishCommand
 
         await output.WriteLineAsync("");
         await output.WriteLineAsync($"Publish '{pipelineName}': {succeeded} succeeded, {failed} failed");
-        return failed > 0 ? 1 : 0;
+
+        var exitCode = failed > 0 ? 1 : 0;
+
+        // Journal log
+        if (!dryRun)
+        {
+            Output.JournalLogger.Log(profileDir, new
+            {
+                action = "publish",
+                pipeline = pipelineName,
+                succeeded,
+                failed,
+                presets = pipeline.Presets,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                user = Environment.UserName
+            });
+        }
+
+        // Webhook notification
+        if (!string.IsNullOrWhiteSpace(profile.Defaults.Notify) && !dryRun)
+        {
+            await Output.WebhookNotifier.NotifyAsync(profile.Defaults.Notify, new
+            {
+                type = "publish",
+                pipeline = pipelineName,
+                succeeded,
+                failed,
+                presets = pipeline.Presets,
+                status = exitCode == 0 ? "passed" : "failed",
+                timestamp = DateTime.UtcNow.ToString("o")
+            });
+        }
+
+        return exitCode;
     }
 }

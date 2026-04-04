@@ -685,6 +685,20 @@ public sealed class RealRevitOperations : IRevitOperations
 
     private List<Element> ResolveSetTargets(Document doc, SetRequest request)
     {
+        // Multiple element IDs (from --stdin pipe)
+        if (request.ElementIds != null && request.ElementIds.Count > 0)
+        {
+            var results = new List<Element>();
+            foreach (var eid in request.ElementIds)
+            {
+                var element = doc.GetElement(new ElementId(eid));
+                if (element == null)
+                    throw new ArgumentException($"Element with ID {eid} not found.");
+                results.Add(element);
+            }
+            return results;
+        }
+
         // Single element by ID
         if (request.ElementId.HasValue)
         {

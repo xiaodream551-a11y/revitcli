@@ -16,6 +16,9 @@ version: 1
 
 defaults:
   outputDir: ./deliverables
+  # Webhook: POST JSON to this URL after check/publish completes
+  # notify: https://hooks.slack.com/services/T.../B.../xxx
+  # notify: https://your-teams-webhook-url
 
 # Named check sets — run with: revitcli check [name]
 checks:

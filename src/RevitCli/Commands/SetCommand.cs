@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Output;
@@ -19,17 +22,18 @@ public static class SetCommand
         var paramOpt = new Option<string>("--param", "Parameter name to modify") { IsRequired = true };
         var valueOpt = new Option<string>("--value", "New parameter value") { IsRequired = true };
         var dryRunOpt = new Option<bool>("--dry-run", "Preview changes without applying");
+        var stdinOpt = new Option<bool>("--stdin", "Read element IDs from stdin (JSON array or query output)");
 
         var command = new Command("set", "Modify element parameters in the Revit model")
         {
-            categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt
+            categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt
         };
 
-        command.SetHandler(async (category, filter, id, param, value, dryRun) =>
+        command.SetHandler(async (category, filter, id, param, value, dryRun, fromStdin) =>
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, param, value, dryRun, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, param, value, dryRun, fromStdin, Console.Out);
                 return;
             }
 
@@ -40,9 +44,9 @@ public static class SetCommand
                 return;
             }
 
-            if (category == null && !id.HasValue)
+            if (category == null && !id.HasValue && !fromStdin)
             {
-                AnsiConsole.MarkupLine("[red]Error:[/] provide a category or --id to target elements.");
+                AnsiConsole.MarkupLine("[red]Error:[/] provide a category, --id, or --stdin to target elements.");
                 Environment.ExitCode = 1;
                 return;
             }
@@ -56,6 +60,9 @@ public static class SetCommand
                 Value = value,
                 DryRun = dryRun
             };
+
+            if (fromStdin)
+                request.ElementIds = ReadIdsFromStdin();
 
             var result = await client.SetParameterAsync(request);
 
@@ -90,12 +97,12 @@ public static class SetCommand
             }
 
             AnsiConsole.MarkupLine($"Modified [green]{data.Affected}[/] element(s).");
-        }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt);
+        }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt);
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string param, string value, bool dryRun, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string param, string value, bool dryRun, bool fromStdin, TextWriter output)
     {
         if (string.IsNullOrEmpty(param))
         {
@@ -103,9 +110,9 @@ public static class SetCommand
             return 1;
         }
 
-        if (category == null && !id.HasValue)
+        if (category == null && !id.HasValue && !fromStdin)
         {
-            await output.WriteLineAsync("Error: provide a category or --id to target elements.");
+            await output.WriteLineAsync("Error: provide a category, --id, or --stdin to target elements.");
             return 1;
         }
 
@@ -118,6 +125,9 @@ public static class SetCommand
             Value = value,
             DryRun = dryRun
         };
+
+        if (fromStdin)
+            request.ElementIds = ReadIdsFromStdin();
 
         var result = await client.SetParameterAsync(request);
 
@@ -138,6 +148,89 @@ public static class SetCommand
         }
 
         await output.WriteLineAsync($"Modified {data.Affected} element(s).");
+
+        // Journal log
+        JournalLogger.Log(null, new
+        {
+            action = "set",
+            param,
+            value,
+            category,
+            filter,
+            elementId = id,
+            fromStdin,
+            affected = data.Affected,
+            timestamp = DateTime.UtcNow.ToString("o"),
+            user = Environment.UserName
+        });
+
         return 0;
+    }
+
+    /// <summary>
+    /// Read element IDs from stdin. Supports:
+    /// - JSON array of objects with "id" field (query --output json)
+    /// - JSON array of numbers
+    /// - One ID per line (plain text)
+    /// </summary>
+    private static List<long> ReadIdsFromStdin()
+    {
+        var input = Console.In.ReadToEnd();
+        if (string.IsNullOrWhiteSpace(input))
+            return new List<long>();
+
+        input = input.Trim();
+
+        // Try JSON array
+        if (input.StartsWith("["))
+        {
+            try
+            {
+                // Try as array of objects with "id" field (query output)
+                var elements = JsonSerializer.Deserialize<List<JsonElement>>(input);
+                if (elements != null)
+                {
+                    var ids = new List<long>();
+                    foreach (var elem in elements)
+                    {
+                        if (elem.ValueKind == JsonValueKind.Number)
+                        {
+                            ids.Add(elem.GetInt64());
+                        }
+                        else if (elem.ValueKind == JsonValueKind.Object &&
+                                 elem.TryGetProperty("id", out var idProp))
+                        {
+                            ids.Add(idProp.GetInt64());
+                        }
+                    }
+                    return ids;
+                }
+            }
+            catch { }
+        }
+
+        // Try JSON wrapper with "data" field (API response format)
+        if (input.StartsWith("{"))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(input);
+                if (doc.RootElement.TryGetProperty("data", out var data) &&
+                    data.ValueKind == JsonValueKind.Array)
+                {
+                    return data.EnumerateArray()
+                        .Where(e => e.TryGetProperty("id", out _))
+                        .Select(e => e.GetProperty("id").GetInt64())
+                        .ToList();
+                }
+            }
+            catch { }
+        }
+
+        // Fallback: one ID per line
+        return input.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => long.TryParse(line, out _))
+            .Select(long.Parse)
+            .ToList();
     }
 }

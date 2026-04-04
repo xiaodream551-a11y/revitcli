@@ -28,6 +28,9 @@ public class ProfileDefaults
 {
     [YamlMember(Alias = "outputDir")]
     public string? OutputDir { get; set; }
+
+    [YamlMember(Alias = "notify")]
+    public string? Notify { get; set; }
 }
 
 public class CheckDefinition

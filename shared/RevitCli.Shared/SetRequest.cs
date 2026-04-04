@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace RevitCli.Shared;
@@ -9,6 +10,9 @@ public class SetRequest
 
     [JsonPropertyName("elementId")]
     public long? ElementId { get; set; }
+
+    [JsonPropertyName("elementIds")]
+    public List<long>? ElementIds { get; set; }
 
     [JsonPropertyName("filter")]
     public string? Filter { get; set; }

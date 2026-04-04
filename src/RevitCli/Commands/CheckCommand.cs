@@ -213,12 +213,29 @@ public static class CheckCommand
         var hasErrors = allIssues.Any(i => i.Severity == "error");
         var hasWarnings = allIssues.Any(i => i.Severity == "warning");
 
+        var exitCode = 0;
         if (failOn == "error" && hasErrors)
-            return 1;
-        if (failOn == "warning" && (hasErrors || hasWarnings))
-            return 1;
+            exitCode = 1;
+        else if (failOn == "warning" && (hasErrors || hasWarnings))
+            exitCode = 1;
 
-        return 0;
+        // Webhook notification
+        if (!string.IsNullOrWhiteSpace(profile.Defaults.Notify))
+        {
+            await WebhookNotifier.NotifyAsync(profile.Defaults.Notify, new
+            {
+                type = "check",
+                check = checkName,
+                passed = totalPassed,
+                failed = totalFailed,
+                suppressed = suppressedCount,
+                issueCount = allIssues.Count,
+                status = exitCode == 0 ? "passed" : "failed",
+                timestamp = DateTime.UtcNow.ToString("o")
+            });
+        }
+
+        return exitCode;
     }
 
     private static bool IsSuppressed(AuditIssue issue, List<Profile.Suppression> suppressions)
