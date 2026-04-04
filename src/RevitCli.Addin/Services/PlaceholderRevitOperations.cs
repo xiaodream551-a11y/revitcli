@@ -12,7 +12,15 @@ public class PlaceholderRevitOperations : IRevitOperations
         return Task.FromResult(new StatusInfo
         {
             RevitVersion = "2025",
-            DocumentName = "Placeholder.rvt"
+            RevitYear = 2025,
+            AddinVersion = "0.0.0",
+            DocumentName = "Placeholder.rvt",
+            Capabilities = new List<string>
+            {
+                "status", "query", "query.filter", "query.id",
+                "set", "set.dry-run", "audit",
+                "export.dwg", "export.pdf", "export.ifc"
+            }
         });
     }
 

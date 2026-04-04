@@ -34,11 +34,15 @@ public static class StatusCommand
             table.AddColumn("Property");
             table.AddColumn("Value");
             table.AddRow("Revit Version", $"[green]{Markup.Escape(status.RevitVersion)}[/]");
+            if (!string.IsNullOrEmpty(status.AddinVersion))
+                table.AddRow("Add-in Version", Markup.Escape(status.AddinVersion));
             table.AddRow("Document", status.DocumentName != null
                 ? $"[cyan]{Markup.Escape(status.DocumentName)}[/]"
                 : "[grey](none open)[/]");
             if (status.DocumentName != null && status.DocumentPath != null)
                 table.AddRow("Path", Markup.Escape(status.DocumentPath));
+            if (status.Capabilities.Count > 0)
+                table.AddRow("Capabilities", Markup.Escape(string.Join(", ", status.Capabilities)));
             AnsiConsole.Write(table);
         });
         return command;
@@ -56,6 +60,8 @@ public static class StatusCommand
 
         var status = result.Data!;
         await output.WriteLineAsync($"Revit version: {status.RevitVersion}");
+        if (!string.IsNullOrEmpty(status.AddinVersion))
+            await output.WriteLineAsync($"Add-in:        v{status.AddinVersion}");
         if (status.DocumentName != null)
         {
             await output.WriteLineAsync($"Document:      {status.DocumentName}");

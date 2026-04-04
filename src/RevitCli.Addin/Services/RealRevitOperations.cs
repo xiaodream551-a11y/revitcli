@@ -467,19 +467,48 @@ public sealed class RealRevitOperations : IRevitOperations
     //  status
     // ═══════════════════════════════════════════════════════════════
 
+    private static readonly string AddinVersionString =
+        typeof(RealRevitOperations).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
     public Task<StatusInfo> GetStatusAsync()
     {
         return _bridge.InvokeAsync(app =>
         {
             var uiDoc = app.ActiveUIDocument;
             var doc = uiDoc?.Document;
+            int.TryParse(app.Application.VersionNumber, out var year);
             return new StatusInfo
             {
                 RevitVersion = app.Application.VersionNumber,
+                RevitYear = year,
+                AddinVersion = AddinVersionString,
                 DocumentName = doc?.Title,
-                DocumentPath = string.IsNullOrWhiteSpace(doc?.PathName) ? null : doc.PathName
+                DocumentPath = string.IsNullOrWhiteSpace(doc?.PathName) ? null : doc.PathName,
+                Capabilities = BuildCapabilities(year)
             };
         });
+    }
+
+    private static List<string> BuildCapabilities(int revitYear)
+    {
+        var caps = new List<string>
+        {
+            "status",
+            "query",
+            "query.filter",
+            "query.id",
+            "set",
+            "set.dry-run",
+            "audit",
+            "export.dwg",
+            "export.ifc"
+        };
+
+        // PDF export requires Revit 2022+
+        if (revitYear >= 2022)
+            caps.Add("export.pdf");
+
+        return caps;
     }
 
     // ═══════════════════════════════════════════════════════════════
