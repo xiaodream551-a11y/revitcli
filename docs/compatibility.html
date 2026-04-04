@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compatibility — RevitCli</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="inner">
+        <span class="logo">RevitCli</span>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="guide.html">Guide</a>
+          <a href="profile.html">Profile Reference</a>
+          <a href="troubleshooting.html">Troubleshooting</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1>Compatibility &amp; Versioning</h1>
+
+      <h2>Revit Version Support</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Revit</th>
+            <th>Runtime</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>2026</strong></td>
+            <td>.NET 8</td>
+            <td style="color: #3fb950">Verified</td>
+            <td>Primary development and test target</td>
+          </tr>
+          <tr>
+            <td><strong>2025</strong></td>
+            <td>.NET 8</td>
+            <td style="color: #d29922">Build supported</td>
+            <td>Same runtime as 2026, not yet verified on real Revit 2025</td>
+          </tr>
+          <tr>
+            <td><strong>2024</strong></td>
+            <td>.NET Framework 4.8</td>
+            <td style="color: #d29922">Build supported</td>
+            <td>Requires net48 build, not yet verified</td>
+          </tr>
+          <tr>
+            <td>2023 and older</td>
+            <td>-</td>
+            <td style="color: #8b949e">Not supported</td>
+            <td>No plans</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="alert alert-info">
+        Build per Revit year:
+        <code>dotnet build -f net8.0-windows -p:RevitYear=2026</code> |
+        <code>dotnet build -f net8.0-windows -p:RevitYear=2025</code> |
+        <code>dotnet build -f net48 -p:RevitYear=2024</code>
+      </div>
+
+      <h2>Command Stability</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Stability</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>status</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>Output contract locked</td>
+          </tr>
+          <tr>
+            <td><code>query</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>JSON output contract locked</td>
+          </tr>
+          <tr>
+            <td><code>set</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>
+              <code>--stdin</code> unreliable on Windows; use
+              <code>--ids-from</code>
+            </td>
+          </tr>
+          <tr>
+            <td><code>audit</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>Rule names are stable identifiers</td>
+          </tr>
+          <tr>
+            <td><code>export</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>Synchronous v1; no async progress</td>
+          </tr>
+          <tr>
+            <td><code>check</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>JSON/HTML report contracts locked</td>
+          </tr>
+          <tr>
+            <td><code>publish</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td>Precheck + export pipeline</td>
+          </tr>
+          <tr>
+            <td><code>config</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><code>doctor</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><code>batch</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><code>completions</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><code>interactive</code></td>
+            <td style="color: #3fb950">Stable</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Output Contracts</h2>
+      <p>
+        The following output formats are locked and will not change without a
+        major version bump:
+      </p>
+      <ul>
+        <li>
+          <code>query --output json</code> — element array with
+          <code>id</code> (long), <code>name</code>, <code>category</code>,
+          <code>typeName</code>, <code>parameters</code>
+        </li>
+        <li>
+          <code>check --output json</code> — object with <code>check</code>,
+          <code>passed</code>, <code>failed</code>, <code>suppressed</code>,
+          <code>timestamp</code>, <code>issues[]</code>
+        </li>
+        <li>check HTML report — dark theme, summary cards, issue table</li>
+        <li>Exit codes — 0 = pass, 1 = fail/error</li>
+        <li>
+          Webhook payload — <code>type</code>, <code>status</code>,
+          <code>timestamp</code> always present
+        </li>
+        <li>Journal format — JSONL, one object per line</li>
+      </ul>
+
+      <h2>Profile Schema</h2>
+      <p>
+        Profile schema is at <code>version: 1</code>. Future schema changes will
+        increment this number. RevitCli will reject profiles with unknown
+        versions and provide migration guidance.
+      </p>
+
+      <h2>Version History</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Date</th>
+            <th>Highlights</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>v0.5.0</strong></td>
+            <td>2026-04-04</td>
+            <td>Docs site, starter profiles, 122 tests, trust hardening</td>
+          </tr>
+          <tr>
+            <td>v0.4.0</td>
+            <td>2026-04-04</td>
+            <td>Pipe composability, webhook, journal</td>
+          </tr>
+          <tr>
+            <td>v0.3.0</td>
+            <td>2026-04-04</td>
+            <td>10 audit rules, naming fix, diff engine</td>
+          </tr>
+          <tr>
+            <td>v0.2.0</td>
+            <td>2026-04-04</td>
+            <td>BIMOps profiles, check/publish, reports, suppressions</td>
+          </tr>
+          <tr>
+            <td>v0.1.0</td>
+            <td>2026-04-04</td>
+            <td>Real Revit API, set/audit/export, multi-version, installer</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Breaking Changes Policy</h2>
+      <ul>
+        <li>
+          <strong>Major version (1.x → 2.x)</strong>: may change output
+          contracts, profile schema, command behavior
+        </li>
+        <li>
+          <strong>Minor version (0.x → 0.y)</strong>: additive changes only, no
+          breaks to stable commands
+        </li>
+        <li><strong>Patch version (0.x.y)</strong>: bug fixes only</li>
+      </ul>
+
+      <h2>Known Limitations</h2>
+      <ul>
+        <li>
+          <code>--stdin</code> pipe does not work reliably with PowerShell +
+          <code>dotnet run</code>. Use <code>--ids-from</code>.
+        </li>
+        <li>
+          <code>--ids-from</code> has a serialization issue with some add-in
+          deployments. Verify with <code>revitcli status</code> that add-in
+          version matches CLI version.
+        </li>
+        <li>Export is synchronous — no real-time progress tracking.</li>
+        <li>
+          PDF export defaults to all printable views (may produce duplicate
+          pages on simple projects).
+        </li>
+        <li>
+          Profile inheritance is full-object replacement for named entries (not
+          deep merge within check/export/publish definitions).
+        </li>
+      </ul>
+
+      <h2>Distribution Channels</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GitHub Releases (ZIP)</td>
+            <td style="color: #3fb950">Available</td>
+          </tr>
+          <tr>
+            <td>GitHub source</td>
+            <td style="color: #3fb950">Available</td>
+          </tr>
+          <tr>
+            <td>NuGet (.NET global tool)</td>
+            <td style="color: #d29922">Requires NUGET_API_KEY</td>
+          </tr>
+          <tr>
+            <td>Autodesk App Store</td>
+            <td style="color: #8b949e">Planned</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <footer>
+        RevitCli is open source.
+        <a href="https://github.com/xiaodream551-a11y/revitcli">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
