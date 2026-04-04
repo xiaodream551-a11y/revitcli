@@ -1,0 +1,281 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using RevitCli.Client;
+using RevitCli.Commands;
+using RevitCli.Profile;
+using RevitCli.Shared;
+using RevitCli.Tests.Client;
+using Xunit;
+
+namespace RevitCli.Tests.Commands;
+
+public class CheckCommandTests
+{
+    private static RevitClient CreateClient(string responseJson)
+    {
+        var handler = new FakeHttpHandler(responseJson);
+        return new RevitClient(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:17839") });
+    }
+
+    [Fact]
+    public async Task Check_NoProfile_ReturnsError()
+    {
+        var client = CreateClient("{}");
+        var writer = new StringWriter();
+        // Use a non-existent profile path
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", "/nonexistent/path/.revitcli.yml", "table", null, true, writer);
+        Assert.Equal(1, exitCode);
+        Assert.Contains("not found", writer.ToString().ToLower());
+    }
+
+    [Fact]
+    public async Task Check_UnknownCheckSet_ReturnsError()
+    {
+        // Create a minimal profile
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var client = CreateClient("{}");
+        var writer = new StringWriter();
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "nonexistent", profilePath, "table", null, true, writer);
+        Assert.Equal(1, exitCode);
+        Assert.Contains("not found", writer.ToString().ToLower());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_PassesAuditRules_ReturnsZero()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var auditResult = new AuditResult { Passed = 1, Failed = 0, Issues = new List<AuditIssue>() };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "table", null, true, writer);
+        Assert.Equal(0, exitCode);
+        Assert.Contains("1 passed", writer.ToString());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_FailsOnError_ReturnsOne()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: room-bounds
+");
+        var auditResult = new AuditResult
+        {
+            Passed = 0,
+            Failed = 1,
+            Issues = new List<AuditIssue>
+            {
+                new() { Rule = "room-bounds", Severity = "error", Message = "Room has zero area" }
+            }
+        };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "table", null, true, writer);
+        Assert.Equal(1, exitCode);
+        Assert.Contains("1 failed", writer.ToString());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_WarningsPassWithFailOnError()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var auditResult = new AuditResult
+        {
+            Passed = 0,
+            Failed = 1,
+            Issues = new List<AuditIssue>
+            {
+                new() { Rule = "naming", Severity = "warning", Message = "Default name" }
+            }
+        };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "table", null, true, writer);
+        // failOn=error, only warnings → should pass
+        Assert.Equal(0, exitCode);
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_SuppressionFiltersIssues()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: room-bounds
+    suppressions:
+      - rule: room-bounds
+        reason: Known legacy issue
+");
+        var auditResult = new AuditResult
+        {
+            Passed = 0,
+            Failed = 1,
+            Issues = new List<AuditIssue>
+            {
+                new() { Rule = "room-bounds", Severity = "error", Message = "Room has zero area", ElementId = 100 }
+            }
+        };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "table", null, true, writer);
+        // Suppressed → should pass
+        Assert.Equal(0, exitCode);
+        Assert.Contains("1 suppressed", writer.ToString());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_JsonOutput_IsValidJson()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var auditResult = new AuditResult { Passed = 1, Failed = 0, Issues = new List<AuditIssue>() };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "json", null, true, writer);
+        Assert.Equal(0, exitCode);
+
+        // Output should be valid JSON
+        var output = writer.ToString().Trim();
+        var doc = JsonDocument.Parse(output);
+        Assert.Equal("default", doc.RootElement.GetProperty("check").GetString());
+        Assert.Equal(1, doc.RootElement.GetProperty("passed").GetInt32());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_HtmlOutput_ContainsDarkTheme()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var auditResult = new AuditResult { Passed = 1, Failed = 0, Issues = new List<AuditIssue>() };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "html", null, true, writer);
+        Assert.Equal(0, exitCode);
+        Assert.Contains("#1a1a2e", writer.ToString()); // dark background
+        Assert.Contains("RevitCli Check Report", writer.ToString());
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public void ProfileLoader_ValidatesFailOn()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: invalid_value
+    auditRules:
+      - rule: naming
+");
+        Assert.Throws<InvalidOperationException>(() => ProfileLoader.Load(profilePath));
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public void ProfileLoader_ValidatesSeverity()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    requiredParameters:
+      - category: doors
+        parameter: Fire Rating
+        severity: typo_severity
+");
+        Assert.Throws<InvalidOperationException>(() => ProfileLoader.Load(profilePath));
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public void ProfileLoader_DetectsCycle()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"revitcli_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var fileA = Path.Combine(dir, "a.yml");
+        var fileB = Path.Combine(dir, "b.yml");
+        File.WriteAllText(fileA, $"version: 1\nextends: b.yml\nchecks: {{}}");
+        File.WriteAllText(fileB, $"version: 1\nextends: a.yml\nchecks: {{}}");
+
+        Assert.Throws<InvalidOperationException>(() => ProfileLoader.Load(fileA));
+        Directory.Delete(dir, true);
+    }
+
+    private static string CreateTempProfile(string yaml)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"revitcli_test_{Guid.NewGuid():N}.yml");
+        File.WriteAllText(path, yaml);
+        return path;
+    }
+}

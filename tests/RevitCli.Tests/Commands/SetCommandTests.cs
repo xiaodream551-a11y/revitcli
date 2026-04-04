@@ -54,6 +54,53 @@ public class SetCommandTests
     }
 
     [Fact]
+    public void SetRequest_ElementIds_SerializesCorrectly()
+    {
+        var request = new SetRequest
+        {
+            Param = "Mark",
+            Value = "TEST",
+            ElementIds = new List<long> { 337596, 337601 }
+        };
+
+        var json = JsonSerializer.Serialize(request);
+        Assert.Contains("\"elementIds\":[337596,337601]", json);
+
+        var deserialized = JsonSerializer.Deserialize<SetRequest>(json);
+        Assert.NotNull(deserialized);
+        Assert.NotNull(deserialized!.ElementIds);
+        Assert.Equal(2, deserialized.ElementIds!.Count);
+        Assert.Equal(337596, deserialized.ElementIds[0]);
+        Assert.Equal(337601, deserialized.ElementIds[1]);
+
+        // Category and ElementId should be null
+        Assert.Null(deserialized.Category);
+        Assert.Null(deserialized.ElementId);
+    }
+
+    [Fact]
+    public void QueryJsonOutput_ParseIds_ExtractsCorrectly()
+    {
+        // Simulates query --output json piped to set --ids-from
+        var queryOutput = @"[
+            {""id"": 337596, ""name"": ""Wall 1"", ""category"": ""Walls""},
+            {""id"": 337601, ""name"": ""Wall 2"", ""category"": ""Walls""}
+        ]";
+
+        var elements = JsonSerializer.Deserialize<List<JsonElement>>(queryOutput);
+        Assert.NotNull(elements);
+        var ids = new List<long>();
+        foreach (var elem in elements!)
+        {
+            if (elem.TryGetProperty("id", out var idProp))
+                ids.Add(idProp.GetInt64());
+        }
+        Assert.Equal(2, ids.Count);
+        Assert.Equal(337596, ids[0]);
+        Assert.Equal(337601, ids[1]);
+    }
+
+    [Fact]
     public async Task Execute_NoTarget_PrintsError()
     {
         var handler = new FakeHttpHandler("{}");
