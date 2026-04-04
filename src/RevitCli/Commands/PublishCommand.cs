@@ -155,10 +155,10 @@ public static class PublishCommand
 
         var exitCode = failed > 0 ? 1 : 0;
 
-        // Journal log
+        // Journal log + receipt
         if (!dryRun)
         {
-            Output.JournalLogger.Log(profileDir, new
+            var receipt = new
             {
                 action = "publish",
                 pipeline = pipelineName,
@@ -166,8 +166,28 @@ public static class PublishCommand
                 failed,
                 presets = pipeline.Presets,
                 timestamp = DateTime.UtcNow.ToString("o"),
-                user = Environment.UserName
-            });
+                user = Environment.UserName,
+                profileHash = profilePath != null && File.Exists(profilePath)
+                    ? ComputeFileHash(profilePath) : null,
+                machine = Environment.MachineName
+            };
+
+            Output.JournalLogger.Log(profileDir, receipt);
+
+            // Write receipt file
+            try
+            {
+                var receiptDir = profileDir ?? Directory.GetCurrentDirectory();
+                var receiptPath = Path.Combine(receiptDir, ".revitcli", "receipts",
+                    $"{pipelineName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json");
+                var dir = Path.GetDirectoryName(receiptPath)!;
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(receiptPath, System.Text.Json.JsonSerializer.Serialize(receipt,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await output.WriteLineAsync($"Receipt saved to {receiptPath}");
+            }
+            catch { /* best effort */ }
         }
 
         // Webhook notification
@@ -186,5 +206,13 @@ public static class PublishCommand
         }
 
         return exitCode;
+    }
+
+    private static string ComputeFileHash(string path)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        using var stream = File.OpenRead(path);
+        var hash = sha.ComputeHash(stream);
+        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant()[..16];
     }
 }

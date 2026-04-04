@@ -34,7 +34,7 @@ public class CompletionsCommandTests : IDisposable
         var script = stdout.ToString();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("status query export set config audit completions batch doctor check publish interactive", script);
+        Assert.Contains("status query export set config audit completions batch doctor check publish init score coverage interactive", script);
         Assert.Contains("compgen -W \"show set\"", script);
         Assert.Contains("defaultOutput)", script);
         Assert.Contains("compgen -f -- \"$cur\"", script);

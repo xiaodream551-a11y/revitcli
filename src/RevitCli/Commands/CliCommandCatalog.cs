@@ -20,6 +20,9 @@ internal static class CliCommandCatalog
         ("doctor", "Check RevitCli setup and diagnose issues"),
         ("check", "Run project checks from .revitcli.yml profile"),
         ("publish", "Run export pipeline from .revitcli.yml profile"),
+        ("init", "Create a .revitcli.yml profile from a template"),
+        ("score", "Calculate model health score (0-100)"),
+        ("coverage", "Show parameter fill rates by category"),
         ("interactive", "Enter interactive REPL mode")
     };
 
@@ -64,6 +67,9 @@ internal static class CliCommandCatalog
         root.AddCommand(DoctorCommand.Create(client, config));
         root.AddCommand(CheckCommand.Create(client));
         root.AddCommand(PublishCommand.Create(client));
+        root.AddCommand(InitCommand.Create());
+        root.AddCommand(ScoreCommand.Create(client));
+        root.AddCommand(CoverageCommand.Create(client));
 
         if (includeBatchCommand)
             root.AddCommand(BatchCommand.Create(client, config));

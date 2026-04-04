@@ -1499,9 +1499,17 @@ public sealed class RealRevitOperations : IRevitOperations
         var sheetPatterns = request.Sheets ?? new List<string>();
         var viewPatterns = request.Views ?? new List<string>();
 
-        // If no targets specified, export all printable sheets
+        // If no targets specified, export sheets only (not views)
         if (sheetPatterns.Count == 0 && viewPatterns.Count == 0)
-            sheetPatterns = new List<string> { "all" };
+        {
+            // Check if any sheets exist first
+            var hasSheets = allViews.Any(v => v is ViewSheet);
+            if (hasSheets)
+                sheetPatterns = new List<string> { "all" };
+            else
+                throw new InvalidOperationException(
+                    "No sheets found in document. Use --views to export specific views, or --sheets to specify sheet patterns.");
+        }
 
         var matched = new HashSet<ElementId>();
         var results = new List<View>();
