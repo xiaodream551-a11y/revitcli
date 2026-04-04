@@ -18,6 +18,8 @@ internal static class CliCommandCatalog
         ("completions", "Generate shell completion script"),
         ("batch", "Execute commands from a JSON batch file"),
         ("doctor", "Check RevitCli setup and diagnose issues"),
+        ("check", "Run project checks from .revitcli.yml profile"),
+        ("publish", "Run export pipeline from .revitcli.yml profile"),
         ("interactive", "Enter interactive REPL mode")
     };
 
@@ -58,6 +60,8 @@ internal static class CliCommandCatalog
         root.AddCommand(AuditCommand.Create(client));
         root.AddCommand(CompletionsCommand.Create());
         root.AddCommand(DoctorCommand.Create(client, config));
+        root.AddCommand(CheckCommand.Create(client));
+        root.AddCommand(PublishCommand.Create(client));
 
         if (includeBatchCommand)
             root.AddCommand(BatchCommand.Create(client, config));

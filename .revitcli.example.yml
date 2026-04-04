@@ -1,0 +1,71 @@
+# RevitCli Project Profile
+# Copy to your project root as .revitcli.yml and customize.
+# Usage:
+#   revitcli check              # Run default checks
+#   revitcli check publish-gate # Run stricter pre-publish checks
+#   revitcli publish            # Run default publish pipeline
+#   revitcli publish issue      # Run full issue pipeline
+
+version: 1
+
+# Inherit from a shared base config (optional)
+# extends: ../company-standards/base.revitcli.yml
+
+defaults:
+  outputDir: ./deliverables
+
+# Named check sets — run with: revitcli check [name]
+checks:
+  default:
+    failOn: error # exit non-zero on errors only
+    auditRules:
+      - rule: room-bounds
+      - rule: level-consistency
+      - rule: unplaced-rooms
+      - rule: naming
+    requiredParameters:
+      - category: doors
+        parameter: Fire Rating
+        requireNonEmpty: true
+        severity: error
+      - category: rooms
+        parameter: Number
+        requireNonEmpty: true
+        severity: warning
+
+  publish-gate:
+    failOn: warning # stricter: fail on warnings too
+    auditRules:
+      - rule: room-bounds
+      - rule: naming
+
+# Named export presets — used by publish pipelines
+exports:
+  publish-dwg:
+    format: dwg
+    sheets: [all]
+    outputDir: ./deliverables/dwg
+
+  publish-pdf:
+    format: pdf
+    sheets: [all]
+    outputDir: ./deliverables/pdf
+
+  publish-ifc:
+    format: ifc
+    outputDir: ./deliverables/ifc
+
+# Named publish pipelines — run with: revitcli publish [name]
+publish:
+  default:
+    precheck: publish-gate
+    presets:
+      - publish-dwg
+      - publish-pdf
+
+  issue:
+    precheck: default
+    presets:
+      - publish-dwg
+      - publish-pdf
+      - publish-ifc
