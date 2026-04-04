@@ -33,6 +33,15 @@ checks:
         requireNonEmpty: true
         severity: warning
 
+    # Suppress known issues (won't count toward pass/fail)
+    suppressions:
+      - rule: naming
+        reason: "Legacy views from template, will rename in Phase 2"
+        expires: "2026-06-01"
+      - rule: required-parameter
+        elementIds: [337596, 337601]
+        reason: "Placeholder doors, no fire rating needed"
+
   publish-gate:
     failOn: warning # stricter: fail on warnings too
     auditRules:

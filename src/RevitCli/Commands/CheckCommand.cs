@@ -101,6 +101,28 @@ public static class CheckCommand
         totalFailed = result.Data!.Failed;
         allIssues.AddRange(result.Data!.Issues);
 
+        // Apply suppressions
+        var suppressedCount = 0;
+        if (checkDef.Suppressions.Count > 0)
+        {
+            var activeSuppressions = checkDef.Suppressions
+                .Where(s => !IsExpired(s.Expires))
+                .ToList();
+
+            var filtered = new List<AuditIssue>();
+            foreach (var issue in allIssues)
+            {
+                if (IsSuppressed(issue, activeSuppressions))
+                    suppressedCount++;
+                else
+                    filtered.Add(issue);
+            }
+            allIssues = filtered;
+
+            // Recount passed/failed after suppression
+            totalFailed = allIssues.Any(i => i.Severity is "error" or "warning") ? totalFailed : 0;
+        }
+
         // Render output
         var format = outputFormat.ToLowerInvariant();
 
@@ -116,9 +138,9 @@ public static class CheckCommand
 
         var rendered = format switch
         {
-            "json" => CheckReportRenderer.RenderJson(checkName, totalPassed, totalFailed, allIssues),
-            "html" => CheckReportRenderer.RenderHtml(checkName, totalPassed, totalFailed, allIssues),
-            _ => CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues)
+            "json" => CheckReportRenderer.RenderJson(checkName, totalPassed, totalFailed, allIssues, suppressedCount),
+            "html" => CheckReportRenderer.RenderHtml(checkName, totalPassed, totalFailed, allIssues, suppressedCount),
+            _ => CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues, suppressedCount)
         };
 
         // Write to file if --report specified
@@ -133,7 +155,7 @@ public static class CheckCommand
 
             // Also print summary to console
             await output.WriteLineAsync(
-                CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues));
+                CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues, suppressedCount));
         }
         else
         {
@@ -151,5 +173,38 @@ public static class CheckCommand
             return 1;
 
         return 0;
+    }
+
+    private static bool IsSuppressed(AuditIssue issue, List<Profile.Suppression> suppressions)
+    {
+        foreach (var s in suppressions)
+        {
+            if (!string.Equals(s.Rule, issue.Rule, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // If elementIds specified, only suppress those specific elements
+            if (s.ElementIds != null && s.ElementIds.Count > 0)
+            {
+                if (issue.ElementId.HasValue && s.ElementIds.Contains(issue.ElementId.Value))
+                    return true;
+            }
+            else
+            {
+                // No elementIds = suppress all issues for this rule
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsExpired(string? expires)
+    {
+        if (string.IsNullOrWhiteSpace(expires))
+            return false;
+
+        if (DateTime.TryParse(expires, out var expiryDate))
+            return DateTime.Now > expiryDate;
+
+        return false;
     }
 }

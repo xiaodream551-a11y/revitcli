@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -10,10 +9,13 @@ namespace RevitCli.Output;
 
 public static class CheckReportRenderer
 {
-    public static string RenderTable(string checkName, int passed, int failed, List<AuditIssue> issues)
+    public static string RenderTable(string checkName, int passed, int failed, List<AuditIssue> issues, int suppressed = 0)
     {
         var lines = new List<string>();
-        lines.Add($"Check '{checkName}': {passed} passed, {failed} failed");
+        var summary = $"Check '{checkName}': {passed} passed, {failed} failed";
+        if (suppressed > 0)
+            summary += $", {suppressed} suppressed";
+        lines.Add(summary);
 
         foreach (var issue in issues)
         {
@@ -25,13 +27,14 @@ public static class CheckReportRenderer
         return string.Join(Environment.NewLine, lines);
     }
 
-    public static string RenderJson(string checkName, int passed, int failed, List<AuditIssue> issues)
+    public static string RenderJson(string checkName, int passed, int failed, List<AuditIssue> issues, int suppressed = 0)
     {
         var report = new
         {
             check = checkName,
             passed,
             failed,
+            suppressed,
             timestamp = DateTime.UtcNow.ToString("o"),
             issues = issues.Select(i => new
             {
@@ -49,7 +52,7 @@ public static class CheckReportRenderer
         });
     }
 
-    public static string RenderHtml(string checkName, int passed, int failed, List<AuditIssue> issues)
+    public static string RenderHtml(string checkName, int passed, int failed, List<AuditIssue> issues, int suppressed = 0)
     {
         var errorCount = issues.Count(i => i.Severity == "error");
         var warnCount = issues.Count(i => i.Severity == "warning");
@@ -70,6 +73,10 @@ public static class CheckReportRenderer
 </tr>";
         }));
 
+        var suppressedCard = suppressed > 0
+            ? $@"<div class=""card""><div class=""label"">Suppressed</div><div class=""value"" style=""color:#95a5a6"">{suppressed}</div></div>"
+            : "";
+
         return $@"<!DOCTYPE html>
 <html lang=""en"">
 <head>
@@ -78,7 +85,7 @@ public static class CheckReportRenderer
 <style>
   body {{ background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, 'Segoe UI', sans-serif; margin: 2rem; }}
   h1 {{ color: #fff; }}
-  .summary {{ display: flex; gap: 2rem; margin: 1.5rem 0; }}
+  .summary {{ display: flex; gap: 2rem; margin: 1.5rem 0; flex-wrap: wrap; }}
   .card {{ background: #16213e; border-radius: 8px; padding: 1rem 1.5rem; min-width: 120px; }}
   .card .label {{ font-size: 0.85rem; color: #999; }}
   .card .value {{ font-size: 1.8rem; font-weight: bold; }}
@@ -97,6 +104,7 @@ public static class CheckReportRenderer
   <div class=""card""><div class=""label"">Check Set</div><div class=""value"">{Escape(checkName)}</div></div>
   <div class=""card""><div class=""label"">Passed</div><div class=""value"" style=""color:#2ecc71"">{passed}</div></div>
   <div class=""card""><div class=""label"">Failed</div><div class=""value"" style=""color:#e74c3c"">{failed}</div></div>
+  {suppressedCard}
 </div>
 <div class=""summary"">
   <div class=""card""><div class=""label"">Errors</div><div class=""value"" style=""color:#e74c3c"">{errorCount}</div></div>

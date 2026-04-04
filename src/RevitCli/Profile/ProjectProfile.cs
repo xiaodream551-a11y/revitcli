@@ -43,6 +43,24 @@ public class CheckDefinition
 
     [YamlMember(Alias = "naming")]
     public List<NamingCheck> Naming { get; set; } = new();
+
+    [YamlMember(Alias = "suppressions")]
+    public List<Suppression> Suppressions { get; set; } = new();
+}
+
+public class Suppression
+{
+    [YamlMember(Alias = "rule")]
+    public string Rule { get; set; } = "";
+
+    [YamlMember(Alias = "elementIds")]
+    public List<long>? ElementIds { get; set; }
+
+    [YamlMember(Alias = "reason")]
+    public string? Reason { get; set; }
+
+    [YamlMember(Alias = "expires")]
+    public string? Expires { get; set; }
 }
 
 public class AuditRuleRef
