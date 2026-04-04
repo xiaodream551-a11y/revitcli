@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: [self-hosted, windows, revit2026]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build CLI
+        run: dotnet publish src/RevitCli -c Release -o ./stage/bin /p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Build Add-in
+        run: dotnet publish src/RevitCli.Addin -c Release -o ./stage/addin
+
+      - name: Copy install scripts
+        shell: pwsh
+        run: |
+          Copy-Item scripts/install.ps1 ./stage/
+          Copy-Item scripts/uninstall.ps1 ./stage/
+
+      - name: Update version in install script
+        shell: pwsh
+        run: |
+          $content = Get-Content ./stage/install.ps1 -Raw
+          $content = $content -replace 'version   = "0\.1\.0"', "version   = `"${{ steps.version.outputs.VERSION }}`""
+          Set-Content ./stage/install.ps1 -Value $content
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./stage/* -DestinationPath ./revitcli-win-x64.zip
+
+      - name: Generate checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash ./revitcli-win-x64.zip -Algorithm SHA256).Hash
+          "$hash  revitcli-win-x64.zip" | Set-Content ./SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            revitcli-win-x64.zip
+            SHA256SUMS.txt
+          body: |
+            ## RevitCli ${{ github.ref_name }}
+
+            ### Install
+            ```powershell
+            # Extract and install
+            Expand-Archive .\revitcli-win-x64.zip -DestinationPath .\revitcli
+            cd .\revitcli
+            powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+            # Restart Revit, then verify
+            revitcli doctor
+            ```
+
+            ### Uninstall
+            ```powershell
+            powershell -ExecutionPolicy Bypass -File "%LocalAppData%\RevitCli\uninstall.ps1"
+            ```
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          generate_release_notes: false
