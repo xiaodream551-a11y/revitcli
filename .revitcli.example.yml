@@ -26,6 +26,12 @@ checks:
       - rule: level-consistency
       - rule: unplaced-rooms
       - rule: naming
+      - rule: duplicate-room-numbers
+      - rule: room-metadata
+      - rule: views-not-on-sheets
+      - rule: imported-dwg
+      - rule: in-place-families
+      - rule: sheets-missing-info
     requiredParameters:
       - category: doors
         parameter: Fire Rating

@@ -749,6 +749,9 @@ public sealed class RealRevitOperations : IRevitOperations
             ["views-not-on-sheets"] = AuditViewsNotOnSheets,
             ["imported-dwg"] = AuditImportedDwg,
             ["in-place-families"] = AuditInPlaceFamilies,
+            ["duplicate-room-numbers"] = AuditDuplicateRoomNumbers,
+            ["room-metadata"] = AuditRoomMetadata,
+            ["sheets-missing-info"] = AuditSheetsMissingInfo,
         };
 
     public Task<AuditResult> RunAuditAsync(AuditRequest request)
@@ -1131,6 +1134,144 @@ public sealed class RealRevitOperations : IRevitOperations
                 if (issues.Count >= 50)
                     break;
             }
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: duplicate-room-numbers ─────────────────────
+
+    private static List<AuditIssue> AuditDuplicateRoomNumbers(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+        var rooms = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfCategory(BuiltInCategory.OST_Rooms)
+            .Where(r => r.Location != null); // only placed rooms
+
+        var numberGroups = new Dictionary<string, List<(string Name, long Id)>>();
+
+        foreach (var room in rooms)
+        {
+            var numberParam = room.get_Parameter(BuiltInParameter.ROOM_NUMBER);
+            var number = numberParam?.AsString();
+            if (string.IsNullOrWhiteSpace(number))
+                continue;
+
+            if (!numberGroups.TryGetValue(number, out var group))
+            {
+                group = new List<(string, long)>();
+                numberGroups[number] = group;
+            }
+            group.Add((room.Name, ToCliElementId(room.Id)));
+        }
+
+        foreach (var (number, group) in numberGroups)
+        {
+            if (group.Count > 1)
+            {
+                foreach (var (name, id) in group)
+                {
+                    issues.Add(new AuditIssue
+                    {
+                        Rule = "duplicate-room-numbers",
+                        Severity = "error",
+                        Message = $"Room number '{number}' is used by {group.Count} rooms ('{name}').",
+                        ElementId = id
+                    });
+                }
+
+                if (issues.Count >= 50)
+                    break;
+            }
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: room-metadata ───────────────────────────────
+
+    private static List<AuditIssue> AuditRoomMetadata(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+        var rooms = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfCategory(BuiltInCategory.OST_Rooms)
+            .Where(r => r.Location != null); // only placed rooms
+
+        foreach (var room in rooms)
+        {
+            // Check room number
+            var numberParam = room.get_Parameter(BuiltInParameter.ROOM_NUMBER);
+            if (numberParam == null || string.IsNullOrWhiteSpace(numberParam.AsString()))
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "room-metadata",
+                    Severity = "warning",
+                    Message = $"Room '{room.Name}' has no room number.",
+                    ElementId = ToCliElementId(room.Id)
+                });
+            }
+
+            // Check room name is not default
+            if (string.IsNullOrWhiteSpace(room.Name) || room.Name == "Room")
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "room-metadata",
+                    Severity = "warning",
+                    Message = $"Room (ID {ToCliElementId(room.Id)}) has default or empty name.",
+                    ElementId = ToCliElementId(room.Id)
+                });
+            }
+
+            if (issues.Count >= 50)
+                break;
+        }
+
+        return issues;
+    }
+
+    // ── Audit rule: sheets-missing-info ─────────────────────────
+
+    private static List<AuditIssue> AuditSheetsMissingInfo(Document doc)
+    {
+        var issues = new List<AuditIssue>();
+        var sheets = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(ViewSheet))
+            .Cast<ViewSheet>();
+
+        foreach (var sheet in sheets)
+        {
+            // Check sheet number
+            if (string.IsNullOrWhiteSpace(sheet.SheetNumber))
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "sheets-missing-info",
+                    Severity = "error",
+                    Message = $"Sheet '{sheet.Name}' has no sheet number.",
+                    ElementId = ToCliElementId(sheet.Id)
+                });
+            }
+
+            // Check sheet has viewports (not empty)
+            var viewports = sheet.GetAllViewports();
+            if (viewports == null || viewports.Count == 0)
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "sheets-missing-info",
+                    Severity = "warning",
+                    Message = $"Sheet '{sheet.SheetNumber} - {sheet.Name}' has no views placed on it.",
+                    ElementId = ToCliElementId(sheet.Id)
+                });
+            }
+
+            if (issues.Count >= 50)
+                break;
         }
 
         return issues;
