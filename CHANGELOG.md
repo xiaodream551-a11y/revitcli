@@ -4,6 +4,31 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-04-04
+
+### Added
+
+- **Pipe composability**
+  - `set --stdin`: read element IDs from stdin (JSON array or one per line)
+  - `set --ids-from <file>`: read element IDs from JSON file (Windows-friendly)
+  - `SetRequest.ElementIds`: batch element ID list for pipe workflows
+  - Strict parsing with clear error messages on malformed input
+
+- **Webhook notifications**
+  - `defaults.notify` in `.revitcli.yml`: HTTPS URL to POST results
+  - Fires after `check` and `publish` with status, counts, timestamp
+  - HTTPS-only for security, non-blocking (errors to stderr)
+
+- **Operation journal**
+  - `.revitcli/journal.jsonl`: append-only log of `set` and `publish` operations
+  - Records: action, parameters, affected count, user, timestamp
+  - Both interactive and non-interactive paths log consistently
+
+### Known Issues
+
+- `--stdin` pipe does not work reliably with PowerShell + `dotnet run`; use `--ids-from` instead
+- `--ids-from` has a serialization issue with the add-in API; use category+filter or --id for now
+
 ## [0.3.0] - 2026-04-04
 
 ### Added
