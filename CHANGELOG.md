@@ -4,6 +4,34 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-04-04
+
+RevitCli v1.0 — production-ready local BIMOps runner for Revit teams.
+
+### Added
+
+- **`revitcli init`** — interactive profile creation from 3 starter templates
+- **`revitcli score`** — model health score 0-100 with weighted rules and letter grade
+- **`revitcli coverage`** — parameter fill rates by category with visual bar chart
+- **Publish receipts** — `.revitcli/receipts/<pipeline>-<timestamp>.json` with profile hash, user, machine
+- **15 commands total**: status, query, set, audit, export, check, publish, init, score, coverage, config, doctor, batch, completions, interactive
+
+### Changed
+
+- PDF export: no sheets + no views → actionable error instead of exporting all views
+- Starter profiles embedded in CLI package (init works from installed tool)
+- Publish receipt includes profileHash for auto-discovered profiles
+
+### Production Readiness
+
+- 122 tests (contract tests, integration tests, validation tests)
+- 10 built-in audit rules + 2 profile-driven checks
+- Documentation website with 5 pages
+- 3 starter profiles (architectural, interior, general)
+- Supports Revit 2024/2025/2026
+- Install scripts, GitHub Actions release workflow
+- Output contracts locked (JSON, HTML, exit codes, webhook payload)
+
 ## [0.5.0] - 2026-04-04
 
 ### Added

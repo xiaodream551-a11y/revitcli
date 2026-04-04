@@ -2,8 +2,8 @@
 
 Command-line interface for Autodesk Revit. Query elements, batch export, and modify parameters — all from your terminal.
 
-> **Status: v0.1.0 — Revit 2026**
-> All core commands are fully implemented with real Revit API integration. Verified on Windows + Revit 2026.
+> **Status: v1.0.0 — Production Ready**
+> Local BIMOps runner for Revit teams. Standards checking, deliverable publishing, model health scoring. Supports Revit 2024/2025/2026.
 
 ```bash
 revitcli status
