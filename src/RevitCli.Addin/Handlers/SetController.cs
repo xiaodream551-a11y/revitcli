@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EmbedIO;
@@ -19,34 +20,54 @@ public class SetController : WebApiController
     [Route(HttpVerbs.Post, "/elements/set")]
     public async Task SetParameter()
     {
-        var body = await HttpContext.GetRequestBodyAsStringAsync();
+        HttpContext.Response.ContentType = "application/json";
+        await using var writer = HttpContext.OpenResponseText();
+
         SetRequest? request;
         try
         {
+            var body = await HttpContext.GetRequestBodyAsStringAsync();
             request = JsonSerializer.Deserialize<SetRequest>(body);
         }
         catch (JsonException ex)
         {
             HttpContext.Response.StatusCode = 400;
-            HttpContext.Response.ContentType = "application/json";
-            await using var errWriter = HttpContext.OpenResponseText();
-            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<SetResult>.Fail($"Invalid JSON: {ex.Message}")));
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Fail($"Invalid JSON: {ex.Message}")));
             return;
         }
 
         if (request == null)
         {
             HttpContext.Response.StatusCode = 400;
-            HttpContext.Response.ContentType = "application/json";
-            await using var errWriter = HttpContext.OpenResponseText();
-            await errWriter.WriteAsync(JsonSerializer.Serialize(ApiResponse<SetResult>.Fail("Request body is required")));
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Fail("Request body is required")));
             return;
         }
 
-        var data = await _operations.SetParametersAsync(request);
-        var response = ApiResponse<SetResult>.Ok(data);
-        HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
-        await writer.WriteAsync(JsonSerializer.Serialize(response));
+        try
+        {
+            var data = await _operations.SetParametersAsync(request);
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Ok(data)));
+        }
+        catch (ArgumentException ex)
+        {
+            HttpContext.Response.StatusCode = 400;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Fail(ex.Message)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            HttpContext.Response.StatusCode = 409;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Fail(ex.Message)));
+        }
+        catch (Exception ex)
+        {
+            HttpContext.Response.StatusCode = 500;
+            await writer.WriteAsync(JsonSerializer.Serialize(
+                ApiResponse<SetResult>.Fail(ex.Message)));
+        }
     }
 }

@@ -19,18 +19,19 @@ public static class ExportCommand
     {
         var formatOpt = new Option<string>("--format", "Export format: dwg, pdf, ifc") { IsRequired = true };
         var sheetsOpt = new Option<string[]>("--sheets", () => System.Array.Empty<string>(), "Sheet name patterns (e.g. \"A1*\", \"all\")");
+        var viewsOpt = new Option<string[]>("--views", () => System.Array.Empty<string>(), "View name patterns (e.g. \"Level 1\", \"all\")");
         var outputDirOpt = new Option<string>("--output-dir", () => config.ExportDir, "Output directory for exported files");
 
         var command = new Command("export", "Export sheets or views from the Revit model")
         {
-            formatOpt, sheetsOpt, outputDirOpt
+            formatOpt, sheetsOpt, viewsOpt, outputDirOpt
         };
 
-        command.SetHandler(async (format, sheets, outputDir) =>
+        command.SetHandler(async (format, sheets, views, outputDir) =>
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                Environment.ExitCode = await ExecuteAsync(client, format, sheets, outputDir, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, format, sheets, views, outputDir, Console.Out);
                 return;
             }
 
@@ -45,6 +46,7 @@ public static class ExportCommand
             {
                 Format = format.ToLower(),
                 Sheets = sheets.ToList(),
+                Views = views.ToList(),
                 OutputDir = Path.GetFullPath(outputDir)
             };
 
@@ -105,12 +107,12 @@ public static class ExportCommand
                 AnsiConsole.MarkupLine("[red]Export status unknown:[/] lost connection to Revit.");
                 Environment.ExitCode = 1;
             }
-        }, formatOpt, sheetsOpt, outputDirOpt);
+        }, formatOpt, sheetsOpt, viewsOpt, outputDirOpt);
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string format, string[] sheets, string outputDir, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string format, string[] sheets, string[] views, string outputDir, TextWriter output)
     {
         if (string.IsNullOrEmpty(format) || !ValidFormats.Contains(format.ToLower()))
         {
@@ -122,6 +124,7 @@ public static class ExportCommand
         {
             Format = format.ToLower(),
             Sheets = sheets.ToList(),
+            Views = views.ToList(),
             OutputDir = Path.GetFullPath(outputDir)
         };
 

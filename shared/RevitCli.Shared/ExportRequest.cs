@@ -11,6 +11,9 @@ public class ExportRequest
     [JsonPropertyName("sheets")]
     public List<string> Sheets { get; set; } = new();
 
+    [JsonPropertyName("views")]
+    public List<string> Views { get; set; } = new();
+
     [JsonPropertyName("outputDir")]
     public string OutputDir { get; set; } = "";
 }

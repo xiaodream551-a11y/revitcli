@@ -40,7 +40,7 @@ public class AuditCommandTests
             Issues = new List<AuditIssue>
             {
                 new() { Rule = "naming", Severity = "error", Message = "Wall has no mark", ElementId = 100 },
-                new() { Rule = "clash", Severity = "warning", Message = "Overlap detected", ElementId = 200 }
+                new() { Rule = "room-bounds", Severity = "warning", Message = "Room not enclosed", ElementId = 200 }
             }
         };
         var response = ApiResponse<AuditResult>.Ok(auditResult);
@@ -48,7 +48,7 @@ public class AuditCommandTests
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var writer = new StringWriter();
 
-        var exitCode = await AuditCommand.ExecuteAsync(client, "naming,clash", writer);
+        var exitCode = await AuditCommand.ExecuteAsync(client, "naming,room-bounds", writer);
 
         var output = writer.ToString();
         Assert.Contains("3 passed", output);

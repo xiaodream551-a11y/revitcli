@@ -126,7 +126,7 @@ public class FailurePathTests
     {
         var client = CreateClient();
         var writer = new StringWriter();
-        var exitCode = await ExportCommand.ExecuteAsync(client, null!, Array.Empty<string>(), ".", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, null!, Array.Empty<string>(), Array.Empty<string>(), ".", writer);
         Assert.Equal(1, exitCode);
         Assert.Contains("--format", writer.ToString().ToLower());
     }
@@ -136,7 +136,7 @@ public class FailurePathTests
     {
         var client = CreateClient();
         var writer = new StringWriter();
-        var exitCode = await ExportCommand.ExecuteAsync(client, "xlsx", Array.Empty<string>(), ".", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, "xlsx", Array.Empty<string>(), Array.Empty<string>(), ".", writer);
         Assert.Equal(1, exitCode);
         Assert.Contains("dwg", writer.ToString().ToLower());
     }
@@ -146,7 +146,7 @@ public class FailurePathTests
     {
         var client = CreateClient(throwException: true);
         var writer = new StringWriter();
-        var exitCode = await ExportCommand.ExecuteAsync(client, "dwg", Array.Empty<string>(), ".", writer);
+        var exitCode = await ExportCommand.ExecuteAsync(client, "dwg", Array.Empty<string>(), Array.Empty<string>(), ".", writer);
         Assert.Equal(1, exitCode);
         Assert.Contains("not running", writer.ToString().ToLower());
     }

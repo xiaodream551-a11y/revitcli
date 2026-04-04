@@ -12,7 +12,7 @@ namespace RevitCli.Commands;
 
 public static class AuditCommand
 {
-    internal static readonly string[] AvailableRules = { "naming", "clash", "room-bounds", "level-consistency", "unplaced-rooms" };
+    internal static readonly string[] AvailableRules = { "naming", "room-bounds", "level-consistency", "unplaced-rooms" };
 
     public static Command Create(RevitClient client)
     {
@@ -38,7 +38,6 @@ public static class AuditCommand
                 table.AddColumn("[bold]Rule[/]");
                 table.AddColumn("[bold]Description[/]");
                 table.AddRow("naming", "Check element naming conventions");
-                table.AddRow("clash", "Detect element clashes/intersections");
                 table.AddRow("room-bounds", "Verify all rooms are properly bounded");
                 table.AddRow("level-consistency", "Check level naming and elevation consistency");
                 table.AddRow("unplaced-rooms", "Find unplaced room elements");
