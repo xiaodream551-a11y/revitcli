@@ -1,11 +1,13 @@
 using System;
 using System.CommandLine;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Config;
 using RevitCli.Output;
+using RevitCli.Profile;
 using RevitCli.Shared;
 using Spectre.Console;
 
@@ -77,12 +79,68 @@ public static class DoctorCommand
                 await output.WriteLineAsync($"OK: Document: {status.Data.DocumentName}");
             else
                 await output.WriteLineAsync("INFO: No document open");
-            return 0;
         }
         else
         {
             await output.WriteLineAsync($"FAIL: {status.Error}");
             return 1;
+        }
+
+        // 5. Project profile
+        WriteProfileInfo(null, s => output.WriteLineAsync(s).Wait());
+
+        return 0;
+    }
+
+    private static void WriteProfileInfo(Action<string>? spectreWrite, Action<string>? plainWrite)
+    {
+        var profilePath = ProfileLoader.Discover();
+        if (profilePath == null)
+        {
+            var msg = $"No {ProfileLoader.FileName} found in directory tree";
+            spectreWrite?.Invoke($"  [blue]\u25cb[/] {msg}");
+            plainWrite?.Invoke($"INFO: {msg}");
+            return;
+        }
+
+        spectreWrite?.Invoke($"  [green]\u2713[/] Profile: [cyan]{Markup.Escape(profilePath)}[/]");
+        plainWrite?.Invoke($"OK: Profile: {profilePath}");
+
+        try
+        {
+            var profile = ProfileLoader.Load(profilePath);
+
+            if (profile.Checks.Count > 0)
+            {
+                var checks = string.Join(", ", profile.Checks.Keys);
+                spectreWrite?.Invoke($"      Check sets: [white]{Markup.Escape(checks)}[/]");
+                plainWrite?.Invoke($"  Check sets: {checks}");
+            }
+
+            if (profile.Exports.Count > 0)
+            {
+                var exports = string.Join(", ", profile.Exports.Keys);
+                spectreWrite?.Invoke($"      Export presets: [white]{Markup.Escape(exports)}[/]");
+                plainWrite?.Invoke($"  Export presets: {exports}");
+            }
+
+            if (profile.Publish.Count > 0)
+            {
+                var pipelines = string.Join(", ", profile.Publish.Keys);
+                spectreWrite?.Invoke($"      Publish pipelines: [white]{Markup.Escape(pipelines)}[/]");
+                plainWrite?.Invoke($"  Publish pipelines: {pipelines}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(profile.Extends))
+            {
+                spectreWrite?.Invoke($"      Extends: [dim]{Markup.Escape(profile.Extends)}[/]");
+                plainWrite?.Invoke($"  Extends: {profile.Extends}");
+            }
+        }
+        catch (Exception ex)
+        {
+            spectreWrite?.Invoke($"  [red]\u2717[/] Profile parse error: [red]{Markup.Escape(ex.Message)}[/]");
+            plainWrite?.Invoke($"FAIL: Profile parse error: {ex.Message}");
         }
     }
 
@@ -153,6 +211,10 @@ public static class DoctorCommand
             AnsiConsole.MarkupLine($"  [red]\u2717[/] Connection failed: [red]{Markup.Escape(status.Error ?? "Unknown")}[/]");
             Environment.ExitCode = 1;
         }
+
+        // 5. Project profile
+        AnsiConsole.WriteLine();
+        WriteProfileInfo(s => AnsiConsole.MarkupLine(s), null);
 
         AnsiConsole.WriteLine();
     }
