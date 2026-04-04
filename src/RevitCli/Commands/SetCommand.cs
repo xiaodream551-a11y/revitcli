@@ -23,17 +23,18 @@ public static class SetCommand
         var valueOpt = new Option<string>("--value", "New parameter value") { IsRequired = true };
         var dryRunOpt = new Option<bool>("--dry-run", "Preview changes without applying");
         var stdinOpt = new Option<bool>("--stdin", "Read element IDs from stdin (JSON array or query output)");
+        var idsFromOpt = new Option<string?>("--ids-from", "Read element IDs from a JSON file");
 
         var command = new Command("set", "Modify element parameters in the Revit model")
         {
-            categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt
+            categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt, idsFromOpt
         };
 
-        command.SetHandler(async (category, filter, id, param, value, dryRun, fromStdin) =>
+        command.SetHandler(async (category, filter, id, param, value, dryRun, fromStdin, idsFromFile) =>
         {
             if (!ConsoleHelper.IsInteractive)
             {
-                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, param, value, dryRun, fromStdin, Console.Out);
+                Environment.ExitCode = await ExecuteAsync(client, category, filter, id, param, value, dryRun, fromStdin, idsFromFile, Console.Out);
                 return;
             }
 
@@ -44,9 +45,10 @@ public static class SetCommand
                 return;
             }
 
-            if (category == null && !id.HasValue && !fromStdin)
+            var hasIdSource = fromStdin || !string.IsNullOrEmpty(idsFromFile);
+            if (category == null && !id.HasValue && !hasIdSource)
             {
-                AnsiConsole.MarkupLine("[red]Error:[/] provide a category, --id, or --stdin to target elements.");
+                AnsiConsole.MarkupLine("[red]Error:[/] provide a category, --id, --stdin, or --ids-from to target elements.");
                 Environment.ExitCode = 1;
                 return;
             }
@@ -61,7 +63,9 @@ public static class SetCommand
                 DryRun = dryRun
             };
 
-            if (fromStdin)
+            if (!string.IsNullOrEmpty(idsFromFile))
+                request.ElementIds = ReadIdsFromFile(idsFromFile);
+            else if (fromStdin)
                 request.ElementIds = ReadIdsFromStdin();
 
             var result = await client.SetParameterAsync(request);
@@ -100,12 +104,12 @@ public static class SetCommand
 
             // Journal log (interactive path)
             LogSetOperation(param, value, category, filter, id, fromStdin, data.Affected);
-        }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt);
+        }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt, idsFromOpt);
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string param, string value, bool dryRun, bool fromStdin, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? category, string? filter, long? id, string param, string value, bool dryRun, bool fromStdin, string? idsFromFile, TextWriter output)
     {
         if (string.IsNullOrEmpty(param))
         {
@@ -113,16 +117,17 @@ public static class SetCommand
             return 1;
         }
 
-        if (category == null && !id.HasValue && !fromStdin)
+        var hasIdSource = fromStdin || !string.IsNullOrEmpty(idsFromFile);
+        if (category == null && !id.HasValue && !hasIdSource)
         {
-            await output.WriteLineAsync("Error: provide a category, --id, or --stdin to target elements.");
+            await output.WriteLineAsync("Error: provide a category, --id, --stdin, or --ids-from to target elements.");
             return 1;
         }
 
-        // --stdin is mutually exclusive with category/filter/id
-        if (fromStdin && (category != null || !string.IsNullOrEmpty(filter) || id.HasValue))
+        // ID source options are mutually exclusive with category/filter/id
+        if (hasIdSource && (category != null || !string.IsNullOrEmpty(filter) || id.HasValue))
         {
-            await output.WriteLineAsync("Error: --stdin cannot be combined with category, --filter, or --id.");
+            await output.WriteLineAsync("Error: --stdin/--ids-from cannot be combined with category, --filter, or --id.");
             return 1;
         }
 
@@ -136,7 +141,9 @@ public static class SetCommand
             DryRun = dryRun
         };
 
-        if (fromStdin)
+        if (!string.IsNullOrEmpty(idsFromFile))
+            request.ElementIds = ReadIdsFromFile(idsFromFile);
+        else if (fromStdin)
             request.ElementIds = ReadIdsFromStdin();
 
         var result = await client.SetParameterAsync(request);
@@ -193,12 +200,26 @@ public static class SetCommand
     /// - One ID per line (plain text)
     /// Fails explicitly if stdin is non-empty but yields no valid IDs.
     /// </summary>
+    private static List<long> ReadIdsFromFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"--ids-from: file not found: {filePath}");
+
+        var input = File.ReadAllText(filePath);
+        return ParseIds(input, "--ids-from");
+    }
+
     private static List<long> ReadIdsFromStdin()
     {
         var input = Console.In.ReadToEnd();
         if (string.IsNullOrWhiteSpace(input))
             throw new InvalidOperationException("--stdin: no input received. Pipe element data to stdin.");
 
+        return ParseIds(input, "--stdin");
+    }
+
+    private static List<long> ParseIds(string input, string source)
+    {
         input = input.Trim();
         List<long>? ids = null;
 
@@ -218,7 +239,7 @@ public static class SetCommand
                         ids.Add(idProp.GetInt64());
                     else
                         throw new InvalidOperationException(
-                            $"--stdin: array item is not a number or object with 'id' field.");
+                            $"{source}: array item is not a number or object with 'id' field.");
                 }
             }
         }
@@ -233,7 +254,7 @@ public static class SetCommand
                     .Select(e =>
                     {
                         if (!e.TryGetProperty("id", out var idProp))
-                            throw new InvalidOperationException("--stdin: object in data array missing 'id' field.");
+                            throw new InvalidOperationException($"{source}: object in data array missing 'id' field.");
                         return idProp.GetInt64();
                     })
                     .ToList();
@@ -247,13 +268,13 @@ public static class SetCommand
             foreach (var line in lines)
             {
                 if (!long.TryParse(line, out var parsed))
-                    throw new InvalidOperationException($"--stdin: '{line}' is not a valid element ID.");
+                    throw new InvalidOperationException($"{source}: '{line}' is not a valid element ID.");
                 ids.Add(parsed);
             }
         }
 
         if (ids == null || ids.Count == 0)
-            throw new InvalidOperationException("--stdin: no element IDs found in input.");
+            throw new InvalidOperationException($"{source}: no element IDs found in input.");
 
         return ids;
     }
