@@ -18,21 +18,24 @@ public static class CheckCommand
     {
         var nameArg = new Argument<string?>("name", () => null, "Check set name (default: 'default')");
         var profileOpt = new Option<string?>("--profile", "Path to .revitcli.yml profile");
+        var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, html");
+        var reportOpt = new Option<string?>("--report", "Save report to file (format inferred from extension, or uses --output)");
 
         var command = new Command("check", "Run project checks from .revitcli.yml profile")
         {
-            nameArg, profileOpt
+            nameArg, profileOpt, outputOpt, reportOpt
         };
 
-        command.SetHandler(async (name, profilePath) =>
+        command.SetHandler(async (name, profilePath, outputFormat, reportPath) =>
         {
-            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, Console.Out);
-        }, nameArg, profileOpt);
+            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, outputFormat, reportPath, Console.Out);
+        }, nameArg, profileOpt, outputOpt, reportOpt);
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath, TextWriter output)
+    public static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
+        string outputFormat, string? reportPath, TextWriter output)
     {
         // Load profile
         ProjectProfile? profile;
@@ -68,83 +71,73 @@ public static class CheckCommand
         var totalPassed = 0;
         var totalFailed = 0;
 
-        // Run built-in audit rules
-        if (checkDef.AuditRules.Count > 0)
+        // Build single audit request with all checks
+        var request = new AuditRequest
         {
-            var ruleNames = checkDef.AuditRules.Select(r => r.Rule).ToList();
-            var request = new AuditRequest { Rules = ruleNames };
-            var result = await client.AuditAsync(request);
-
-            if (!result.Success)
+            Rules = checkDef.AuditRules.Select(r => r.Rule).ToList(),
+            RequiredParameters = checkDef.RequiredParameters.Select(r => new RequiredParameterSpec
             {
-                await output.WriteLineAsync($"Error: {result.Error}");
-                return 1;
-            }
+                Category = r.Category,
+                Parameter = r.Parameter,
+                RequireNonEmpty = r.RequireNonEmpty,
+                Severity = r.Severity
+            }).ToList(),
+            NamingPatterns = checkDef.Naming.Select(n => new NamingPatternSpec
+            {
+                Target = n.Target,
+                Pattern = n.Pattern,
+                Severity = n.Severity
+            }).ToList()
+        };
 
-            totalPassed += result.Data!.Passed;
-            totalFailed += result.Data!.Failed;
-            allIssues.AddRange(result.Data!.Issues);
+        var result = await client.AuditAsync(request);
+        if (!result.Success)
+        {
+            await output.WriteLineAsync($"Error: {result.Error}");
+            return 1;
         }
 
-        // Run required parameter checks (client-side via query + inspect)
-        foreach (var req in checkDef.RequiredParameters)
+        totalPassed = result.Data!.Passed;
+        totalFailed = result.Data!.Failed;
+        allIssues.AddRange(result.Data!.Issues);
+
+        // Render output
+        var format = outputFormat.ToLowerInvariant();
+
+        // Infer format from report file extension if provided
+        if (reportPath != null)
         {
-            var queryResult = await client.QueryElementsAsync(req.Category, null);
-            if (!queryResult.Success)
-            {
-                allIssues.Add(new AuditIssue
-                {
-                    Rule = "required-parameter",
-                    Severity = "error",
-                    Message = $"Failed to query {req.Category}: {queryResult.Error}"
-                });
-                totalFailed++;
-                continue;
-            }
-
-            var elements = queryResult.Data!;
-            var missing = elements.Where(e =>
-                !e.Parameters.ContainsKey(req.Parameter) ||
-                (req.RequireNonEmpty && string.IsNullOrWhiteSpace(e.Parameters.GetValueOrDefault(req.Parameter)))
-            ).ToList();
-
-            if (missing.Count == 0)
-            {
-                totalPassed++;
-            }
-            else
-            {
-                totalFailed++;
-                foreach (var elem in missing.Take(20)) // cap per check
-                {
-                    allIssues.Add(new AuditIssue
-                    {
-                        Rule = "required-parameter",
-                        Severity = req.Severity,
-                        Message = $"{req.Category} '{elem.Name}' is missing required parameter '{req.Parameter}'.",
-                        ElementId = elem.Id
-                    });
-                }
-                if (missing.Count > 20)
-                {
-                    allIssues.Add(new AuditIssue
-                    {
-                        Rule = "required-parameter",
-                        Severity = "info",
-                        Message = $"... and {missing.Count - 20} more {req.Category} elements missing '{req.Parameter}'."
-                    });
-                }
-            }
+            var ext = Path.GetExtension(reportPath).ToLowerInvariant();
+            if (ext == ".html" || ext == ".htm")
+                format = "html";
+            else if (ext == ".json")
+                format = "json";
         }
 
-        // Print results
-        await output.WriteLineAsync($"Check '{checkName}': {totalPassed} passed, {totalFailed} failed");
-
-        foreach (var issue in allIssues)
+        var rendered = format switch
         {
-            var prefix = issue.Severity == "error" ? "ERROR" : issue.Severity == "warning" ? "WARN" : "INFO";
-            var elementRef = issue.ElementId.HasValue ? $" [Element {issue.ElementId}]" : "";
-            await output.WriteLineAsync($"  [{prefix}] {issue.Rule}: {issue.Message}{elementRef}");
+            "json" => CheckReportRenderer.RenderJson(checkName, totalPassed, totalFailed, allIssues),
+            "html" => CheckReportRenderer.RenderHtml(checkName, totalPassed, totalFailed, allIssues),
+            _ => CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues)
+        };
+
+        // Write to file if --report specified
+        if (reportPath != null)
+        {
+            var dir = Path.GetDirectoryName(Path.GetFullPath(reportPath));
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            await File.WriteAllTextAsync(reportPath, rendered);
+            await output.WriteLineAsync($"Report saved to {reportPath}");
+
+            // Also print summary to console
+            await output.WriteLineAsync(
+                CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues));
+        }
+        else
+        {
+            await output.WriteLineAsync(rendered);
         }
 
         // Determine exit code based on failOn

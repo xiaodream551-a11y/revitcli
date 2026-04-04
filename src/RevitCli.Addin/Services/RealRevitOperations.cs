@@ -779,6 +779,28 @@ public sealed class RealRevitOperations : IRevitOperations
                 allIssues.AddRange(issues);
             }
 
+            // Run required-parameter checks (server-side, batch)
+            foreach (var spec in request.RequiredParameters)
+            {
+                var issues = AuditRequiredParameter(doc, spec);
+                if (issues.Count == 0)
+                    passed++;
+                else
+                    failed++;
+                allIssues.AddRange(issues);
+            }
+
+            // Run custom naming pattern checks
+            foreach (var spec in request.NamingPatterns)
+            {
+                var issues = AuditNamingPattern(doc, spec);
+                if (issues.Count == 0)
+                    passed++;
+                else
+                    failed++;
+                allIssues.AddRange(issues);
+            }
+
             return new AuditResult
             {
                 Passed = passed,
@@ -786,6 +808,141 @@ public sealed class RealRevitOperations : IRevitOperations
                 Issues = allIssues
             };
         });
+    }
+
+    // ── Audit: required-parameter (server-side batch) ───────────
+
+    private static List<AuditIssue> AuditRequiredParameter(Document doc, RequiredParameterSpec spec)
+    {
+        var issues = new List<AuditIssue>();
+
+        BuiltInCategory builtInCat;
+        try { builtInCat = ResolveCategory(doc, spec.Category); }
+        catch { return new List<AuditIssue> { new() {
+            Rule = "required-parameter", Severity = "error",
+            Message = $"Unknown category: '{spec.Category}'"
+        }}; }
+
+        var collector = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfCategory(builtInCat);
+
+        var count = 0;
+        foreach (var element in collector)
+        {
+            var param = element.LookupParameter(spec.Parameter);
+            var missing = param == null;
+
+            if (!missing && spec.RequireNonEmpty)
+            {
+                missing = param!.StorageType == StorageType.String
+                    ? string.IsNullOrWhiteSpace(param.AsString())
+                    : !param.HasValue;
+            }
+
+            if (missing)
+            {
+                count++;
+                if (count <= 20)
+                {
+                    issues.Add(new AuditIssue
+                    {
+                        Rule = "required-parameter",
+                        Severity = spec.Severity,
+                        Message = $"{spec.Category} '{element.Name}' is missing required parameter '{spec.Parameter}'.",
+                        ElementId = ToCliElementId(element.Id)
+                    });
+                }
+            }
+        }
+
+        if (count > 20)
+        {
+            issues.Add(new AuditIssue
+            {
+                Rule = "required-parameter",
+                Severity = "info",
+                Message = $"... and {count - 20} more {spec.Category} elements missing '{spec.Parameter}'."
+            });
+        }
+
+        return issues;
+    }
+
+    // ── Audit: custom naming pattern ────────────────────────────
+
+    private static List<AuditIssue> AuditNamingPattern(Document doc, NamingPatternSpec spec)
+    {
+        var issues = new List<AuditIssue>();
+        var regex = new Regex(spec.Pattern, RegexOptions.Compiled);
+        var target = spec.Target.ToLowerInvariant();
+
+        IEnumerable<Element> elements;
+        if (target is "views" or "view")
+        {
+            elements = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(View))
+                .Cast<View>()
+                .Where(v => !v.IsTemplate)
+                .Cast<Element>();
+        }
+        else if (target is "sheets" or "sheet")
+        {
+            elements = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(ViewSheet))
+                .Cast<Element>();
+        }
+        else
+        {
+            // Try as category
+            try
+            {
+                var cat = ResolveCategory(doc, spec.Target);
+                elements = new FilteredElementCollector(doc)
+                    .WhereElementIsNotElementType()
+                    .OfCategory(cat);
+            }
+            catch
+            {
+                return new List<AuditIssue> { new() {
+                    Rule = "naming-pattern", Severity = "error",
+                    Message = $"Unknown naming target: '{spec.Target}'"
+                }};
+            }
+        }
+
+        var count = 0;
+        foreach (var element in elements)
+        {
+            if (!regex.IsMatch(element.Name))
+            {
+                count++;
+                if (count <= 50)
+                {
+                    issues.Add(new AuditIssue
+                    {
+                        Rule = "naming-pattern",
+                        Severity = spec.Severity,
+                        Message = $"{spec.Target} '{element.Name}' does not match pattern '{spec.Pattern}'.",
+                        ElementId = ToCliElementId(element.Id)
+                    });
+                }
+            }
+        }
+
+        if (count > 50)
+        {
+            issues.Add(new AuditIssue
+            {
+                Rule = "naming-pattern",
+                Severity = "info",
+                Message = $"... and {count - 50} more {spec.Target} elements violating naming pattern."
+            });
+        }
+
+        return issues;
     }
 
     // ── Audit rule: unplaced-rooms ──────────────────────────────
