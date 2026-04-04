@@ -4,19 +4,34 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Changed
-
-- **Architecture: IRevitOperations interface** — Extracted business logic from HTTP handlers into `IRevitOperations` interface. Controllers now only handle HTTP protocol concerns. `PlaceholderRevitOperations` implements the interface with placeholder data. Real Revit integration only requires implementing `IRevitOperations`.
-- **Renamed EndToEndTests to ProtocolTests** — Reflects that these tests verify the HTTP protocol layer, not real Revit integration.
+## [0.1.0] - 2026-04-04
 
 ### Added
 
-- **`revitcli batch`** — Execute commands from a JSON batch file
-- **21 failure path tests** — null, empty string, invalid filter, unknown category, server down, exit codes
-- **CONTRIBUTING.md** — Contributor guide
-- **AGENTS.md** — Codex review mode configuration
+- **Real Revit API Integration (Revit 2026)**
+  - `status` — Returns actual Revit version and active document info
+  - `query --id` — Fetch real elements by ElementId
+  - `query <category> --filter` — Category collection with typed filter matching, unit conversion, duplicate parameter handling
+  - `set` — Parameter modification with Transaction safety, type coercion (String/Integer/Double/ElementId), `--dry-run` with full validation, all-or-nothing semantics
+  - `audit` — 4 real rules: `naming`, `room-bounds`, `level-consistency`, `unplaced-rooms`
+  - `export` — DWG/PDF per-view/sheet export with wildcard matching, IFC whole-model export
+
+- **Add-in Architecture**
+  - `IExternalApplication` + `ExternalEvent` bridge for safe main-thread access
+  - `RealRevitOperations` with real Revit API calls
+  - Exception mapping in controllers (ArgumentException->400, InvalidOperationException->409)
+  - Transaction commit status verification
+  - Export return value checking
+
+- **CLI Enhancements**
+  - `--views` option for export command
+  - Category aliases in English + Chinese (walls/墙, doors/门, etc.)
+  - Duplicate parameter disambiguation via `[N]` suffix in both query and set
+
+### Changed
+
+- Removed `clash` audit rule (placeholder; deferred to future release)
+- Controllers now return structured JSON errors instead of HTTP 500
 
 ## [0.1.0-alpha] - 2026-04-02
 
@@ -27,7 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - `revitcli query` — Query elements by category, filter, or ID with table/JSON/CSV output
   - `revitcli export` — Batch export sheets as DWG, PDF, or IFC with progress bar
   - `revitcli set` — Modify element parameters with `--dry-run` preview
-  - `revitcli audit` — Run model checking rules (naming, clash, room-bounds, level-consistency, unplaced-rooms)
+  - `revitcli audit` — Run model checking rules
   - `revitcli config` — View and modify CLI configuration (`config show` / `config set`)
   - `revitcli doctor` — Diagnose setup issues and connection problems
   - `revitcli completions` — Generate shell completion scripts (bash/zsh/PowerShell)
@@ -49,10 +64,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - Packaged as .NET global tool (`dotnet tool install --global RevitCli`)
   - GitHub Actions CI (build + test on push/PR)
   - NuGet auto-publish workflow on tag push
-  - 82 unit, integration, and protocol tests
-
-### Architecture
-
-- Client-Server model: CLI ↔ HTTP REST ↔ Revit Add-in ↔ Revit API
-- Three .NET projects: CLI (net8.0), Add-in (net8.0), Shared DTOs (netstandard2.0)
-- `IRevitOperations` interface with `PlaceholderRevitOperations` (real implementation requires Windows + Revit)
+  - 86 unit, integration, and protocol tests
