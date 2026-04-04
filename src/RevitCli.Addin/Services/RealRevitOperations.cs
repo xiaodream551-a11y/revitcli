@@ -9,6 +9,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RevitCli.Addin.Bridge;
 using RevitCli.Shared;
+using CliElementFilter = RevitCli.Shared.ElementFilter;
 
 namespace RevitCli.Addin.Services;
 
@@ -397,7 +398,7 @@ public sealed class RealRevitOperations : IRevitOperations
         }
     }
 
-    private static bool MatchesFilter(Document doc, Element element, ElementFilter filter,
+    private static bool MatchesFilter(Document doc, Element element, CliElementFilter filter,
         double? filterRhsNumeric, ref bool fieldFound)
     {
         if (PseudoFields.Contains(filter.Property))
@@ -506,12 +507,12 @@ public sealed class RealRevitOperations : IRevitOperations
         if (string.IsNullOrWhiteSpace(category))
             throw new ArgumentException("Category is required.");
 
-        ElementFilter? parsedFilter = null;
+        CliElementFilter? parsedFilter = null;
         double? filterRhsNumeric = null;
 
         if (!string.IsNullOrWhiteSpace(filter))
         {
-            parsedFilter = ElementFilter.Parse(filter);
+            parsedFilter = CliElementFilter.Parse(filter);
             if (parsedFilter == null)
                 throw new ArgumentException($"Invalid filter expression: '{filter}'");
 
@@ -670,12 +671,12 @@ public sealed class RealRevitOperations : IRevitOperations
             .WhereElementIsNotElementType()
             .OfCategory(builtInCat);
 
-        ElementFilter? parsedFilter = null;
+        CliElementFilter? parsedFilter = null;
         double? filterRhsNumeric = null;
 
         if (!string.IsNullOrWhiteSpace(request.Filter))
         {
-            parsedFilter = ElementFilter.Parse(request.Filter);
+            parsedFilter = CliElementFilter.Parse(request.Filter);
             if (parsedFilter == null)
                 throw new ArgumentException($"Invalid filter expression: '{request.Filter}'");
 
