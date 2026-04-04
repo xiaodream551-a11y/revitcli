@@ -4,6 +4,35 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-04-04
+
+### Added
+
+- **Documentation website** (GitHub Pages, dark theme)
+  - Quick Start guide, 3 core workflows, profile reference, troubleshooting
+  - Live at https://xiaodream551-a11y.github.io/revitcli/
+
+- **3 starter profiles** (`profiles/`)
+  - `architectural-issue.yml` — room data, sheet completeness, pre-issue gate
+  - `interior-room-data.yml` — room metadata, naming, FM handover
+  - `general-publish.yml` — health checks, DWG/PDF/IFC pipelines
+
+- **Doctor onboarding** — quickstart guidance when no profile detected
+- **34 new tests** (86 → 122) — check command, journal, diff engine, output contracts, profile validation
+
+### Changed
+
+- Profile inheritance: `defaults.Notify` now properly inherited from parent
+- Error messages are actionable (suggest fixes, list available options)
+- `set --ids-from <file>` for Windows pipe workaround
+- Malformed `--ids-from` input rejected with clear error (not silent partial)
+- Publish suggests 'revitcli doctor' on connection failure
+
+### Fixed
+
+- Placeholder contract tests replaced with real assertions
+- ParseIds tests exercise actual parser path
+
 ## [0.4.0] - 2026-04-04
 
 ### Added
