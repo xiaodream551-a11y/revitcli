@@ -4,6 +4,34 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-04-04
+
+### Added
+
+- **6 new audit rules** (total: 10 built-in + 2 profile-driven)
+  - `views-not-on-sheets` — printable views/schedules not placed on sheets
+  - `imported-dwg` — imported (not linked) CAD files
+  - `in-place-families` — in-place families that should be loadable
+  - `duplicate-room-numbers` — rooms sharing the same number
+  - `room-metadata` — rooms missing number or using default name
+  - `sheets-missing-info` — sheets with no number or empty content
+
+- **Check result diff engine**
+  - Auto-saves results to `.revitcli/results/` after each check run
+  - Compares against previous run: reports new, resolved, unchanged issues
+  - `--no-save` flag to skip storage (used by publish precheck)
+
+### Changed
+
+- **Naming rule rewritten**: replaced broad regex with prefix-based detection
+  using known Revit default view prefixes (English + Chinese + German + French).
+  System names like "标高 1" / "Level 1" are now whitelisted and no longer flagged.
+- `views-not-on-sheets` and `sheets-missing-info` account for `ScheduleSheetInstance`
+  placements (schedules on sheets are not false positives)
+- `audit --list` output generated from rule registry (no more stale hardcoded strings)
+- Diff output only appears in table format (JSON/HTML remain clean for CI parsers)
+- Result storage wrapped in try/catch (I/O failures don't break audit output)
+
 ## [0.2.0] - 2026-04-04
 
 ### Added
