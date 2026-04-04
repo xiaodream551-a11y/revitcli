@@ -9,6 +9,9 @@
 version: 1
 
 # Inherit from a shared base config (optional)
+# When a child repeats a named check/export/publish, it REPLACES the
+# parent's entire definition (not deep-merged). To extend a parent
+# check set, copy its rules into the child and add your overrides.
 # extends: ../company-standards/base.revitcli.yml
 
 defaults:

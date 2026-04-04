@@ -31,6 +31,8 @@ internal static class CliCommandCatalog
         ("set <category>", "Modify parameters (--param, --value, --dry-run)"),
         ("config show/set", "View or modify configuration"),
         ("audit", "Run model checking rules (--rules, --list)"),
+        ("check [name]", "Run project checks from .revitcli.yml profile"),
+        ("publish [name]", "Run export pipeline from .revitcli.yml profile"),
         ("doctor", "Check setup, server discovery, and connectivity"),
         ("batch <file>", "Execute commands from a JSON batch file"),
         ("completions <shell>", "Generate shell completion script"),

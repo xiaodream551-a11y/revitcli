@@ -53,6 +53,12 @@ public class Suppression
     [YamlMember(Alias = "rule")]
     public string Rule { get; set; } = "";
 
+    [YamlMember(Alias = "category")]
+    public string? Category { get; set; }
+
+    [YamlMember(Alias = "parameter")]
+    public string? Parameter { get; set; }
+
     [YamlMember(Alias = "elementIds")]
     public List<long>? ElementIds { get; set; }
 
@@ -67,9 +73,6 @@ public class AuditRuleRef
 {
     [YamlMember(Alias = "rule")]
     public string Rule { get; set; } = "";
-
-    [YamlMember(Alias = "options")]
-    public Dictionary<string, object>? Options { get; set; }
 }
 
 public class RequiredParameterCheck

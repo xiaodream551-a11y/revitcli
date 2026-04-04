@@ -830,7 +830,17 @@ public sealed class RealRevitOperations : IRevitOperations
         var count = 0;
         foreach (var element in collector)
         {
-            var param = element.LookupParameter(spec.Parameter);
+            // Use case-insensitive ordered scan instead of ambiguous LookupParameter
+            Parameter? param = null;
+            var matchCount = 0;
+            foreach (var p in element.GetOrderedParameters())
+            {
+                if (string.Equals(p.Definition.Name, spec.Parameter, StringComparison.OrdinalIgnoreCase))
+                {
+                    param ??= p;
+                    matchCount++;
+                }
+            }
             var missing = param == null;
 
             if (!missing && spec.RequireNonEmpty)

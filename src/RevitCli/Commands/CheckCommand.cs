@@ -119,8 +119,13 @@ public static class CheckCommand
             }
             allIssues = filtered;
 
-            // Recount passed/failed after suppression
-            totalFailed = allIssues.Any(i => i.Severity is "error" or "warning") ? totalFailed : 0;
+            // Recount: failed = has any error/warning issues remaining
+            var hasRemainingProblems = allIssues.Any(i => i.Severity is "error" or "warning");
+            if (!hasRemainingProblems)
+            {
+                totalPassed += totalFailed;
+                totalFailed = 0;
+            }
         }
 
         // Render output
@@ -182,6 +187,15 @@ public static class CheckCommand
             if (!string.Equals(s.Rule, issue.Rule, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            // Fine-grained matching: category and parameter narrow the scope
+            if (!string.IsNullOrEmpty(s.Category) &&
+                !issue.Message.Contains(s.Category, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!string.IsNullOrEmpty(s.Parameter) &&
+                !issue.Message.Contains(s.Parameter, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             // If elementIds specified, only suppress those specific elements
             if (s.ElementIds != null && s.ElementIds.Count > 0)
             {
@@ -190,7 +204,6 @@ public static class CheckCommand
             }
             else
             {
-                // No elementIds = suppress all issues for this rule
                 return true;
             }
         }

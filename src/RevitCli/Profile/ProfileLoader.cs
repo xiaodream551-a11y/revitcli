@@ -38,25 +38,63 @@ public static class ProfileLoader
     /// Load and parse a profile from the given path.
     /// Resolves single-parent inheritance via 'extends'.
     /// </summary>
-    public static ProjectProfile Load(string path)
-    {
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"Profile not found: {path}");
+    public static ProjectProfile Load(string path) => Load(path, new HashSet<string>());
 
-        var yaml = File.ReadAllText(path);
+    private static ProjectProfile Load(string path, HashSet<string> visited)
+    {
+        var canonical = Path.GetFullPath(path);
+        if (!visited.Add(canonical))
+            throw new InvalidOperationException($"Circular profile inheritance detected: {canonical}");
+
+        if (!File.Exists(canonical))
+            throw new FileNotFoundException($"Profile not found: {canonical}");
+
+        var yaml = File.ReadAllText(canonical);
         var profile = Deserializer.Deserialize<ProjectProfile>(yaml)
-            ?? throw new InvalidOperationException($"Failed to parse profile: {path}");
+            ?? throw new InvalidOperationException($"Failed to parse profile: {canonical}");
+
+        ValidateProfile(profile, canonical);
 
         // Resolve inheritance
         if (!string.IsNullOrWhiteSpace(profile.Extends))
         {
-            var baseDir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            var baseDir = Path.GetDirectoryName(canonical)!;
             var basePath = Path.GetFullPath(Path.Combine(baseDir, profile.Extends));
-            var baseProfile = Load(basePath); // recursive, supports chaining
+            var baseProfile = Load(basePath, visited);
             profile = Merge(baseProfile, profile);
         }
 
         return profile;
+    }
+
+    private static readonly HashSet<string> ValidSeverities = new(StringComparer.OrdinalIgnoreCase)
+        { "error", "warning", "info" };
+
+    private static readonly HashSet<string> ValidFailOn = new(StringComparer.OrdinalIgnoreCase)
+        { "error", "warning" };
+
+    private static void ValidateProfile(ProjectProfile profile, string path)
+    {
+        foreach (var (name, check) in profile.Checks)
+        {
+            if (!ValidFailOn.Contains(check.FailOn))
+                throw new InvalidOperationException(
+                    $"Profile {path}: checks.{name}.failOn must be 'error' or 'warning', got '{check.FailOn}'");
+
+            foreach (var req in check.RequiredParameters)
+            {
+                if (!ValidSeverities.Contains(req.Severity))
+                    throw new InvalidOperationException(
+                        $"Profile {path}: checks.{name}.requiredParameters severity must be error/warning/info, got '{req.Severity}'");
+            }
+
+            foreach (var naming in check.Naming)
+            {
+                if (!ValidSeverities.Contains(naming.Severity))
+                    throw new InvalidOperationException(
+                        $"Profile {path}: checks.{name}.naming severity must be error/warning/info, got '{naming.Severity}'");
+            }
+        }
     }
 
     /// <summary>
