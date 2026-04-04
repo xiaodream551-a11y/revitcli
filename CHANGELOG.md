@@ -4,6 +4,59 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-04-04
+
+### Added
+
+- **Project Profiles** (`.revitcli.yml`)
+  - Named check sets with audit rules, required parameter checks, naming patterns
+  - Named export presets (format, sheets/views, output directory)
+  - Named publish pipelines with precheck gates
+  - Single-parent inheritance via `extends` with cycle detection
+  - Validation of `failOn` and `severity` values at load time
+
+- **`revitcli check`** — Run project checks from profile
+  - Sends all checks in single request to add-in (fast batch execution)
+  - `--output table|json|html` for different consumers
+  - `--report <file>` to save reports (format inferred from extension)
+  - Exit code based on `failOn` (error/warning) for CI gating
+  - Suppression/waiver system: by rule, category, parameter, element IDs, with expiry dates
+
+- **`revitcli publish`** — Run export pipelines from profile
+  - Optional precheck gate (runs a check set first)
+  - Sequential export preset execution
+  - `--dry-run` support
+  - Output paths resolved relative to profile file
+
+- **Check Report Renderer**
+  - Table (plain text), JSON (CI), HTML (dark mode with summary cards)
+  - All formats display suppressed issue count
+
+- **Server-side audit extensions**
+  - `required-parameter`: batch check per category with duplicate-aware parameter scan
+  - `naming-pattern`: custom regex patterns for views, sheets, or any category
+
+- **Multi-version Revit support**
+  - Dual TFM: `net48` (Revit 2024) + `net8.0-windows` (Revit 2025/2026)
+  - `RevitYear` build parameter with per-year output directories
+  - Element IDs widened from `int` to `long` (64-bit ElementId since Revit 2024)
+
+- **Capability/version model**
+  - `status` reports `revitYear`, `addinVersion`, and `capabilities` list
+  - CLI displays add-in version and capabilities
+
+- **Installer**
+  - `install.ps1`: auto-detects Revit years, per-year add-in deployment, PATH setup
+  - `uninstall.ps1`: multi-year manifest removal, optional `-Purge`
+  - `release.yml`: GitHub Actions builds per Revit year, packages ZIP with checksum
+
+- **`doctor`** now displays detected `.revitcli.yml` profile info
+
+### Changed
+
+- Release notes derive supported Revit years from actual build outcomes
+- Profile inheritance documented as full-object replacement (not deep merge)
+
 ## [0.1.0] - 2026-04-04
 
 ### Added
