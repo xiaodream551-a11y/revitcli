@@ -30,7 +30,7 @@ public static class AuditCommand
             {
                 if (!ConsoleHelper.IsInteractive)
                 {
-                    Console.WriteLine("Available rules: naming, clash, room-bounds, level-consistency, unplaced-rooms");
+                    Console.WriteLine($"Available rules: {string.Join(", ", AvailableRules)}");
                     return;
                 }
 

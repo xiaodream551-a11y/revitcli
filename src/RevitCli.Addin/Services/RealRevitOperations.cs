@@ -1257,15 +1257,19 @@ public sealed class RealRevitOperations : IRevitOperations
                 });
             }
 
-            // Check sheet has viewports (not empty)
+            // Check sheet has viewports or schedule instances (not empty)
             var viewports = sheet.GetAllViewports();
-            if (viewports == null || viewports.Count == 0)
+            var hasViewports = viewports != null && viewports.Count > 0;
+            var hasSchedules = new FilteredElementCollector(doc, sheet.Id)
+                .OfClass(typeof(ScheduleSheetInstance))
+                .Any();
+            if (!hasViewports && !hasSchedules)
             {
                 issues.Add(new AuditIssue
                 {
                     Rule = "sheets-missing-info",
                     Severity = "warning",
-                    Message = $"Sheet '{sheet.SheetNumber} - {sheet.Name}' has no views placed on it.",
+                    Message = $"Sheet '{sheet.SheetNumber} - {sheet.Name}' has no views or schedules placed on it.",
                     ElementId = ToCliElementId(sheet.Id)
                 });
             }
@@ -1283,16 +1287,23 @@ public sealed class RealRevitOperations : IRevitOperations
     {
         var issues = new List<AuditIssue>();
 
-        // Collect all viewport-placed view IDs
+        // Collect all placed view IDs (viewports + schedule instances)
         var placedViewIds = new HashSet<ElementId>();
+
         var viewports = new FilteredElementCollector(doc)
             .WhereElementIsNotElementType()
             .OfClass(typeof(Viewport));
-
         foreach (Viewport vp in viewports)
             placedViewIds.Add(vp.ViewId);
 
-        // Check all non-template, non-sheet views
+        // Schedules are placed via ScheduleSheetInstance, not Viewport
+        var scheduleInstances = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(ScheduleSheetInstance));
+        foreach (ScheduleSheetInstance ssi in scheduleInstances)
+            placedViewIds.Add(ssi.ScheduleId);
+
+        // Check all non-template, non-sheet, printable views
         var views = new FilteredElementCollector(doc)
             .WhereElementIsNotElementType()
             .OfClass(typeof(View))

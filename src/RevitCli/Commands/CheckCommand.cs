@@ -168,40 +168,43 @@ public static class CheckCommand
             await output.WriteLineAsync(rendered);
         }
 
-        // Resolve profile directory for result storage
+        // Diff + save (only for table output — don't pollute JSON/HTML)
         var profileDir = profilePath != null
             ? Path.GetDirectoryName(Path.GetFullPath(profilePath))
             : (ProfileLoader.Discover() is { } discovered
                 ? Path.GetDirectoryName(Path.GetFullPath(discovered))
                 : null);
 
-        // Compute diff against previous run (before saving, since save rotates files)
         if (!noSave)
         {
-            var diff = CheckResultStore.ComputeDiff(checkName, allIssues, profileDir);
-            CheckResultStore.Save(checkName, totalPassed, totalFailed, suppressedCount, allIssues, profileDir);
-
-            if (diff != null)
+            try
             {
-                await output.WriteLineAsync("");
-                await output.WriteLineAsync(
-                    $"vs previous: {diff.New.Count} new, {diff.Resolved.Count} resolved, {diff.Unchanged} unchanged");
+                // Diff against latest (before rotation)
+                var diff = CheckResultStore.ComputeDiffAgainstLatest(checkName, allIssues, profileDir);
+                CheckResultStore.Save(checkName, totalPassed, totalFailed, suppressedCount, allIssues, profileDir);
 
-                if (diff.Resolved.Count > 0)
+                // Only print diff to console for table format (not JSON/HTML)
+                if (diff != null && format == "table")
                 {
+                    await output.WriteLineAsync("");
+                    await output.WriteLineAsync(
+                        $"vs previous: {diff.New.Count} new, {diff.Resolved.Count} resolved, {diff.Unchanged} unchanged");
+
                     foreach (var r in diff.Resolved.Take(5))
                         await output.WriteLineAsync($"  [RESOLVED] {r.Rule}: {r.Message}");
                     if (diff.Resolved.Count > 5)
                         await output.WriteLineAsync($"  ... and {diff.Resolved.Count - 5} more resolved");
-                }
 
-                if (diff.New.Count > 0)
-                {
                     foreach (var n in diff.New.Take(5))
                         await output.WriteLineAsync($"  [NEW] {n.Rule}: {n.Message}");
                     if (diff.New.Count > 5)
                         await output.WriteLineAsync($"  ... and {diff.New.Count - 5} more new issues");
                 }
+            }
+            catch (Exception ex)
+            {
+                // Don't let history I/O failures break the audit result
+                await Console.Error.WriteLineAsync($"Warning: failed to save check results: {ex.Message}");
             }
         }
 

@@ -43,11 +43,20 @@ public class StoredIssue
     [JsonPropertyName("elementId")]
     public long? ElementId { get; set; }
 
-    /// <summary>Stable key for diffing: rule + elementId (or message hash if no elementId)</summary>
+    /// <summary>Stable key for diffing: rule + elementId + message prefix for uniqueness</summary>
     [JsonIgnore]
-    public string DiffKey => ElementId.HasValue
-        ? $"{Rule}:{ElementId}"
-        : $"{Rule}:{Message.GetHashCode()}";
+    public string DiffKey
+    {
+        get
+        {
+            // Include first 80 chars of message to distinguish multiple issues
+            // on the same element for the same rule
+            var msgKey = Message.Length <= 80 ? Message : Message[..80];
+            return ElementId.HasValue
+                ? $"{Rule}:{ElementId}:{msgKey}"
+                : $"{Rule}::{msgKey}";
+        }
+    }
 }
 
 public class CheckDiff
@@ -113,11 +122,14 @@ public static class CheckResultStore
         File.WriteAllText(latestPath, JsonSerializer.Serialize(result, JsonOpts));
     }
 
-    public static CheckDiff? ComputeDiff(string checkName, List<AuditIssue> currentIssues, string? profileDir)
+    /// <summary>
+    /// Compare current issues against the latest saved result (before rotation).
+    /// Call this BEFORE Save() so the baseline is the most recent prior run.
+    /// </summary>
+    public static CheckDiff? ComputeDiffAgainstLatest(string checkName, List<AuditIssue> currentIssues, string? profileDir)
     {
         var resultsDir = GetResultsDir(profileDir);
-        // Compare against previous (which is the last-saved-before-current-run)
-        var previousPath = GetPreviousPath(resultsDir, checkName);
+        var previousPath = GetLatestPath(resultsDir, checkName);
         if (!File.Exists(previousPath))
             return null;
 
