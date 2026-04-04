@@ -272,6 +272,87 @@ checks:
         Directory.Delete(dir, true);
     }
 
+    [Fact]
+    public void ProfileInheritance_DefaultsMergeFieldLevel()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"revitcli_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        // Base profile has outputDir and notify
+        File.WriteAllText(Path.Combine(dir, "base.yml"), @"
+version: 1
+defaults:
+  outputDir: ./base-output
+  notify: https://base.example.com/hook
+checks:
+  base-check:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+
+        // Child overrides outputDir, inherits notify, adds own check
+        File.WriteAllText(Path.Combine(dir, "child.yml"), @"
+version: 1
+extends: base.yml
+defaults:
+  outputDir: ./child-output
+checks:
+  child-check:
+    failOn: warning
+    auditRules:
+      - rule: room-bounds
+");
+
+        var profile = ProfileLoader.Load(Path.Combine(dir, "child.yml"));
+
+        // Defaults: child outputDir wins, base notify inherited
+        Assert.Equal("./child-output", profile.Defaults.OutputDir);
+        Assert.Equal("https://base.example.com/hook", profile.Defaults.Notify);
+
+        // Both check sets available
+        Assert.True(profile.Checks.ContainsKey("base-check"));
+        Assert.True(profile.Checks.ContainsKey("child-check"));
+
+        Directory.Delete(dir, true);
+    }
+
+    [Fact]
+    public void ProfileInheritance_ChildOverridesNamedCheck()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"revitcli_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        File.WriteAllText(Path.Combine(dir, "base.yml"), @"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+      - rule: room-bounds
+");
+
+        // Child replaces entire 'default' check (not deep-merged)
+        File.WriteAllText(Path.Combine(dir, "child.yml"), @"
+version: 1
+extends: base.yml
+checks:
+  default:
+    failOn: warning
+    auditRules:
+      - rule: naming
+");
+
+        var profile = ProfileLoader.Load(Path.Combine(dir, "child.yml"));
+
+        // Child's version wins entirely
+        Assert.Equal("warning", profile.Checks["default"].FailOn);
+        Assert.Single(profile.Checks["default"].AuditRules); // Only naming, not room-bounds
+
+        Directory.Delete(dir, true);
+    }
+
     private static string CreateTempProfile(string yaml)
     {
         var path = Path.Combine(Path.GetTempPath(), $"revitcli_test_{Guid.NewGuid():N}.yml");

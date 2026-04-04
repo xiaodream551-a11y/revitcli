@@ -67,7 +67,8 @@ public static class PublishCommand
 
         if (profile == null)
         {
-            await output.WriteLineAsync($"Error: no {ProfileLoader.FileName} found. Create one in your project root.");
+            await output.WriteLineAsync($"Error: no {ProfileLoader.FileName} found.");
+            await output.WriteLineAsync($"  Create one in your project root, or copy from .revitcli.example.yml");
             return 1;
         }
 
@@ -76,7 +77,9 @@ public static class PublishCommand
         {
             await output.WriteLineAsync($"Error: publish pipeline '{pipelineName}' not found in profile.");
             if (profile.Publish.Count > 0)
-                await output.WriteLineAsync($"Available: {string.Join(", ", profile.Publish.Keys)}");
+                await output.WriteLineAsync($"  Available pipelines: {string.Join(", ", profile.Publish.Keys)}");
+            else
+                await output.WriteLineAsync($"  Your profile has no publish pipelines. Add a 'publish:' section.");
             return 1;
         }
 
@@ -88,6 +91,7 @@ public static class PublishCommand
             if (checkResult != 0)
             {
                 await output.WriteLineAsync("Precheck failed. Aborting publish.");
+                await output.WriteLineAsync("  Fix the issues above, or use suppressions to waive known problems.");
                 return 1;
             }
             await output.WriteLineAsync("");
@@ -102,6 +106,8 @@ public static class PublishCommand
             if (!profile.Exports.TryGetValue(presetName, out var preset))
             {
                 await output.WriteLineAsync($"Error: export preset '{presetName}' not found in profile.");
+                if (profile.Exports.Count > 0)
+                    await output.WriteLineAsync($"  Available presets: {string.Join(", ", profile.Exports.Keys)}");
                 failed++;
                 continue;
             }

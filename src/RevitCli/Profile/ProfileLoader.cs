@@ -110,8 +110,10 @@ public static class ProfileLoader
     }
 
     /// <summary>
-    /// Merge base profile with child. Child values override base.
-    /// Maps are deep-merged by key. Lists are replaced entirely.
+    /// Merge base profile with child.
+    /// - defaults: field-level merge (child overrides individual fields, inherits the rest)
+    /// - checks/exports/publish: merged by name (child replaces entire named entry)
+    /// - lists within named entries: NOT deep-merged (child replaces parent's lists)
     /// </summary>
     private static ProjectProfile Merge(ProjectProfile baseProfile, ProjectProfile child)
     {
@@ -120,7 +122,8 @@ public static class ProfileLoader
             Version = child.Version > 0 ? child.Version : baseProfile.Version,
             Defaults = new ProfileDefaults
             {
-                OutputDir = child.Defaults.OutputDir ?? baseProfile.Defaults.OutputDir
+                OutputDir = child.Defaults.OutputDir ?? baseProfile.Defaults.OutputDir,
+                Notify = child.Defaults.Notify ?? baseProfile.Defaults.Notify
             }
         };
 

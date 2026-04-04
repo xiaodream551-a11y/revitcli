@@ -59,7 +59,9 @@ public static class CheckCommand
 
         if (profile == null)
         {
-            await output.WriteLineAsync($"Error: no {ProfileLoader.FileName} found. Create one in your project root.");
+            await output.WriteLineAsync($"Error: no {ProfileLoader.FileName} found.");
+            await output.WriteLineAsync($"  Create one in your project root, or copy from .revitcli.example.yml");
+            await output.WriteLineAsync($"  Docs: revitcli doctor  (shows profile detection status)");
             return 1;
         }
 
@@ -68,7 +70,9 @@ public static class CheckCommand
         {
             await output.WriteLineAsync($"Error: check set '{checkName}' not found in profile.");
             if (profile.Checks.Count > 0)
-                await output.WriteLineAsync($"Available: {string.Join(", ", profile.Checks.Keys)}");
+                await output.WriteLineAsync($"  Available check sets: {string.Join(", ", profile.Checks.Keys)}");
+            else
+                await output.WriteLineAsync($"  Your profile has no check sets defined. Add a 'checks:' section.");
             return 1;
         }
 
@@ -99,6 +103,8 @@ public static class CheckCommand
         if (!result.Success)
         {
             await output.WriteLineAsync($"Error: {result.Error}");
+            if (result.Error?.Contains("not running") == true)
+                await output.WriteLineAsync("  Run 'revitcli doctor' to diagnose connection issues.");
             return 1;
         }
 
