@@ -97,6 +97,9 @@ public static class SetCommand
             }
 
             AnsiConsole.MarkupLine($"Modified [green]{data.Affected}[/] element(s).");
+
+            // Journal log (interactive path)
+            LogSetOperation(param, value, category, filter, id, fromStdin, data.Affected);
         }, categoryArg, filterOpt, idOpt, paramOpt, valueOpt, dryRunOpt, stdinOpt);
 
         return command;
@@ -113,6 +116,13 @@ public static class SetCommand
         if (category == null && !id.HasValue && !fromStdin)
         {
             await output.WriteLineAsync("Error: provide a category, --id, or --stdin to target elements.");
+            return 1;
+        }
+
+        // --stdin is mutually exclusive with category/filter/id
+        if (fromStdin && (category != null || !string.IsNullOrEmpty(filter) || id.HasValue))
+        {
+            await output.WriteLineAsync("Error: --stdin cannot be combined with category, --filter, or --id.");
             return 1;
         }
 
@@ -149,8 +159,19 @@ public static class SetCommand
 
         await output.WriteLineAsync($"Modified {data.Affected} element(s).");
 
-        // Journal log
-        JournalLogger.Log(null, new
+        LogSetOperation(param, value, category, filter, id, fromStdin, data.Affected);
+
+        return 0;
+    }
+
+    private static void LogSetOperation(string param, string value, string? category,
+        string? filter, long? id, bool fromStdin, int affected)
+    {
+        var profileDir = Profile.ProfileLoader.Discover() is { } p
+            ? Path.GetDirectoryName(Path.GetFullPath(p))
+            : null;
+
+        JournalLogger.Log(profileDir, new
         {
             action = "set",
             param,
@@ -159,12 +180,10 @@ public static class SetCommand
             filter,
             elementId = id,
             fromStdin,
-            affected = data.Affected,
+            affected,
             timestamp = DateTime.UtcNow.ToString("o"),
             user = Environment.UserName
         });
-
-        return 0;
     }
 
     /// <summary>
@@ -172,65 +191,70 @@ public static class SetCommand
     /// - JSON array of objects with "id" field (query --output json)
     /// - JSON array of numbers
     /// - One ID per line (plain text)
+    /// Fails explicitly if stdin is non-empty but yields no valid IDs.
     /// </summary>
     private static List<long> ReadIdsFromStdin()
     {
         var input = Console.In.ReadToEnd();
         if (string.IsNullOrWhiteSpace(input))
-            return new List<long>();
+            throw new InvalidOperationException("--stdin: no input received. Pipe element data to stdin.");
 
         input = input.Trim();
+        List<long>? ids = null;
 
         // Try JSON array
         if (input.StartsWith("["))
         {
-            try
+            var elements = JsonSerializer.Deserialize<List<JsonElement>>(input);
+            if (elements != null)
             {
-                // Try as array of objects with "id" field (query output)
-                var elements = JsonSerializer.Deserialize<List<JsonElement>>(input);
-                if (elements != null)
+                ids = new List<long>();
+                foreach (var elem in elements)
                 {
-                    var ids = new List<long>();
-                    foreach (var elem in elements)
-                    {
-                        if (elem.ValueKind == JsonValueKind.Number)
-                        {
-                            ids.Add(elem.GetInt64());
-                        }
-                        else if (elem.ValueKind == JsonValueKind.Object &&
-                                 elem.TryGetProperty("id", out var idProp))
-                        {
-                            ids.Add(idProp.GetInt64());
-                        }
-                    }
-                    return ids;
+                    if (elem.ValueKind == JsonValueKind.Number)
+                        ids.Add(elem.GetInt64());
+                    else if (elem.ValueKind == JsonValueKind.Object &&
+                             elem.TryGetProperty("id", out var idProp))
+                        ids.Add(idProp.GetInt64());
+                    else
+                        throw new InvalidOperationException(
+                            $"--stdin: array item is not a number or object with 'id' field.");
                 }
             }
-            catch { }
         }
-
         // Try JSON wrapper with "data" field (API response format)
-        if (input.StartsWith("{"))
+        else if (input.StartsWith("{"))
         {
-            try
+            using var doc = JsonDocument.Parse(input);
+            if (doc.RootElement.TryGetProperty("data", out var data) &&
+                data.ValueKind == JsonValueKind.Array)
             {
-                using var doc = JsonDocument.Parse(input);
-                if (doc.RootElement.TryGetProperty("data", out var data) &&
-                    data.ValueKind == JsonValueKind.Array)
-                {
-                    return data.EnumerateArray()
-                        .Where(e => e.TryGetProperty("id", out _))
-                        .Select(e => e.GetProperty("id").GetInt64())
-                        .ToList();
-                }
+                ids = data.EnumerateArray()
+                    .Select(e =>
+                    {
+                        if (!e.TryGetProperty("id", out var idProp))
+                            throw new InvalidOperationException("--stdin: object in data array missing 'id' field.");
+                        return idProp.GetInt64();
+                    })
+                    .ToList();
             }
-            catch { }
+        }
+        else
+        {
+            // Fallback: one ID per line
+            var lines = input.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            ids = new List<long>();
+            foreach (var line in lines)
+            {
+                if (!long.TryParse(line, out var parsed))
+                    throw new InvalidOperationException($"--stdin: '{line}' is not a valid element ID.");
+                ids.Add(parsed);
+            }
         }
 
-        // Fallback: one ID per line
-        return input.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => long.TryParse(line, out _))
-            .Select(long.Parse)
-            .ToList();
+        if (ids == null || ids.Count == 0)
+            throw new InvalidOperationException("--stdin: no element IDs found in input.");
+
+        return ids;
     }
 }

@@ -35,8 +35,12 @@ public static class CheckCommand
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
+    public static Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
         string outputFormat, string? reportPath, bool noSave, TextWriter output)
+        => ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, true, output);
+
+    internal static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
+        string outputFormat, string? reportPath, bool noSave, bool sendNotify, TextWriter output)
     {
         // Load profile
         ProjectProfile? profile;
@@ -219,8 +223,8 @@ public static class CheckCommand
         else if (failOn == "warning" && (hasErrors || hasWarnings))
             exitCode = 1;
 
-        // Webhook notification
-        if (!string.IsNullOrWhiteSpace(profile.Defaults.Notify))
+        // Webhook notification (suppressed when called from publish precheck)
+        if (sendNotify && !string.IsNullOrWhiteSpace(profile.Defaults.Notify))
         {
             await WebhookNotifier.NotifyAsync(profile.Defaults.Notify, new
             {

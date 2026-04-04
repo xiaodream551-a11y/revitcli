@@ -602,8 +602,9 @@ public sealed class RealRevitOperations : IRevitOperations
         if (string.IsNullOrWhiteSpace(request.Param))
             throw new ArgumentException("Parameter name (--param) is required.");
 
-        if (request.ElementId == null && string.IsNullOrWhiteSpace(request.Category))
-            throw new ArgumentException("Provide a category or --id to target elements.");
+        var hasElementIds = request.ElementIds != null && request.ElementIds.Count > 0;
+        if (request.ElementId == null && string.IsNullOrWhiteSpace(request.Category) && !hasElementIds)
+            throw new ArgumentException("Provide a category, --id, or --stdin to target elements.");
 
         return _bridge.InvokeAsync(app =>
         {
