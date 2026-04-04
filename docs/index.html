@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RevitCli — Local BIMOps Runner for Revit Teams</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="inner">
+        <span class="logo">RevitCli</span>
+        <div class="links">
+          <a href="index.html" class="active">Home</a>
+          <a href="guide.html">Guide</a>
+          <a href="profile.html">Profile Reference</a>
+          <a href="troubleshooting.html">Troubleshooting</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="hero">
+        <h1>RevitCli</h1>
+        <p class="tagline">
+          Local BIMOps runner for Revit teams.<br />Standards checking +
+          deliverable publishing, from your terminal.
+        </p>
+        <div class="badges">
+          <span class="badge badge-green">10 audit rules</span>
+          <span class="badge badge-blue">Revit 2024/2025/2026</span>
+          <span class="badge badge-purple">122 tests</span>
+        </div>
+      </div>
+
+      <h2>What is RevitCli?</h2>
+      <p>
+        RevitCli is a command-line tool that runs model quality checks and
+        publishes deliverables for Autodesk Revit projects. It turns your BIM
+        standards into executable, repeatable, version-controlled workflows.
+      </p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>revitcli check</h3>
+          <p>
+            Run audit rules, required parameter checks, and naming patterns from
+            a shared profile. Generate HTML/JSON reports. Diff against previous
+            runs.
+          </p>
+        </div>
+        <div class="card">
+          <h3>revitcli publish</h3>
+          <p>
+            Pre-check gate + batch export pipeline. DWG, PDF, IFC with
+            consistent settings every time. One command, no guesswork.
+          </p>
+        </div>
+        <div class="card">
+          <h3>revitcli query + set</h3>
+          <p>
+            Query elements by category/filter, output as JSON/CSV. Batch-modify
+            parameters with dry-run preview and transaction safety.
+          </p>
+        </div>
+      </div>
+
+      <h2>Quick Start (5 minutes)</h2>
+
+      <div class="steps">
+        <div class="step">
+          <h3>Install the CLI</h3>
+          <pre><code>dotnet tool install --global RevitCli</code></pre>
+          <p>
+            Or build from source:
+            <code>dotnet publish src/RevitCli -c Release -o ./publish</code>
+          </p>
+        </div>
+        <div class="step">
+          <h3>Deploy the Revit Add-in</h3>
+          <pre><code>dotnet publish src/RevitCli.Addin -c Release
+# Close Revit, then copy files to:
+# %APPDATA%\Autodesk\Revit\Addins\2026\</code></pre>
+          <p>
+            Or use the installer:
+            <code>powershell -ExecutionPolicy Bypass -File install.ps1</code>
+          </p>
+        </div>
+        <div class="step">
+          <h3>Verify connection</h3>
+          <pre><code>revitcli doctor</code></pre>
+          <p>Should show green checks for Revit version and document.</p>
+        </div>
+        <div class="step">
+          <h3>Copy a starter profile</h3>
+          <pre><code># Choose one:
+cp profiles/architectural-issue.yml .revitcli.yml
+cp profiles/interior-room-data.yml .revitcli.yml
+cp profiles/general-publish.yml .revitcli.yml</code></pre>
+        </div>
+        <div class="step">
+          <h3>Run your first check</h3>
+          <pre><code>revitcli check
+revitcli check --report report.html   # open in browser</code></pre>
+        </div>
+      </div>
+
+      <h2>Why RevitCli?</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Without RevitCli</th>
+            <th>With RevitCli</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Manually browse schedules, views, sheets before issue</td>
+            <td><code>revitcli check pre-issue</code> in 10 seconds</td>
+          </tr>
+          <tr>
+            <td>Export DWG/PDF one by one with different settings</td>
+            <td><code>revitcli publish</code> with consistent presets</td>
+          </tr>
+          <tr>
+            <td>Standards are in a Word doc nobody reads</td>
+            <td>
+              Standards are in <code>.revitcli.yml</code>, enforced
+              automatically
+            </td>
+          </tr>
+          <tr>
+            <td>"Did we check the model?" — "I think so"</td>
+            <td>HTML report + journal log + webhook notification</td>
+          </tr>
+          <tr>
+            <td>Fix 200 door fire ratings one by one</td>
+            <td>
+              <code
+                >revitcli set doors --filter "Fire Rating=" --param "Fire
+                Rating" --value "60min"</code
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Starter Profiles</h2>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>Architectural Issue Gate</h3>
+          <p>
+            Room data, sheet completeness, pre-issue checks. DWG + PDF publish
+            pipeline with quality gate.
+          </p>
+          <p><code>profiles/architectural-issue.yml</code></p>
+        </div>
+        <div class="card">
+          <h3>Interior / Room Data</h3>
+          <p>
+            Room metadata, naming patterns, department checks. Handover-ready
+            strict mode for FM delivery.
+          </p>
+          <p><code>profiles/interior-room-data.yml</code></p>
+        </div>
+        <div class="card">
+          <h3>General Publish</h3>
+          <p>
+            Basic model health + DWG/PDF/IFC export. Quick and full publish
+            pipelines. Works for any project.
+          </p>
+          <p><code>profiles/general-publish.yml</code></p>
+        </div>
+      </div>
+
+      <h2>Audit Rules</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Category</th>
+            <th>What it checks</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>room-bounds</code></td>
+            <td>Rooms</td>
+            <td>Rooms with zero area (not enclosed)</td>
+          </tr>
+          <tr>
+            <td><code>unplaced-rooms</code></td>
+            <td>Rooms</td>
+            <td>Rooms not placed in model</td>
+          </tr>
+          <tr>
+            <td><code>duplicate-room-numbers</code></td>
+            <td>Rooms</td>
+            <td>Multiple rooms sharing same number</td>
+          </tr>
+          <tr>
+            <td><code>room-metadata</code></td>
+            <td>Rooms</td>
+            <td>Missing room number or default name</td>
+          </tr>
+          <tr>
+            <td><code>level-consistency</code></td>
+            <td>Levels</td>
+            <td>Duplicate elevations</td>
+          </tr>
+          <tr>
+            <td><code>naming</code></td>
+            <td>Naming</td>
+            <td>Default view names (Section 1, 3D View 2)</td>
+          </tr>
+          <tr>
+            <td><code>views-not-on-sheets</code></td>
+            <td>Delivery</td>
+            <td>Printable views/schedules not on any sheet</td>
+          </tr>
+          <tr>
+            <td><code>sheets-missing-info</code></td>
+            <td>Delivery</td>
+            <td>Sheets with no number or empty content</td>
+          </tr>
+          <tr>
+            <td><code>imported-dwg</code></td>
+            <td>Health</td>
+            <td>Imported (not linked) CAD files</td>
+          </tr>
+          <tr>
+            <td><code>in-place-families</code></td>
+            <td>Health</td>
+            <td>In-place families that should be loadable</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Plus profile-driven: <code>required-parameter</code> and
+        <code>naming-pattern</code> (custom regex).
+      </p>
+
+      <footer>
+        RevitCli is open source.
+        <a href="https://github.com/xiaodream551-a11y/revitcli">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

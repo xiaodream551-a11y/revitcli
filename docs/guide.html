@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guide — RevitCli</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="inner">
+        <span class="logo">RevitCli</span>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="guide.html" class="active">Guide</a>
+          <a href="profile.html">Profile Reference</a>
+          <a href="troubleshooting.html">Troubleshooting</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1>Core Workflows</h1>
+      <p>
+        RevitCli has three core workflows. Each one replaces a manual process
+        that BIM teams do every week.
+      </p>
+
+      <h2>Workflow 1: Model Quality Check</h2>
+      <p>
+        Run standardized checks against your Revit model and generate reports.
+      </p>
+
+      <h3>Basic check</h3>
+      <pre><code>revitcli check</code></pre>
+      <p>
+        Runs the <code>default</code> check set from your
+        <code>.revitcli.yml</code> profile. Exits with code 1 if any issues
+        exceed the <code>failOn</code> threshold.
+      </p>
+
+      <h3>Named check set</h3>
+      <pre><code>revitcli check pre-issue</code></pre>
+      <p>
+        Runs a specific check set. Use stricter sets for milestones, relaxed
+        sets for daily work.
+      </p>
+
+      <h3>Generate reports</h3>
+      <pre><code># HTML report (send to BIM manager)
+revitcli check --report check-report.html
+
+# JSON report (feed to CI/scripts)
+revitcli check --output json
+
+# Both: save HTML file + print table to console
+revitcli check --report report.html --output table</code></pre>
+
+      <h3>Track progress over time</h3>
+      <p>
+        RevitCli automatically saves check results. Run it again to see what
+        changed:
+      </p>
+      <pre><code>revitcli check
+# ... fix some issues ...
+revitcli check
+# Output:
+# Check 'default': 8 passed, 1 failed
+# vs previous: 0 new, 3 resolved, 5 unchanged
+#   [RESOLVED] room-bounds: Room 'Kitchen' has zero area
+#   [RESOLVED] naming: View 'Section 1' appears to use a default name</code></pre>
+
+      <h3>Suppress known issues</h3>
+      <p>
+        Real projects have legacy issues you can't fix right now. Add
+        suppressions to your profile:
+      </p>
+      <pre><code># In .revitcli.yml
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+    suppressions:
+      - rule: naming
+        reason: "Legacy views from template, will fix in Phase 2"
+        expires: "2026-06-01"
+      - rule: required-parameter
+        category: doors
+        parameter: Fire Rating
+        elementIds: [337596, 337601]
+        reason: "Placeholder doors"</code></pre>
+      <p>
+        Suppressed issues don't count toward pass/fail and show a separate
+        count.
+      </p>
+
+      <h2>Workflow 2: Deliverable Publishing</h2>
+      <p>Export consistent deliverable packages with pre-checks.</p>
+
+      <h3>Preview first</h3>
+      <pre><code>revitcli publish --dry-run</code></pre>
+      <p>Shows what would be exported without actually exporting.</p>
+
+      <h3>Publish with quality gate</h3>
+      <pre><code>revitcli publish</code></pre>
+      <p>
+        If a <code>precheck</code> is defined in the pipeline, it runs first.
+        Publishing is aborted if the precheck fails.
+      </p>
+
+      <h3>Named pipelines</h3>
+      <pre><code># Default pipeline (e.g. DWG + PDF)
+revitcli publish
+
+# Full pipeline (e.g. DWG + PDF + IFC)
+revitcli publish full</code></pre>
+
+      <h3>Direct export (without profile)</h3>
+      <pre><code># Export DWG
+revitcli export --format dwg --sheets all --output-dir ./exports
+
+# Export PDF for specific sheets
+revitcli export --format pdf --sheets "A1*" --output-dir ./exports
+
+# Export IFC (whole model)
+revitcli export --format ifc --output-dir ./exports
+
+# Export specific views
+revitcli export --format dwg --views "Level 1" --output-dir ./exports</code></pre>
+
+      <h2>Workflow 3: Parameter Query and Modification</h2>
+      <p>Find elements and batch-edit parameters.</p>
+
+      <h3>Query elements</h3>
+      <pre><code># All walls
+revitcli query walls
+
+# With filter
+revitcli query doors --filter "Fire Rating="
+
+# Specific element
+revitcli query --id 337596
+
+# Output formats
+revitcli query rooms --output json
+revitcli query rooms --output csv > rooms.csv</code></pre>
+
+      <h3>Modify parameters</h3>
+      <pre><code># Preview changes first (always!)
+revitcli set walls --param "Mark" --value "W-01" --dry-run
+
+# Apply changes
+revitcli set walls --param "Mark" --value "W-01"
+
+# With filter
+revitcli set doors --filter "Fire Rating=" --param "Fire Rating" --value "60min"
+
+# Single element
+revitcli set --id 337596 --param "Comments" --value "Reviewed"</code></pre>
+
+      <div class="alert alert-warn">
+        <strong>Always use --dry-run first.</strong> The
+        <code>set</code> command modifies your Revit model. Changes are wrapped
+        in a single transaction (all-or-nothing), but there is no undo from the
+        CLI.
+      </div>
+
+      <h3>Batch from file</h3>
+      <pre><code># Export element IDs to file
+revitcli query doors --filter "Fire Rating=" --output json > doors.json
+
+# Apply changes from file
+revitcli set --ids-from doors.json --param "Fire Rating" --value "60min" --dry-run</code></pre>
+
+      <h2>Other Commands</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>revitcli status</code></td>
+            <td>Show Revit version, add-in version, document, capabilities</td>
+          </tr>
+          <tr>
+            <td><code>revitcli doctor</code></td>
+            <td>
+              Diagnose setup: config, server, connection, profile detection
+            </td>
+          </tr>
+          <tr>
+            <td><code>revitcli audit --list</code></td>
+            <td>List all available audit rules</td>
+          </tr>
+          <tr>
+            <td><code>revitcli audit --rules naming,room-bounds</code></td>
+            <td>Run specific audit rules directly (without profile)</td>
+          </tr>
+          <tr>
+            <td><code>revitcli config show</code></td>
+            <td>Show CLI configuration</td>
+          </tr>
+          <tr>
+            <td><code>revitcli config set defaultOutput json</code></td>
+            <td>Change CLI defaults</td>
+          </tr>
+          <tr>
+            <td><code>revitcli batch commands.json</code></td>
+            <td>Execute commands from a JSON file</td>
+          </tr>
+          <tr>
+            <td><code>revitcli completions bash</code></td>
+            <td>Generate shell completions</td>
+          </tr>
+          <tr>
+            <td><code>revitcli -i</code></td>
+            <td>Interactive REPL mode</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <footer>
+        RevitCli is open source.
+        <a href="https://github.com/xiaodream551-a11y/revitcli">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

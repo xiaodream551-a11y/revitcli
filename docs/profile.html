@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile Reference — RevitCli</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="inner">
+        <span class="logo">RevitCli</span>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="guide.html">Guide</a>
+          <a href="profile.html" class="active">Profile Reference</a>
+          <a href="troubleshooting.html">Troubleshooting</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1>Profile Reference</h1>
+      <p>
+        The <code>.revitcli.yml</code> file defines your project's BIM standards
+        as executable configuration. Place it in your project root and commit to
+        version control.
+      </p>
+
+      <h2>Full Schema</h2>
+
+      <pre><code>version: 1
+
+# Inherit from a parent profile (optional)
+# Child replaces entire named entries; defaults merge field-by-field.
+extends: ../company-standards/base.revitcli.yml
+
+defaults:
+  outputDir: ./deliverables          # default export directory
+  notify: https://hooks.slack.com/...  # webhook URL (HTTPS only)
+
+checks:
+  &lt;name&gt;:
+    failOn: error | warning          # exit code threshold
+    auditRules:
+      - rule: &lt;rule-name&gt;
+    requiredParameters:
+      - category: &lt;category&gt;
+        parameter: &lt;param-name&gt;
+        requireNonEmpty: true | false
+        severity: error | warning | info
+    naming:
+      - target: views | sheets | &lt;category&gt;
+        pattern: &lt;regex&gt;
+        severity: error | warning | info
+    suppressions:
+      - rule: &lt;rule-name&gt;
+        category: &lt;optional&gt;         # narrow by category
+        parameter: &lt;optional&gt;        # narrow by parameter
+        elementIds: [id1, id2]        # narrow by element (optional)
+        reason: "explanation"          # why this is suppressed
+        expires: "2026-12-31"          # auto-expire date (optional)
+
+exports:
+  &lt;name&gt;:
+    format: dwg | pdf | ifc
+    sheets: [pattern1, pattern2]     # sheet name/number patterns
+    views: [pattern1, pattern2]      # view name patterns
+    outputDir: ./path                # overrides defaults.outputDir
+
+publish:
+  &lt;name&gt;:
+    precheck: &lt;check-name&gt;           # run this check set first
+    presets: [export1, export2]      # export presets to run</code></pre>
+
+      <h2>Section Details</h2>
+
+      <h3>version</h3>
+      <p>Always <code>1</code>. Reserved for future schema changes.</p>
+
+      <h3>extends</h3>
+      <p>
+        Path to a parent profile (relative to this file). Inheritance rules:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Section</th>
+            <th>Merge behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>defaults</code></td>
+            <td>
+              Field-level merge (child overrides individual fields, inherits the
+              rest)
+            </td>
+          </tr>
+          <tr>
+            <td><code>checks</code></td>
+            <td>
+              Merge by name. Child replaces the entire named check definition.
+            </td>
+          </tr>
+          <tr>
+            <td><code>exports</code></td>
+            <td>
+              Merge by name. Child replaces the entire named export preset.
+            </td>
+          </tr>
+          <tr>
+            <td><code>publish</code></td>
+            <td>Merge by name. Child replaces the entire named pipeline.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="alert alert-info">
+        Named entries are full-object replacement, not deep merge. If a child
+        overrides <code>checks.default</code>, it must include all rules — the
+        parent's rules are not inherited into that check set.
+      </div>
+
+      <h3>defaults</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>outputDir</code></td>
+            <td>string</td>
+            <td>
+              Default export directory. Paths are relative to the profile file.
+            </td>
+          </tr>
+          <tr>
+            <td><code>notify</code></td>
+            <td>string</td>
+            <td>
+              Webhook URL. Must be HTTPS. Receives JSON POST after
+              check/publish.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>checks.&lt;name&gt;</h3>
+
+      <h3>failOn</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Value</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>error</code></td>
+            <td>Exit 1 only if errors found. Warnings pass.</td>
+          </tr>
+          <tr>
+            <td><code>warning</code></td>
+            <td>Exit 1 if errors or warnings found. Stricter.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>auditRules</h3>
+      <p>
+        List of built-in rules to run. See
+        <a href="index.html#audit-rules">Audit Rules</a> for the full list.
+      </p>
+
+      <h3>requiredParameters</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>category</code></td>
+            <td>string</td>
+            <td>
+              Element category (e.g. doors, walls, rooms). English or Chinese.
+            </td>
+          </tr>
+          <tr>
+            <td><code>parameter</code></td>
+            <td>string</td>
+            <td>Parameter name to check.</td>
+          </tr>
+          <tr>
+            <td><code>requireNonEmpty</code></td>
+            <td>bool</td>
+            <td>If true, parameter must exist AND have a non-empty value.</td>
+          </tr>
+          <tr>
+            <td><code>severity</code></td>
+            <td>string</td>
+            <td>
+              <code>error</code>, <code>warning</code>, or <code>info</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>naming</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>target</code></td>
+            <td>string</td>
+            <td>
+              <code>views</code>, <code>sheets</code>, or a category name.
+            </td>
+          </tr>
+          <tr>
+            <td><code>pattern</code></td>
+            <td>string</td>
+            <td>
+              Regex pattern. Elements whose names do NOT match are flagged.
+            </td>
+          </tr>
+          <tr>
+            <td><code>severity</code></td>
+            <td>string</td>
+            <td>
+              <code>error</code>, <code>warning</code>, or <code>info</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>suppressions</h3>
+      <p>Suppress known issues so they don't count toward pass/fail.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>rule</code></td>
+            <td>Yes</td>
+            <td>
+              Rule name to suppress (e.g. <code>naming</code>,
+              <code>required-parameter</code>).
+            </td>
+          </tr>
+          <tr>
+            <td><code>category</code></td>
+            <td>No</td>
+            <td>Only suppress issues mentioning this category.</td>
+          </tr>
+          <tr>
+            <td><code>parameter</code></td>
+            <td>No</td>
+            <td>Only suppress issues mentioning this parameter.</td>
+          </tr>
+          <tr>
+            <td><code>elementIds</code></td>
+            <td>No</td>
+            <td>Only suppress these specific element IDs.</td>
+          </tr>
+          <tr>
+            <td><code>reason</code></td>
+            <td>No</td>
+            <td>Human-readable explanation (shows in reports).</td>
+          </tr>
+          <tr>
+            <td><code>expires</code></td>
+            <td>No</td>
+            <td>Date (YYYY-MM-DD) after which suppression is ignored.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>exports.&lt;name&gt;</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>format</code></td>
+            <td>string</td>
+            <td><code>dwg</code>, <code>pdf</code>, or <code>ifc</code>.</td>
+          </tr>
+          <tr>
+            <td><code>sheets</code></td>
+            <td>string[]</td>
+            <td>
+              Sheet patterns. Use <code>all</code> for everything, or wildcards
+              like <code>A1*</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>views</code></td>
+            <td>string[]</td>
+            <td>View name patterns. Not used for IFC (whole-model export).</td>
+          </tr>
+          <tr>
+            <td><code>outputDir</code></td>
+            <td>string</td>
+            <td>
+              Export directory. Overrides <code>defaults.outputDir</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>publish.&lt;name&gt;</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>precheck</code></td>
+            <td>string</td>
+            <td>
+              Name of a check set to run before exporting. Aborts on failure.
+            </td>
+          </tr>
+          <tr>
+            <td><code>presets</code></td>
+            <td>string[]</td>
+            <td>List of export preset names to run sequentially.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Webhook Payload</h2>
+
+      <h3>check</h3>
+      <pre><code>{
+  "type": "check",
+  "check": "default",
+  "passed": 8,
+  "failed": 1,
+  "suppressed": 2,
+  "issueCount": 3,
+  "status": "failed",
+  "timestamp": "2026-04-04T12:00:00Z"
+}</code></pre>
+
+      <h3>publish</h3>
+      <pre><code>{
+  "type": "publish",
+  "pipeline": "default",
+  "succeeded": 2,
+  "failed": 0,
+  "presets": ["dwg", "pdf"],
+  "status": "passed",
+  "timestamp": "2026-04-04T12:00:00Z"
+}</code></pre>
+
+      <h2>Exit Codes</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0</code></td>
+            <td>All checks passed (or below <code>failOn</code> threshold)</td>
+          </tr>
+          <tr>
+            <td><code>1</code></td>
+            <td>Checks failed, or command error</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <footer>
+        RevitCli is open source.
+        <a href="https://github.com/xiaodream551-a11y/revitcli">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

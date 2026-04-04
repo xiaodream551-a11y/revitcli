@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Troubleshooting — RevitCli</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="inner">
+        <span class="logo">RevitCli</span>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="guide.html">Guide</a>
+          <a href="profile.html">Profile Reference</a>
+          <a href="troubleshooting.html" class="active">Troubleshooting</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1>Troubleshooting</h1>
+      <p>
+        Start with <code>revitcli doctor</code> — it checks configuration,
+        server connection, and profile detection.
+      </p>
+
+      <h2>"Revit is not running or plugin is not loaded"</h2>
+
+      <div class="alert alert-error">
+        This means the CLI cannot connect to the Revit add-in HTTP server.
+      </div>
+
+      <h3>Checklist</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Check</th>
+            <th>Fix</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Is Revit open?</td>
+            <td>Start Revit and open a project.</td>
+          </tr>
+          <tr>
+            <td>Is the add-in installed?</td>
+            <td>
+              Check
+              <code>%APPDATA%\Autodesk\Revit\Addins\2026\RevitCli.addin</code>
+              exists.
+            </td>
+          </tr>
+          <tr>
+            <td>Is the DLL path correct?</td>
+            <td>
+              Open the <code>.addin</code> file and verify the
+              <code>&lt;Assembly&gt;</code> path points to the actual DLL.
+            </td>
+          </tr>
+          <tr>
+            <td>Was Revit restarted after install?</td>
+            <td>Revit loads add-ins at startup. Close and reopen Revit.</td>
+          </tr>
+          <tr>
+            <td>Is the port blocked?</td>
+            <td>
+              Check firewall. The add-in uses port 17839 by default (tries 10
+              ports).
+            </td>
+          </tr>
+          <tr>
+            <td>Is <code>server.json</code> stale?</td>
+            <td>
+              Delete <code>~/.revitcli/server.json</code> and restart Revit.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>"No .revitcli.yml found"</h2>
+
+      <div class="alert alert-info">
+        The CLI looks for <code>.revitcli.yml</code> starting from your current
+        directory, walking up to the filesystem root.
+      </div>
+
+      <h3>Fix</h3>
+      <pre><code># Copy a starter profile to your project root
+cp profiles/general-publish.yml .revitcli.yml
+
+# Or specify explicitly
+revitcli check --profile /path/to/.revitcli.yml</code></pre>
+
+      <h2>"Check set 'xxx' not found in profile"</h2>
+
+      <p>
+        Your profile doesn't have a check set with that name. Run
+        <code>revitcli doctor</code> to see available check sets.
+      </p>
+
+      <pre><code># List what's in your profile
+revitcli doctor
+
+# Run a specific check set
+revitcli check default
+revitcli check pre-issue</code></pre>
+
+      <h2>"Unknown audit rule(s): xxx"</h2>
+
+      <p>You referenced a rule that doesn't exist. Available rules:</p>
+
+      <pre><code>revitcli audit --list</code></pre>
+
+      <p>
+        Current rules: <code>naming</code>, <code>room-bounds</code>,
+        <code>level-consistency</code>, <code>unplaced-rooms</code>,
+        <code>views-not-on-sheets</code>, <code>imported-dwg</code>,
+        <code>in-place-families</code>, <code>duplicate-room-numbers</code>,
+        <code>room-metadata</code>, <code>sheets-missing-info</code>.
+      </p>
+
+      <h2>"Parameter 'xxx' has N definitions on this element"</h2>
+
+      <p>
+        The element has multiple parameters with the same name (e.g. instance vs
+        type parameter). Disambiguate with the <code>[N]</code> suffix:
+      </p>
+
+      <pre><code># Query to see which is which
+revitcli query --id 12345 --output json
+
+# Set the second one
+revitcli set --id 12345 --param "Comments [2]" --value "Updated"</code></pre>
+
+      <h2>"Parameter 'xxx' is read-only"</h2>
+
+      <p>
+        This parameter cannot be modified via the API. Common read-only
+        parameters include system-calculated values like Area, Volume, and
+        Perimeter.
+      </p>
+
+      <h2>"Cannot convert 'abc' to integer/number"</h2>
+
+      <p>
+        The value you're trying to set doesn't match the parameter's data type.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Storage type</th>
+            <th>Expected value</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>String</td>
+            <td>Any text</td>
+            <td><code>--value "Hello"</code></td>
+          </tr>
+          <tr>
+            <td>Integer</td>
+            <td>Whole number</td>
+            <td><code>--value "42"</code></td>
+          </tr>
+          <tr>
+            <td>Double</td>
+            <td>Number (in display units)</td>
+            <td><code>--value "3000"</code> for mm</td>
+          </tr>
+          <tr>
+            <td>ElementId</td>
+            <td>Element ID number</td>
+            <td><code>--value "337596"</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="alert alert-info">
+        Use <code>--dry-run</code> to test value compatibility before applying
+        changes.
+      </div>
+
+      <h2>Export produces duplicate pages</h2>
+
+      <p>
+        When exporting PDF without specifying <code>--sheets</code>, all
+        printable views are included. For simple projects this may produce
+        duplicate-looking pages (e.g. multiple floor plans of the same level).
+      </p>
+
+      <h3>Fix</h3>
+      <pre><code># Export specific sheets only
+revitcli export --format pdf --sheets "A101" --output-dir ./exports
+
+# Or use a profile with explicit sheet selection
+# In .revitcli.yml:
+exports:
+  my-pdf:
+    format: pdf
+    sheets: ["A101", "A102"]
+    outputDir: ./deliverables/pdf</code></pre>
+
+      <h2>"--stdin: no input received"</h2>
+
+      <p>
+        PowerShell pipe + <code>dotnet run</code> doesn't reliably pass stdin.
+        Use <code>--ids-from</code> instead:
+      </p>
+
+      <pre><code># Save query results to file first
+revitcli query doors --output json > doors.json
+
+# Then use the file
+revitcli set --ids-from doors.json --param "Mark" --value "OK" --dry-run</code></pre>
+
+      <h2>Profile parse error</h2>
+
+      <p>Your <code>.revitcli.yml</code> has a syntax error. Common issues:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Error</th>
+            <th>Cause</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>failOn must be 'error' or 'warning'</code></td>
+            <td>Typo in failOn value (e.g. <code>errors</code>)</td>
+          </tr>
+          <tr>
+            <td><code>severity must be error/warning/info</code></td>
+            <td>Typo in severity (e.g. <code>warnng</code>)</td>
+          </tr>
+          <tr>
+            <td><code>Circular profile inheritance</code></td>
+            <td>Two profiles extend each other</td>
+          </tr>
+          <tr>
+            <td>YAML syntax error</td>
+            <td>Indentation or formatting issue</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Add-in version mismatch</h2>
+
+      <p>
+        If <code>revitcli status</code> shows an old add-in version, the
+        deployed DLL is outdated.
+      </p>
+
+      <h3>Fix</h3>
+      <pre><code># 1. Close Revit completely (check Task Manager)
+# 2. Clean old files
+Remove-Item "$env:APPDATA\Autodesk\Revit\Addins\2026\RevitCli*" -Force
+# 3. Rebuild and redeploy
+dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2026
+Copy-Item src\RevitCli.Addin\bin\Release\2026\publish\* "$env:APPDATA\Autodesk\Revit\Addins\2026\" -Force
+# 4. Start Revit and verify
+revitcli status</code></pre>
+
+      <h2>Still stuck?</h2>
+
+      <p>
+        Open an issue on
+        <a href="https://github.com/xiaodream551-a11y/revitcli/issues"
+          >GitHub</a
+        >
+        with:
+      </p>
+      <ul>
+        <li>Output of <code>revitcli doctor</code></li>
+        <li>Output of <code>revitcli status</code></li>
+        <li>Your <code>.revitcli.yml</code> (if relevant)</li>
+        <li>The exact command and error message</li>
+      </ul>
+
+      <footer>
+        RevitCli is open source.
+        <a href="https://github.com/xiaodream551-a11y/revitcli">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
