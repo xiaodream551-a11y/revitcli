@@ -20,22 +20,23 @@ public static class CheckCommand
         var profileOpt = new Option<string?>("--profile", "Path to .revitcli.yml profile");
         var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, html");
         var reportOpt = new Option<string?>("--report", "Save report to file (format inferred from extension, or uses --output)");
+        var noSaveOpt = new Option<bool>("--no-save", "Don't save results for diff comparison");
 
         var command = new Command("check", "Run project checks from .revitcli.yml profile")
         {
-            nameArg, profileOpt, outputOpt, reportOpt
+            nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt
         };
 
-        command.SetHandler(async (name, profilePath, outputFormat, reportPath) =>
+        command.SetHandler(async (name, profilePath, outputFormat, reportPath, noSave) =>
         {
-            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, outputFormat, reportPath, Console.Out);
-        }, nameArg, profileOpt, outputOpt, reportOpt);
+            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, Console.Out);
+        }, nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt);
 
         return command;
     }
 
     public static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
-        string outputFormat, string? reportPath, TextWriter output)
+        string outputFormat, string? reportPath, bool noSave, TextWriter output)
     {
         // Load profile
         ProjectProfile? profile;
@@ -165,6 +166,43 @@ public static class CheckCommand
         else
         {
             await output.WriteLineAsync(rendered);
+        }
+
+        // Resolve profile directory for result storage
+        var profileDir = profilePath != null
+            ? Path.GetDirectoryName(Path.GetFullPath(profilePath))
+            : (ProfileLoader.Discover() is { } discovered
+                ? Path.GetDirectoryName(Path.GetFullPath(discovered))
+                : null);
+
+        // Compute diff against previous run (before saving, since save rotates files)
+        if (!noSave)
+        {
+            var diff = CheckResultStore.ComputeDiff(checkName, allIssues, profileDir);
+            CheckResultStore.Save(checkName, totalPassed, totalFailed, suppressedCount, allIssues, profileDir);
+
+            if (diff != null)
+            {
+                await output.WriteLineAsync("");
+                await output.WriteLineAsync(
+                    $"vs previous: {diff.New.Count} new, {diff.Resolved.Count} resolved, {diff.Unchanged} unchanged");
+
+                if (diff.Resolved.Count > 0)
+                {
+                    foreach (var r in diff.Resolved.Take(5))
+                        await output.WriteLineAsync($"  [RESOLVED] {r.Rule}: {r.Message}");
+                    if (diff.Resolved.Count > 5)
+                        await output.WriteLineAsync($"  ... and {diff.Resolved.Count - 5} more resolved");
+                }
+
+                if (diff.New.Count > 0)
+                {
+                    foreach (var n in diff.New.Take(5))
+                        await output.WriteLineAsync($"  [NEW] {n.Rule}: {n.Message}");
+                    if (diff.New.Count > 5)
+                        await output.WriteLineAsync($"  ... and {diff.New.Count - 5} more new issues");
+                }
+            }
         }
 
         // Determine exit code based on failOn

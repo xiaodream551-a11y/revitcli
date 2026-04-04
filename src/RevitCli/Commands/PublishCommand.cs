@@ -84,7 +84,7 @@ public static class PublishCommand
         if (!string.IsNullOrWhiteSpace(pipeline.Precheck))
         {
             await output.WriteLineAsync($"Running precheck '{pipeline.Precheck}' ...");
-            var checkResult = await CheckCommand.ExecuteAsync(client, pipeline.Precheck, profilePath, "table", null, output);
+            var checkResult = await CheckCommand.ExecuteAsync(client, pipeline.Precheck, profilePath, "table", null, true, output);
             if (checkResult != 0)
             {
                 await output.WriteLineAsync("Precheck failed. Aborting publish.");
