@@ -38,20 +38,23 @@ public static class PublishCommand
         // Load profile
         ProjectProfile? profile;
         string? profileDir = null;
+        string? resolvedProfilePath = null;
         try
         {
             if (profilePath != null)
             {
-                profile = ProfileLoader.Load(profilePath);
-                profileDir = Path.GetDirectoryName(Path.GetFullPath(profilePath));
+                resolvedProfilePath = Path.GetFullPath(profilePath);
+                profile = ProfileLoader.Load(resolvedProfilePath);
+                profileDir = Path.GetDirectoryName(resolvedProfilePath);
             }
             else
             {
                 var discovered = ProfileLoader.Discover();
                 if (discovered != null)
                 {
-                    profile = ProfileLoader.Load(discovered);
-                    profileDir = Path.GetDirectoryName(Path.GetFullPath(discovered));
+                    resolvedProfilePath = Path.GetFullPath(discovered);
+                    profile = ProfileLoader.Load(resolvedProfilePath);
+                    profileDir = Path.GetDirectoryName(resolvedProfilePath);
                 }
                 else
                 {
@@ -167,8 +170,8 @@ public static class PublishCommand
                 presets = pipeline.Presets,
                 timestamp = DateTime.UtcNow.ToString("o"),
                 user = Environment.UserName,
-                profileHash = profilePath != null && File.Exists(profilePath)
-                    ? ComputeFileHash(profilePath) : null,
+                profileHash = resolvedProfilePath != null && File.Exists(resolvedProfilePath)
+                    ? ComputeFileHash(resolvedProfilePath) : null,
                 machine = Environment.MachineName
             };
 

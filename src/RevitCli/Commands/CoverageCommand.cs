@@ -123,6 +123,12 @@ public static class CoverageCommand
             }
         }
 
+        if (!outputFormat.Equals("json", StringComparison.OrdinalIgnoreCase))
+        {
+            await output.WriteLineAsync("Note: only parameters with at least one value are shown.");
+            await output.WriteLineAsync("Parameters absent from all elements are not listed.");
+        }
+
         return 0;
     }
 
