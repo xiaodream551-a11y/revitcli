@@ -1813,6 +1813,28 @@ public sealed class RealRevitOperations : IRevitOperations
                 }
                 fields = allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
             }
+            else if (mappedElements.Count > 0)
+            {
+                // Validate at least one requested field is resolvable — otherwise the caller
+                // likely passed the wrong language (e.g. English "Mark" against a Chinese
+                // Revit where the parameter is named "标记"). Silently returning an empty
+                // table was worse than a clear error.
+                var pseudo = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "Name", "Category", "Type", "Type Name", "TypeName" };
+                var available = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var info in mappedElements)
+                    foreach (var key in info.Parameters.Keys)
+                        available.Add(key);
+
+                if (!fields.Any(f => pseudo.Contains(f) || available.Contains(f)))
+                {
+                    var preview = available.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).Take(12).ToList();
+                    var more = available.Count > preview.Count ? $" …+{available.Count - preview.Count} more" : "";
+                    throw new ArgumentException(
+                        $"None of the requested fields ({string.Join(", ", fields)}) exist on {request.Category} elements. " +
+                        $"Available parameter names (first {preview.Count}): {string.Join(", ", preview)}{more}");
+                }
+            }
 
             // Build rows from element parameters, resolving pseudo-fields first
             var rows = new List<Dictionary<string, string>>();

@@ -148,7 +148,9 @@ public static class CheckCommand
         }
 
         var displayFailed = allIssues.Count(i => i.Severity is "error" or "warning");
-        var displayPassed = totalPassed + (totalFailed - displayFailed);
+        // totalPassed/totalFailed come from audit rules only; displayFailed also counts
+        // requiredParameter and namingPattern issues, so the subtraction can go negative.
+        var displayPassed = Math.Max(0, totalPassed + totalFailed - displayFailed);
 
         var rendered = format switch
         {

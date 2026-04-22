@@ -20,7 +20,8 @@ public sealed class RevitCliApp : IExternalApplication
         {
             _bridge = new RevitBridge();
             _operations = new RealRevitOperations(_bridge);
-            _server = new ApiServer(DefaultPort, _operations);
+            var revitVersion = application.ControlledApplication.VersionNumber ?? "";
+            _server = new ApiServer(DefaultPort, _operations, revitVersion);
             _server.Start();
             return Result.Succeeded;
         }
