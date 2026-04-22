@@ -9,7 +9,7 @@ using RevitCli.Shared;
 
 namespace RevitCli.Client;
 
-public class RevitClient
+public class RevitClient : IDisposable
 {
     private readonly HttpClient _http;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -17,7 +17,7 @@ public class RevitClient
         PropertyNameCaseInsensitive = true
     };
 
-    public static bool Verbose { get; set; }
+    public bool Verbose { get; set; }
 
     private async Task<string> SendAndRead(HttpResponseMessage response, string method, string url)
     {
@@ -34,12 +34,19 @@ public class RevitClient
         _http = http;
     }
 
-    public RevitClient(string baseUrl = "http://localhost:17839")
+    public RevitClient(string baseUrl = "http://localhost:17839", string token = "")
     {
         _http = new HttpClient { BaseAddress = new System.Uri(baseUrl) };
+        if (!string.IsNullOrEmpty(token))
+            _http.DefaultRequestHeaders.Add("X-RevitCli-Token", token);
     }
 
-    public static string DiscoverServerUrl(string configuredUrl)
+    public void Dispose()
+    {
+        _http.Dispose();
+    }
+
+    public static (string Url, string Token) DiscoverServerUrl(string configuredUrl)
     {
         try
         {
@@ -48,21 +55,21 @@ public class RevitClient
             {
                 var json = File.ReadAllText(serverInfoPath);
                 var info = JsonSerializer.Deserialize<ServerInfo>(json);
-                if (info != null && info.Port > 0)
+                if (info != null && info.Port >= 1024 && info.Port <= 65535)
                 {
                     // Verify the process is still alive
                     try
                     {
                         using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
                         if (!proc.HasExited)
-                            return $"http://localhost:{info.Port}";
+                            return ($"http://localhost:{info.Port}", info.Token ?? "");
                     }
                     catch (System.ArgumentException) { /* process not found */ }
                 }
             }
         }
         catch { }
-        return configuredUrl;
+        return (configuredUrl, "");
     }
 
     public async Task<ApiResponse<StatusInfo>> GetStatusAsync()

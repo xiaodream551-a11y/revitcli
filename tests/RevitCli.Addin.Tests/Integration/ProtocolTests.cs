@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using System.Threading.Tasks;
 using RevitCli.Addin.Server;
 using RevitCli.Addin.Services;
@@ -28,11 +30,22 @@ public class ProtocolTests : IDisposable
         var operations = new PlaceholderRevitOperations();
         _server = new ApiServer(_port, operations);
         _server.Start();
-        _client = new RevitClient($"http://localhost:{_port}");
+
+        var serverInfoPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".revitcli", "server.json");
+        var token = "";
+        if (File.Exists(serverInfoPath))
+        {
+            var info = JsonSerializer.Deserialize<ServerInfo>(File.ReadAllText(serverInfoPath));
+            token = info?.Token ?? "";
+        }
+        _client = new RevitClient($"http://localhost:{_port}", token);
     }
 
     public void Dispose()
     {
+        _client.Dispose();
         _server.Dispose();
     }
 

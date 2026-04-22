@@ -21,15 +21,15 @@ if (args.Length == 1 && args[0] == "-i")
 }
 
 // --verbose: enable HTTP request logging
-if (args.Contains("--verbose"))
+var verbose = args.Contains("--verbose");
+if (verbose)
 {
-    RevitClient.Verbose = true;
     args = args.Where(a => a != "--verbose").ToArray();
 }
 
 var config = CliConfig.Load();
-var serverUrl = RevitClient.DiscoverServerUrl(config.ServerUrl);
-var client = new RevitClient(serverUrl);
+var (serverUrl, token) = RevitClient.DiscoverServerUrl(config.ServerUrl);
+var client = new RevitClient(serverUrl, token) { Verbose = verbose };
 var rootCommand = CliCommandCatalog.CreateRootCommand(
     client,
     config,

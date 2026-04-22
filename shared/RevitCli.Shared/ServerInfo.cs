@@ -15,4 +15,7 @@ public class ServerInfo
 
     [JsonPropertyName("startedAt")]
     public string StartedAt { get; set; } = "";
+
+    [JsonPropertyName("token")]
+    public string Token { get; set; } = "";
 }

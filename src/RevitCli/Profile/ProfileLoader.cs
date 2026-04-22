@@ -38,7 +38,7 @@ public static class ProfileLoader
     /// Load and parse a profile from the given path.
     /// Resolves single-parent inheritance via 'extends'.
     /// </summary>
-    public static ProjectProfile Load(string path) => Load(path, new HashSet<string>());
+    public static ProjectProfile Load(string path) => Load(path, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
     private static ProjectProfile Load(string path, HashSet<string> visited)
     {
@@ -60,6 +60,8 @@ public static class ProfileLoader
         {
             var baseDir = Path.GetDirectoryName(canonical)!;
             var basePath = Path.GetFullPath(Path.Combine(baseDir, profile.Extends));
+            if (!basePath.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Profile 'extends' path escapes the profile directory: {profile.Extends}");
             var baseProfile = Load(basePath, visited);
             profile = Merge(baseProfile, profile);
         }
