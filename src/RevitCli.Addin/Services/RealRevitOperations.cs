@@ -1649,4 +1649,153 @@ public sealed class RealRevitOperations : IRevitOperations
             throw;
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  schedules
+    // ═══════════════════════════════════════════════════════════════
+
+    public Task<ScheduleInfo[]> ListSchedulesAsync()
+    {
+        return _bridge.InvokeAsync(app =>
+        {
+            var doc = RequireActiveDocument(app);
+            var schedules = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(ViewSchedule))
+                .Cast<ViewSchedule>()
+                .Where(vs => !vs.IsTitleblockRevisionSchedule && !vs.IsTemplate)
+                .Select(vs => new ScheduleInfo
+                {
+                    Id = ToCliElementId(vs.Id),
+                    Name = vs.Name,
+                    Category = vs.Definition.CategoryId != null
+                        ? doc.Settings.Categories.get_Item((BuiltInCategory)vs.Definition.CategoryId.Value)?.Name ?? ""
+                        : "",
+                    FieldCount = vs.Definition.GetFieldCount(),
+                    RowCount = vs.GetTableData().GetSectionData(SectionType.Body).NumberOfRows
+                })
+                .ToArray();
+            return schedules;
+        });
+    }
+
+    public Task<ScheduleData> ExportScheduleAsync(ScheduleExportRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ScheduleName) && request.ScheduleId == null)
+            throw new ArgumentException("Either ScheduleName or ScheduleId is required.");
+
+        return _bridge.InvokeAsync(app =>
+        {
+            var doc = RequireActiveDocument(app);
+            var schedules = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(ViewSchedule))
+                .Cast<ViewSchedule>();
+
+            ViewSchedule? schedule = null;
+            if (request.ScheduleId.HasValue)
+                schedule = schedules.FirstOrDefault(vs => vs.Id.Value == request.ScheduleId.Value);
+            else
+                schedule = schedules.FirstOrDefault(vs =>
+                    string.Equals(vs.Name, request.ScheduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (schedule == null)
+                throw new InvalidOperationException(
+                    $"Schedule '{request.ScheduleName ?? request.ScheduleId.ToString()}' not found.");
+
+            var columns = new List<string>();
+            var fieldCount = schedule.Definition.GetFieldCount();
+            for (var i = 0; i < fieldCount; i++)
+            {
+                var field = schedule.Definition.GetField(i);
+                if (!field.IsHidden)
+                    columns.Add(field.ColumnHeading);
+            }
+
+            var tableData = schedule.GetTableData();
+            var bodySection = tableData.GetSectionData(SectionType.Body);
+            var rows = new List<Dictionary<string, string>>();
+            // Row 0 is the header row in the body section; data starts at row 1
+            for (var r = 1; r < bodySection.NumberOfRows; r++)
+            {
+                var row = new Dictionary<string, string>();
+                for (var c = 0; c < Math.Min(columns.Count, bodySection.NumberOfColumns); c++)
+                    row[columns[c]] = schedule.GetCellText(SectionType.Body, r, c);
+                rows.Add(row);
+            }
+
+            return new ScheduleData
+            {
+                Columns = columns,
+                Rows = rows,
+                TotalRows = rows.Count
+            };
+        });
+    }
+
+    public Task<ScheduleCreateResult> CreateScheduleAsync(ScheduleCreateRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Schedule name is required.");
+        if (string.IsNullOrWhiteSpace(request.Category))
+            throw new ArgumentException("Schedule category is required.");
+
+        return _bridge.InvokeAsync(app =>
+        {
+            var doc = RequireActiveDocument(app);
+
+            // Verify no schedule with same name exists
+            var existing = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .OfClass(typeof(ViewSchedule))
+                .Cast<ViewSchedule>()
+                .FirstOrDefault(vs => string.Equals(vs.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+                throw new InvalidOperationException($"A schedule named '{request.Name}' already exists.");
+
+            var builtInCat = ResolveCategory(doc, request.Category!);
+
+            ViewSchedule? schedule = null;
+            using var tx = new Transaction(doc, $"RevitCLI Create Schedule '{request.Name}'");
+            tx.Start();
+            try
+            {
+                schedule = ViewSchedule.CreateSchedule(doc, new ElementId(builtInCat));
+                schedule.Name = request.Name;
+
+                if (request.Fields != null)
+                {
+                    var definition = schedule.Definition;
+                    var schedulableFields = definition.GetSchedulableFields();
+                    foreach (var fieldName in request.Fields)
+                    {
+                        var match = schedulableFields.FirstOrDefault(sf =>
+                            string.Equals(sf.GetName(doc), fieldName, StringComparison.OrdinalIgnoreCase));
+                        if (match != null)
+                            definition.AddField(match);
+                    }
+                }
+
+                var commitStatus = tx.Commit();
+                if (commitStatus != TransactionStatus.Committed)
+                    throw new InvalidOperationException(
+                        $"Create schedule transaction failed with status: {commitStatus}.");
+            }
+            catch
+            {
+                if (tx.GetStatus() == TransactionStatus.Started)
+                    tx.RollBack();
+                throw;
+            }
+
+            return new ScheduleCreateResult
+            {
+                ViewId = ToCliElementId(schedule.Id),
+                Name = schedule.Name,
+                FieldCount = schedule.Definition.GetFieldCount(),
+                RowCount = 0,
+                PlacedOnSheet = null
+            };
+        });
+    }
 }
