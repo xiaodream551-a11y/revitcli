@@ -11,4 +11,7 @@ public interface IRevitOperations
     Task<ExportProgress> GetExportProgressAsync(string taskId);
     Task<SetResult> SetParametersAsync(SetRequest request);
     Task<AuditResult> RunAuditAsync(AuditRequest request);
+    Task<ScheduleInfo[]> ListSchedulesAsync();
+    Task<ScheduleData> ExportScheduleAsync(ScheduleExportRequest request);
+    Task<ScheduleCreateResult> CreateScheduleAsync(ScheduleCreateRequest request);
 }

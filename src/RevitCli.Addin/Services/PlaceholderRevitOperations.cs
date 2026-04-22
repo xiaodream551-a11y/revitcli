@@ -68,4 +68,35 @@ public class PlaceholderRevitOperations : IRevitOperations
             Issues = new List<AuditIssue>()
         });
     }
+
+    public Task<ScheduleInfo[]> ListSchedulesAsync()
+    {
+        return Task.FromResult(new[]
+        {
+            new ScheduleInfo { Id = 1001, Name = "Door Schedule", Category = "Doors", FieldCount = 5, RowCount = 12 },
+            new ScheduleInfo { Id = 1002, Name = "Room Schedule", Category = "Rooms", FieldCount = 4, RowCount = 8 }
+        });
+    }
+
+    public Task<ScheduleData> ExportScheduleAsync(ScheduleExportRequest request)
+    {
+        return Task.FromResult(new ScheduleData
+        {
+            Columns = new List<string> { "Name", "Level", "Type" },
+            Rows = new List<Dictionary<string, string>>(),
+            TotalRows = 0
+        });
+    }
+
+    public Task<ScheduleCreateResult> CreateScheduleAsync(ScheduleCreateRequest request)
+    {
+        return Task.FromResult(new ScheduleCreateResult
+        {
+            ViewId = 2001,
+            Name = request.Name,
+            FieldCount = request.Fields?.Count ?? 0,
+            RowCount = 0,
+            PlacedOnSheet = null
+        });
+    }
 }
