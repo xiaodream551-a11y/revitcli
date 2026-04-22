@@ -1666,15 +1666,20 @@ public sealed class RealRevitOperations : IRevitOperations
                 .Where(vs => !vs.IsTitleblockRevisionSchedule
                           && !vs.IsTemplate
                           && !vs.Name.StartsWith("<"))
-                .Select(vs => new ScheduleInfo
+                .Select(vs =>
                 {
-                    Id = ToCliElementId(vs.Id),
-                    Name = vs.Name,
-                    Category = vs.Definition.CategoryId != ElementId.InvalidElementId
-                        ? doc.Settings.Categories.get_Item((BuiltInCategory)vs.Definition.CategoryId.Value)?.Name ?? ""
-                        : "",
-                    FieldCount = vs.Definition.GetFieldCount(),
-                    RowCount = vs.GetTableData().GetSectionData(SectionType.Body).NumberOfRows
+                    var body = vs.GetTableData()?.GetSectionData(SectionType.Body);
+                    var rawRows = body?.NumberOfRows ?? 0;
+                    return new ScheduleInfo
+                    {
+                        Id = ToCliElementId(vs.Id),
+                        Name = vs.Name,
+                        Category = vs.Definition.CategoryId != ElementId.InvalidElementId
+                            ? (Category.GetCategory(doc, vs.Definition.CategoryId)?.Name ?? "")
+                            : "",
+                        FieldCount = vs.Definition.GetFieldCount(),
+                        RowCount = rawRows > 0 ? rawRows - 1 : 0
+                    };
                 })
                 .ToArray();
             return schedules;
@@ -1704,12 +1709,16 @@ public sealed class RealRevitOperations : IRevitOperations
                         $"Schedule '{request.ExistingName}' not found.");
 
                 var columns = new List<string>();
+                var visibleColIndices = new List<int>();
                 var fieldCount = schedule.Definition.GetFieldCount();
                 for (var i = 0; i < fieldCount; i++)
                 {
                     var field = schedule.Definition.GetField(i);
                     if (!field.IsHidden)
-                        columns.Add(field.ColumnHeading);
+                    {
+                        columns.Add(field.GetName());
+                        visibleColIndices.Add(i);
+                    }
                 }
 
                 var tableData = schedule.GetTableData();
@@ -1719,8 +1728,8 @@ public sealed class RealRevitOperations : IRevitOperations
                 for (var r = 1; r < bodySection.NumberOfRows; r++)
                 {
                     var row = new Dictionary<string, string>();
-                    for (var c = 0; c < Math.Min(columns.Count, bodySection.NumberOfColumns); c++)
-                        row[columns[c]] = schedule.GetCellText(SectionType.Body, r, c);
+                    for (var colIdx = 0; colIdx < columns.Count; colIdx++)
+                        row[columns[colIdx]] = schedule.GetCellText(SectionType.Body, r, colIdx);
                     rows.Add(row);
                 }
 
@@ -1762,10 +1771,13 @@ public sealed class RealRevitOperations : IRevitOperations
 
             // Collect elements, applying filter if present
             var elements = new List<Element>();
+            var sawAnyElement = false;
             var fieldFound = parsedFilter == null;
 
             foreach (var element in collector)
             {
+                sawAnyElement = true;
+
                 if (parsedFilter != null)
                 {
                     if (!MatchesFilter(doc, element, parsedFilter, filterRhsNumeric, ref fieldFound))
@@ -1774,7 +1786,7 @@ public sealed class RealRevitOperations : IRevitOperations
                 elements.Add(element);
             }
 
-            if (elements.Count > 0 && !fieldFound)
+            if (sawAnyElement && !fieldFound)
                 throw new ArgumentException(
                     $"Filter field '{parsedFilter!.Property}' not found on any {request.Category} element.");
 
@@ -1789,8 +1801,11 @@ public sealed class RealRevitOperations : IRevitOperations
             }
             else if (fields.Count == 1 && string.Equals(fields[0], "all", StringComparison.OrdinalIgnoreCase))
             {
-                // Collect all parameter names from all elements
-                var allNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                // Collect all parameter names from all elements, plus top-level pseudo-fields
+                var allNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "Name", "Category", "Type Name"
+                };
                 foreach (var info in mappedElements)
                 {
                     foreach (var key in info.Parameters.Keys)
@@ -1799,17 +1814,22 @@ public sealed class RealRevitOperations : IRevitOperations
                 fields = allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
             }
 
-            // Build rows from element parameters
+            // Build rows from element parameters, resolving pseudo-fields first
             var rows = new List<Dictionary<string, string>>();
             foreach (var info in mappedElements)
             {
                 var row = new Dictionary<string, string>();
                 foreach (var fieldName in fields)
                 {
-                    if (info.Parameters.TryGetValue(fieldName, out var val))
-                        row[fieldName] = val;
-                    else
-                        row[fieldName] = "";
+                    var pseudoValue = fieldName.ToLowerInvariant() switch
+                    {
+                        "name" => info.Name,
+                        "category" => info.Category,
+                        "type" or "type name" or "typename" => info.TypeName,
+                        _ => null
+                    };
+                    row[fieldName] = pseudoValue
+                        ?? (info.Parameters.TryGetValue(fieldName, out var val) ? val : "");
                 }
                 rows.Add(row);
             }
@@ -1924,6 +1944,16 @@ public sealed class RealRevitOperations : IRevitOperations
                     }
                 }
 
+                // Validate --filter: not yet supported on schedule create
+                if (!string.IsNullOrWhiteSpace(request.Filter))
+                    throw new ArgumentException(
+                        "--filter on schedule create is not yet supported. Use schedule export --filter instead.");
+
+                // Validate sort field was found among --fields
+                if (!string.IsNullOrWhiteSpace(request.Sort) && sortFieldId == null)
+                    throw new ArgumentException(
+                        $"Sort field '{request.Sort}' must be included in --fields.");
+
                 // Sort support
                 if (!string.IsNullOrWhiteSpace(request.Sort) && sortFieldId != null)
                 {
@@ -1962,12 +1992,15 @@ public sealed class RealRevitOperations : IRevitOperations
                 throw;
             }
 
+            var resultBody = schedule.GetTableData()?.GetSectionData(SectionType.Body);
+            var resultRowCount = resultBody?.NumberOfRows ?? 0;
+
             return new ScheduleCreateResult
             {
                 ViewId = ToCliElementId(schedule.Id),
                 Name = schedule.Name,
                 FieldCount = schedule.Definition.GetFieldCount(),
-                RowCount = 0,
+                RowCount = resultRowCount > 0 ? resultRowCount - 1 : 0,
                 PlacedOnSheet = placedOnSheet
             };
         });
