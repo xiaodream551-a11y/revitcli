@@ -22,6 +22,9 @@ public class ProjectProfile
 
     [YamlMember(Alias = "publish")]
     public Dictionary<string, PublishPipeline> Publish { get; set; } = new();
+
+    [YamlMember(Alias = "schedules")]
+    public Dictionary<string, ScheduleTemplate> Schedules { get; set; } = new();
 }
 
 public class ProfileDefaults
@@ -127,4 +130,25 @@ public class PublishPipeline
 
     [YamlMember(Alias = "precheck")]
     public string? Precheck { get; set; }
+}
+
+public class ScheduleTemplate
+{
+    [YamlMember(Alias = "category")]
+    public string Category { get; set; } = "";
+
+    [YamlMember(Alias = "fields")]
+    public List<string>? Fields { get; set; }
+
+    [YamlMember(Alias = "filter")]
+    public string? Filter { get; set; }
+
+    [YamlMember(Alias = "sort")]
+    public string? Sort { get; set; }
+
+    [YamlMember(Alias = "sortDescending")]
+    public bool SortDescending { get; set; }
+
+    [YamlMember(Alias = "name")]
+    public string? Name { get; set; }
 }

@@ -148,6 +148,12 @@ public static class ProfileLoader
         foreach (var kvp in child.Publish)
             merged.Publish[kvp.Key] = kvp.Value;
 
+        // Merge schedules by name
+        foreach (var kvp in baseProfile.Schedules)
+            merged.Schedules[kvp.Key] = kvp.Value;
+        foreach (var kvp in child.Schedules)
+            merged.Schedules[kvp.Key] = kvp.Value;
+
         return merged;
     }
 }
