@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
 using System.Linq;
@@ -12,19 +13,18 @@ namespace RevitCli.Commands;
 
 public static class ScoreCommand
 {
-    // Rules and their weights (higher = more important)
-    private static readonly (string Rule, int Weight)[] ScoredRules =
+    private static readonly Dictionary<string, int> RuleWeights = new(StringComparer.OrdinalIgnoreCase)
     {
-        ("room-bounds", 15),
-        ("unplaced-rooms", 10),
-        ("duplicate-room-numbers", 15),
-        ("room-metadata", 10),
-        ("level-consistency", 10),
-        ("naming", 5),
-        ("views-not-on-sheets", 10),
-        ("sheets-missing-info", 10),
-        ("imported-dwg", 10),
-        ("in-place-families", 5),
+        ["room-bounds"] = 15,
+        ["unplaced-rooms"] = 10,
+        ["duplicate-room-numbers"] = 15,
+        ["room-metadata"] = 10,
+        ["level-consistency"] = 10,
+        ["naming"] = 5,
+        ["views-not-on-sheets"] = 10,
+        ["sheets-missing-info"] = 10,
+        ["imported-dwg"] = 10,
+        ["in-place-families"] = 5,
     };
 
     public static Command Create(RevitClient client)
@@ -74,7 +74,7 @@ public static class ScoreCommand
 
     private static async Task<int> RunScore(RevitClient client)
     {
-        var ruleNames = ScoredRules.Select(r => r.Rule).ToList();
+        var ruleNames = AuditCommand.AvailableRules.ToList();
         var request = new AuditRequest { Rules = ruleNames };
 
         var result = await client.AuditAsync(request);
@@ -82,27 +82,28 @@ public static class ScoreCommand
             return -1;
 
         var data = result.Data!;
-        var totalWeight = ScoredRules.Sum(r => r.Weight);
+        var totalWeight = 0;
         var earnedWeight = 0;
 
-        // Group issues by rule
         var issuesByRule = data.Issues.GroupBy(i => i.Rule)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (rule, weight) in ScoredRules)
+        foreach (var rule in AuditCommand.AvailableRules)
         {
+            var weight = RuleWeights.GetValueOrDefault(rule, 5);
+            totalWeight += weight;
+
             var issueCount = issuesByRule.GetValueOrDefault(rule, 0);
             if (issueCount == 0)
             {
-                earnedWeight += weight; // Full marks
+                earnedWeight += weight;
             }
             else if (issueCount <= 3)
             {
-                earnedWeight += weight / 2; // Half marks for few issues
+                earnedWeight += weight / 2;
             }
-            // else: zero marks
         }
 
-        return (int)Math.Round(100.0 * earnedWeight / totalWeight);
+        return totalWeight == 0 ? 100 : (int)Math.Round(100.0 * earnedWeight / totalWeight);
     }
 }

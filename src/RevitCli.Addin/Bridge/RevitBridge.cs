@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Autodesk.Revit.UI;
 
@@ -83,7 +82,7 @@ public sealed class RevitBridge : IExternalEventHandler, IDisposable
         public void Fail(Exception ex) => _tcs.TrySetException(ex);
     }
 
-    private readonly List<IQueuedRequest> _requests = new();
+    private readonly Queue<IQueuedRequest> _requests = new();
     private readonly IExternalEventSource _eventSource;
     private readonly object _lock = new();
     private bool _disposed;
@@ -123,22 +122,22 @@ public sealed class RevitBridge : IExternalEventHandler, IDisposable
                 return request.Task;
             }
 
-            _requests.Add(request);
-
             try
             {
                 if (!_eventSource.Raise())
                 {
-                    _requests.Remove(request);
                     request.Fail(new InvalidOperationException(
                         "ExternalEvent.Raise() was rejected by Revit."));
+                    return request.Task;
                 }
             }
             catch (Exception ex)
             {
-                _requests.Remove(request);
                 request.Fail(ex);
+                return request.Task;
             }
+
+            _requests.Enqueue(request);
         }
 
         return request.Task;
@@ -186,8 +185,9 @@ public sealed class RevitBridge : IExternalEventHandler, IDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            remaining = _requests.ToArray();
-            _requests.Clear();
+            remaining = new IQueuedRequest[_requests.Count];
+            for (var i = 0; i < remaining.Length; i++)
+                remaining[i] = _requests.Dequeue();
         }
 
         var disposedException = new ObjectDisposedException(nameof(RevitBridge));
@@ -204,8 +204,9 @@ public sealed class RevitBridge : IExternalEventHandler, IDisposable
             if (_requests.Count == 0)
                 return Array.Empty<IQueuedRequest>();
 
-            var batch = _requests.ToArray();
-            _requests.Clear();
+            var batch = new IQueuedRequest[_requests.Count];
+            for (var i = 0; i < batch.Length; i++)
+                batch[i] = _requests.Dequeue();
             return batch;
         }
     }
