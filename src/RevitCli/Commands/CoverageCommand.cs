@@ -68,9 +68,10 @@ public static class CoverageCommand
             var paramStats = new Dictionary<string, (int filled, int total)>();
             foreach (var param in paramNames)
             {
+                var hasParam = elements.Count(e => e.Parameters.ContainsKey(param));
                 var filled = elements.Count(e =>
                     e.Parameters.TryGetValue(param, out var v) && !string.IsNullOrWhiteSpace(v));
-                paramStats[param] = (filled, elements.Length);
+                paramStats[param] = (filled, hasParam > 0 ? hasParam : elements.Length);
             }
 
             results.Add(new CategoryCoverage
