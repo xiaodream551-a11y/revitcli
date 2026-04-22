@@ -147,11 +147,14 @@ public static class CheckCommand
                 format = "json";
         }
 
+        var displayFailed = allIssues.Count(i => i.Severity is "error" or "warning");
+        var displayPassed = totalPassed + (totalFailed - displayFailed);
+
         var rendered = format switch
         {
-            "json" => CheckReportRenderer.RenderJson(checkName, totalPassed, totalFailed, allIssues, suppressedCount),
-            "html" => CheckReportRenderer.RenderHtml(checkName, totalPassed, totalFailed, allIssues, suppressedCount),
-            _ => CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues, suppressedCount)
+            "json" => CheckReportRenderer.RenderJson(checkName, displayPassed, displayFailed, allIssues, suppressedCount),
+            "html" => CheckReportRenderer.RenderHtml(checkName, displayPassed, displayFailed, allIssues, suppressedCount),
+            _ => CheckReportRenderer.RenderTable(checkName, displayPassed, displayFailed, allIssues, suppressedCount)
         };
 
         // Write to file if --report specified
@@ -166,7 +169,7 @@ public static class CheckCommand
 
             // Also print summary to console
             await output.WriteLineAsync(
-                CheckReportRenderer.RenderTable(checkName, totalPassed, totalFailed, allIssues, suppressedCount));
+                CheckReportRenderer.RenderTable(checkName, displayPassed, displayFailed, allIssues, suppressedCount));
         }
         else
         {
@@ -186,7 +189,7 @@ public static class CheckCommand
             {
                 // Diff against latest (before rotation)
                 var diff = CheckResultStore.ComputeDiffAgainstLatest(checkName, allIssues, profileDir);
-                CheckResultStore.Save(checkName, totalPassed, totalFailed, suppressedCount, allIssues, profileDir);
+                CheckResultStore.Save(checkName, displayPassed, displayFailed, suppressedCount, allIssues, profileDir);
 
                 // Only print diff to console for table format (not JSON/HTML)
                 if (diff != null && format == "table")
@@ -231,8 +234,8 @@ public static class CheckCommand
             {
                 type = "check",
                 check = checkName,
-                passed = totalPassed,
-                failed = totalFailed,
+                passed = displayPassed,
+                failed = displayFailed,
                 suppressed = suppressedCount,
                 issueCount = allIssues.Count,
                 status = exitCode == 0 ? "passed" : "failed",

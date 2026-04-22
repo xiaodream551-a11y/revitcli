@@ -60,7 +60,8 @@ public static class ProfileLoader
         {
             var baseDir = Path.GetDirectoryName(canonical)!;
             var basePath = Path.GetFullPath(Path.Combine(baseDir, profile.Extends));
-            if (!basePath.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
+            if (!basePath.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(Path.GetDirectoryName(basePath), baseDir, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Profile 'extends' path escapes the profile directory: {profile.Extends}");
             var baseProfile = Load(basePath, visited);
             profile = Merge(baseProfile, profile);

@@ -48,14 +48,23 @@ public class ExportController : WebApiController
 
         if (!string.IsNullOrWhiteSpace(request.OutputDir))
         {
-            var normalized = Path.GetFullPath(request.OutputDir);
-            if (normalized.Contains(".." + Path.DirectorySeparatorChar) ||
-                normalized.Contains(".." + Path.AltDirectorySeparatorChar) ||
-                !Path.IsPathRooted(normalized))
+            var raw = request.OutputDir;
+            if (raw.Contains(".."))
             {
                 HttpContext.Response.StatusCode = 400;
                 await writer.WriteAsync(JsonSerializer.Serialize(
-                    ApiResponse<ExportProgress>.Fail("OutputDir must be an absolute path without '..' traversal.")));
+                    ApiResponse<ExportProgress>.Fail("OutputDir must not contain '..' path traversal.")));
+                return;
+            }
+            var normalized = Path.GetFullPath(raw);
+            var userDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!normalized.StartsWith(userProfile + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                HttpContext.Response.StatusCode = 400;
+                await writer.WriteAsync(JsonSerializer.Serialize(
+                    ApiResponse<ExportProgress>.Fail("OutputDir must be within the user's home directory.")));
                 return;
             }
             request.OutputDir = normalized;
