@@ -1663,12 +1663,14 @@ public sealed class RealRevitOperations : IRevitOperations
                 .WhereElementIsNotElementType()
                 .OfClass(typeof(ViewSchedule))
                 .Cast<ViewSchedule>()
-                .Where(vs => !vs.IsTitleblockRevisionSchedule && !vs.IsTemplate)
+                .Where(vs => !vs.IsTitleblockRevisionSchedule
+                          && !vs.IsTemplate
+                          && !vs.Name.StartsWith("<"))
                 .Select(vs => new ScheduleInfo
                 {
                     Id = ToCliElementId(vs.Id),
                     Name = vs.Name,
-                    Category = vs.Definition.CategoryId != null
+                    Category = vs.Definition.CategoryId != ElementId.InvalidElementId
                         ? doc.Settings.Categories.get_Item((BuiltInCategory)vs.Definition.CategoryId.Value)?.Name ?? ""
                         : "",
                     FieldCount = vs.Definition.GetFieldCount(),
@@ -1681,54 +1683,172 @@ public sealed class RealRevitOperations : IRevitOperations
 
     public Task<ScheduleData> ExportScheduleAsync(ScheduleExportRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.ScheduleName) && request.ScheduleId == null)
-            throw new ArgumentException("Either ScheduleName or ScheduleId is required.");
+        if (string.IsNullOrWhiteSpace(request.ExistingName) && string.IsNullOrWhiteSpace(request.Category))
+            throw new ArgumentException("Either ExistingName or Category is required.");
+
+        // Path A — export existing ViewSchedule by name
+        if (!string.IsNullOrWhiteSpace(request.ExistingName))
+        {
+            return _bridge.InvokeAsync(app =>
+            {
+                var doc = RequireActiveDocument(app);
+                var schedule = new FilteredElementCollector(doc)
+                    .WhereElementIsNotElementType()
+                    .OfClass(typeof(ViewSchedule))
+                    .Cast<ViewSchedule>()
+                    .FirstOrDefault(vs =>
+                        string.Equals(vs.Name, request.ExistingName, StringComparison.OrdinalIgnoreCase));
+
+                if (schedule == null)
+                    throw new InvalidOperationException(
+                        $"Schedule '{request.ExistingName}' not found.");
+
+                var columns = new List<string>();
+                var fieldCount = schedule.Definition.GetFieldCount();
+                for (var i = 0; i < fieldCount; i++)
+                {
+                    var field = schedule.Definition.GetField(i);
+                    if (!field.IsHidden)
+                        columns.Add(field.ColumnHeading);
+                }
+
+                var tableData = schedule.GetTableData();
+                var bodySection = tableData.GetSectionData(SectionType.Body);
+                var rows = new List<Dictionary<string, string>>();
+                // Row 0 is the header row in the body section; data starts at row 1
+                for (var r = 1; r < bodySection.NumberOfRows; r++)
+                {
+                    var row = new Dictionary<string, string>();
+                    for (var c = 0; c < Math.Min(columns.Count, bodySection.NumberOfColumns); c++)
+                        row[columns[c]] = schedule.GetCellText(SectionType.Body, r, c);
+                    rows.Add(row);
+                }
+
+                return new ScheduleData
+                {
+                    Columns = columns,
+                    Rows = rows,
+                    TotalRows = rows.Count
+                };
+            });
+        }
+
+        // Path B — ad-hoc export: collect elements by category, read params, filter, sort
+        // Pre-parse filter outside the Revit thread for early validation
+        CliElementFilter? parsedFilter = null;
+        double? filterRhsNumeric = null;
+
+        if (!string.IsNullOrWhiteSpace(request.Filter))
+        {
+            parsedFilter = CliElementFilter.Parse(request.Filter);
+            if (parsedFilter == null)
+                throw new ArgumentException($"Invalid filter expression: '{request.Filter}'");
+
+            if (double.TryParse(parsedFilter.Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var num))
+                filterRhsNumeric = num;
+        }
+
+        const int MaxScheduleRows = 2000;
 
         return _bridge.InvokeAsync(app =>
         {
             var doc = RequireActiveDocument(app);
-            var schedules = new FilteredElementCollector(doc)
+            var builtInCat = ResolveCategory(doc, request.Category!);
+
+            var collector = new FilteredElementCollector(doc)
                 .WhereElementIsNotElementType()
-                .OfClass(typeof(ViewSchedule))
-                .Cast<ViewSchedule>();
+                .OfCategory(builtInCat);
 
-            ViewSchedule? schedule = null;
-            if (request.ScheduleId.HasValue)
-                schedule = schedules.FirstOrDefault(vs => vs.Id.Value == request.ScheduleId.Value);
-            else
-                schedule = schedules.FirstOrDefault(vs =>
-                    string.Equals(vs.Name, request.ScheduleName, StringComparison.OrdinalIgnoreCase));
+            // Collect elements, applying filter if present
+            var elements = new List<Element>();
+            var fieldFound = parsedFilter == null;
 
-            if (schedule == null)
-                throw new InvalidOperationException(
-                    $"Schedule '{request.ScheduleName ?? request.ScheduleId.ToString()}' not found.");
-
-            var columns = new List<string>();
-            var fieldCount = schedule.Definition.GetFieldCount();
-            for (var i = 0; i < fieldCount; i++)
+            foreach (var element in collector)
             {
-                var field = schedule.Definition.GetField(i);
-                if (!field.IsHidden)
-                    columns.Add(field.ColumnHeading);
+                if (parsedFilter != null)
+                {
+                    if (!MatchesFilter(doc, element, parsedFilter, filterRhsNumeric, ref fieldFound))
+                        continue;
+                }
+                elements.Add(element);
             }
 
-            var tableData = schedule.GetTableData();
-            var bodySection = tableData.GetSectionData(SectionType.Body);
+            if (elements.Count > 0 && !fieldFound)
+                throw new ArgumentException(
+                    $"Filter field '{parsedFilter!.Property}' not found on any {request.Category} element.");
+
+            // Map elements to ElementInfo to access Parameters dictionary
+            var mappedElements = elements.Select(e => MapElement(doc, e)).ToList();
+
+            // Determine fields
+            var fields = request.Fields;
+            if (fields == null || fields.Count == 0)
+            {
+                fields = new List<string> { "Name", "Level", "Type Name" };
+            }
+            else if (fields.Count == 1 && string.Equals(fields[0], "all", StringComparison.OrdinalIgnoreCase))
+            {
+                // Collect all parameter names from all elements
+                var allNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var info in mappedElements)
+                {
+                    foreach (var key in info.Parameters.Keys)
+                        allNames.Add(key);
+                }
+                fields = allNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+
+            // Build rows from element parameters
             var rows = new List<Dictionary<string, string>>();
-            // Row 0 is the header row in the body section; data starts at row 1
-            for (var r = 1; r < bodySection.NumberOfRows; r++)
+            foreach (var info in mappedElements)
             {
                 var row = new Dictionary<string, string>();
-                for (var c = 0; c < Math.Min(columns.Count, bodySection.NumberOfColumns); c++)
-                    row[columns[c]] = schedule.GetCellText(SectionType.Body, r, c);
+                foreach (var fieldName in fields)
+                {
+                    if (info.Parameters.TryGetValue(fieldName, out var val))
+                        row[fieldName] = val;
+                    else
+                        row[fieldName] = "";
+                }
                 rows.Add(row);
             }
 
+            // Sort by requested field
+            if (!string.IsNullOrWhiteSpace(request.Sort))
+            {
+                var sortField = request.Sort;
+                rows.Sort((a, b) =>
+                {
+                    a.TryGetValue(sortField, out var va);
+                    b.TryGetValue(sortField, out var vb);
+                    va ??= "";
+                    vb ??= "";
+
+                    // Try numeric comparison first
+                    if (double.TryParse(va, NumberStyles.Float, CultureInfo.InvariantCulture, out var na)
+                        && double.TryParse(vb, NumberStyles.Float, CultureInfo.InvariantCulture, out var nb))
+                    {
+                        var cmp = na.CompareTo(nb);
+                        return request.SortDescending ? -cmp : cmp;
+                    }
+
+                    var strCmp = string.Compare(va, vb, StringComparison.OrdinalIgnoreCase);
+                    return request.SortDescending ? -strCmp : strCmp;
+                });
+            }
+
+            var totalRows = rows.Count;
+
+            // Truncate to MaxScheduleRows
+            if (rows.Count > MaxScheduleRows)
+                rows = rows.Take(MaxScheduleRows).ToList();
+
             return new ScheduleData
             {
-                Columns = columns,
+                Columns = fields.ToList(),
                 Rows = rows,
-                TotalRows = rows.Count
+                TotalRows = totalRows
             };
         });
     }
@@ -1756,6 +1876,7 @@ public sealed class RealRevitOperations : IRevitOperations
             var builtInCat = ResolveCategory(doc, request.Category!);
 
             ViewSchedule? schedule = null;
+            string? placedOnSheet = null;
             using var tx = new Transaction(doc, $"RevitCLI Create Schedule '{request.Name}'");
             tx.Start();
             try
@@ -1763,17 +1884,70 @@ public sealed class RealRevitOperations : IRevitOperations
                 schedule = ViewSchedule.CreateSchedule(doc, new ElementId(builtInCat));
                 schedule.Name = request.Name;
 
-                if (request.Fields != null)
+                var definition = schedule.Definition;
+                var schedulableFields = definition.GetSchedulableFields();
+
+                // Determine fields to add
+                var fieldsToAdd = request.Fields;
+                if (fieldsToAdd != null && fieldsToAdd.Count == 1
+                    && string.Equals(fieldsToAdd[0], "all", StringComparison.OrdinalIgnoreCase))
                 {
-                    var definition = schedule.Definition;
-                    var schedulableFields = definition.GetSchedulableFields();
-                    foreach (var fieldName in request.Fields)
+                    // Add all schedulable fields
+                    fieldsToAdd = schedulableFields.Select(sf => sf.GetName(doc)).ToList();
+                }
+
+                // Track sort field id for later
+                ScheduleFieldId? sortFieldId = null;
+
+                if (fieldsToAdd != null)
+                {
+                    foreach (var fieldName in fieldsToAdd)
                     {
                         var match = schedulableFields.FirstOrDefault(sf =>
                             string.Equals(sf.GetName(doc), fieldName, StringComparison.OrdinalIgnoreCase));
-                        if (match != null)
-                            definition.AddField(match);
+                        if (match == null)
+                        {
+                            var available = string.Join(", ",
+                                schedulableFields.Select(sf => sf.GetName(doc)).OrderBy(n => n).Take(20));
+                            throw new ArgumentException(
+                                $"Field '{fieldName}' not found for category {request.Category}. Available: {available}");
+                        }
+
+                        var addedField = definition.AddField(match);
+
+                        // Remember the field id if this is the sort field
+                        if (!string.IsNullOrWhiteSpace(request.Sort)
+                            && string.Equals(fieldName, request.Sort, StringComparison.OrdinalIgnoreCase))
+                        {
+                            sortFieldId = addedField.FieldId;
+                        }
                     }
+                }
+
+                // Sort support
+                if (!string.IsNullOrWhiteSpace(request.Sort) && sortFieldId != null)
+                {
+                    var sortGroup = new ScheduleSortGroupField(sortFieldId);
+                    if (request.SortDescending)
+                        sortGroup.SortOrder = ScheduleSortOrder.Descending;
+                    definition.AddSortGroupField(sortGroup);
+                }
+
+                // Place on sheet
+                if (!string.IsNullOrWhiteSpace(request.PlaceOnSheet))
+                {
+                    var sheets = new FilteredElementCollector(doc)
+                        .OfClass(typeof(ViewSheet))
+                        .Cast<ViewSheet>()
+                        .Where(s => MatchesPattern(s.SheetNumber, request.PlaceOnSheet)
+                                 || MatchesPattern(s.Name, request.PlaceOnSheet))
+                        .ToList();
+                    if (sheets.Count == 0)
+                        throw new ArgumentException(
+                            $"No sheets matching pattern '{request.PlaceOnSheet}'.");
+                    var sheet = sheets[0];
+                    ScheduleSheetInstance.Create(doc, sheet.Id, schedule.Id, new XYZ(0.1, 0.9, 0));
+                    placedOnSheet = $"{sheet.SheetNumber} - {sheet.Name}";
                 }
 
                 var commitStatus = tx.Commit();
@@ -1794,7 +1968,7 @@ public sealed class RealRevitOperations : IRevitOperations
                 Name = schedule.Name,
                 FieldCount = schedule.Definition.GetFieldCount(),
                 RowCount = 0,
-                PlacedOnSheet = null
+                PlacedOnSheet = placedOnSheet
             };
         });
     }
