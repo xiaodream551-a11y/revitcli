@@ -905,7 +905,7 @@ public sealed class RealRevitOperations : IRevitOperations
     private static List<AuditIssue> AuditNamingPattern(Document doc, NamingPatternSpec spec)
     {
         var issues = new List<AuditIssue>();
-        var regex = new Regex(spec.Pattern, RegexOptions.Compiled);
+        var regex = new Regex(spec.Pattern, RegexOptions.Compiled, TimeSpan.FromSeconds(2));
         var target = spec.Target.ToLowerInvariant();
 
         IEnumerable<Element> elements;
@@ -947,7 +947,24 @@ public sealed class RealRevitOperations : IRevitOperations
         var count = 0;
         foreach (var element in elements)
         {
-            if (!regex.IsMatch(element.Name))
+            bool matched;
+            try
+            {
+                matched = regex.IsMatch(element.Name);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                issues.Add(new AuditIssue
+                {
+                    Rule = "naming-pattern",
+                    Severity = "warning",
+                    Message = $"Regex pattern '{spec.Pattern}' timed out on '{element.Name}'. Skipping remaining checks.",
+                    ElementId = ToCliElementId(element.Id)
+                });
+                break;
+            }
+
+            if (!matched)
             {
                 count++;
                 if (count <= 50)

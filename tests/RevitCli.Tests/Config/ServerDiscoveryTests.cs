@@ -11,10 +11,10 @@ public class ServerDiscoveryTests
     [Fact]
     public void DiscoverServerUrl_NoFile_ReturnsConfigured()
     {
-        var result = RevitClient.DiscoverServerUrl("http://localhost:17839");
+        var (url, token) = RevitClient.DiscoverServerUrl("http://localhost:17839");
         // If no server.json exists at the expected path, should return configured URL
         // This test works because we don't write a server.json during testing
-        Assert.StartsWith("http://localhost:", result);
+        Assert.StartsWith("http://localhost:", url);
     }
 
     [Fact]

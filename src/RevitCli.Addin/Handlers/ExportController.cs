@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EmbedIO;
@@ -43,6 +44,21 @@ public class ExportController : WebApiController
             await writer.WriteAsync(JsonSerializer.Serialize(
                 ApiResponse<ExportProgress>.Fail("Request body is required")));
             return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.OutputDir))
+        {
+            var normalized = Path.GetFullPath(request.OutputDir);
+            if (normalized.Contains(".." + Path.DirectorySeparatorChar) ||
+                normalized.Contains(".." + Path.AltDirectorySeparatorChar) ||
+                !Path.IsPathRooted(normalized))
+            {
+                HttpContext.Response.StatusCode = 400;
+                await writer.WriteAsync(JsonSerializer.Serialize(
+                    ApiResponse<ExportProgress>.Fail("OutputDir must be an absolute path without '..' traversal.")));
+                return;
+            }
+            request.OutputDir = normalized;
         }
 
         try
