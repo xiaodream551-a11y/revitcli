@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -57,6 +58,58 @@ public class RevitClientTests
         Assert.Single(data);
         Assert.Equal("Wall 1", data[0].Name);
         Assert.Contains("category=walls", handler.LastRequestUri!);
+    }
+
+    [Fact]
+    public async Task ListSchedulesAsync_ReturnsSchedules()
+    {
+        var schedules = new[] { new ScheduleInfo { Id = 1, Name = "Door Schedule", Category = "Doors" } };
+        var response = ApiResponse<ScheduleInfo[]>.Ok(schedules);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+
+        var result = await client.ListSchedulesAsync();
+
+        Assert.True(result.Success);
+        Assert.Single(result.Data!);
+        Assert.Equal("Door Schedule", result.Data![0].Name);
+    }
+
+    [Fact]
+    public async Task ExportScheduleAsync_ReturnsData()
+    {
+        var data = new ScheduleData
+        {
+            Columns = new List<string> { "Name", "Level" },
+            Rows = new List<Dictionary<string, string>>
+            {
+                new() { ["Name"] = "Door-01", ["Level"] = "Level 1" }
+            },
+            TotalRows = 1
+        };
+        var response = ApiResponse<ScheduleData>.Ok(data);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+
+        var result = await client.ExportScheduleAsync(new ScheduleExportRequest { Category = "Doors" });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.Data!.Columns.Count);
+        Assert.Single(result.Data.Rows);
+    }
+
+    [Fact]
+    public async Task CreateScheduleAsync_ReturnsResult()
+    {
+        var createResult = new ScheduleCreateResult { ViewId = 100, Name = "Test", FieldCount = 3, RowCount = 5 };
+        var response = ApiResponse<ScheduleCreateResult>.Ok(createResult);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+
+        var result = await client.CreateScheduleAsync(new ScheduleCreateRequest { Category = "Doors", Name = "Test" });
+
+        Assert.True(result.Success);
+        Assert.Equal(100, result.Data!.ViewId);
     }
 }
 

@@ -227,4 +227,72 @@ public class RevitClient : IDisposable
             return ApiResponse<AuditResult>.Fail($"Communication error: {ex.Message}");
         }
     }
+
+    public async Task<ApiResponse<ScheduleInfo[]>> ListSchedulesAsync()
+    {
+        try
+        {
+            var url = "/api/schedules";
+            var response = await _http.GetAsync(url);
+            var json = await SendAndRead(response, "GET", url);
+            return JsonSerializer.Deserialize<ApiResponse<ScheduleInfo[]>>(json, JsonOptions)!;
+        }
+        catch (HttpRequestException ex)
+        {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
+            return ApiResponse<ScheduleInfo[]>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ScheduleInfo[]>.Fail($"Communication error: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<ScheduleData>> ExportScheduleAsync(ScheduleExportRequest request)
+    {
+        try
+        {
+            var url = "/api/schedules/export";
+            var content = new StringContent(
+                JsonSerializer.Serialize(request),
+                Encoding.UTF8,
+                "application/json");
+            var response = await _http.PostAsync(url, content);
+            var json = await SendAndRead(response, "POST", url);
+            return JsonSerializer.Deserialize<ApiResponse<ScheduleData>>(json, JsonOptions)!;
+        }
+        catch (HttpRequestException ex)
+        {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
+            return ApiResponse<ScheduleData>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ScheduleData>.Fail($"Communication error: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<ScheduleCreateResult>> CreateScheduleAsync(ScheduleCreateRequest request)
+    {
+        try
+        {
+            var url = "/api/schedules/create";
+            var content = new StringContent(
+                JsonSerializer.Serialize(request),
+                Encoding.UTF8,
+                "application/json");
+            var response = await _http.PostAsync(url, content);
+            var json = await SendAndRead(response, "POST", url);
+            return JsonSerializer.Deserialize<ApiResponse<ScheduleCreateResult>>(json, JsonOptions)!;
+        }
+        catch (HttpRequestException ex)
+        {
+            if (Verbose) Console.Error.WriteLine($"[HTTP] Connection failed: {ex.Message}");
+            return ApiResponse<ScheduleCreateResult>.Fail("Revit is not running or plugin is not loaded.");
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or JsonException)
+        {
+            return ApiResponse<ScheduleCreateResult>.Fail($"Communication error: {ex.Message}");
+        }
+    }
 }
