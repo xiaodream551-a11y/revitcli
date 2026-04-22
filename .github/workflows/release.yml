@@ -62,9 +62,14 @@ jobs:
       - name: Update version in install script
         shell: pwsh
         run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
           $content = Get-Content ./stage/install.ps1 -Raw
-          $content = $content -replace 'version      = "0\.1\.0"', "version      = `"${{ steps.version.outputs.VERSION }}`""
+          $content = $content -replace 'version\s*=\s*"\d+\.\d+\.\d+"', "version      = `"$version`""
           Set-Content ./stage/install.ps1 -Value $content
+          if ($content -notmatch [regex]::Escape($version)) {
+            Write-Host "::error::Failed to inject version $version into install.ps1"
+            exit 1
+          }
 
       - name: Package ZIP
         shell: pwsh
