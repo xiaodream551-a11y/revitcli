@@ -130,13 +130,8 @@ public static class CheckCommand
             }
             allIssues = filtered;
 
-            // Recount: failed = has any error/warning issues remaining
-            var hasRemainingProblems = allIssues.Any(i => i.Severity is "error" or "warning");
-            if (!hasRemainingProblems)
-            {
-                totalPassed += totalFailed;
-                totalFailed = 0;
-            }
+            // If all error/warning issues were suppressed, exit code should be 0
+            // (handled below in the failOn logic which checks allIssues after filtering)
         }
 
         // Render output
@@ -255,13 +250,13 @@ public static class CheckCommand
             if (!string.Equals(s.Rule, issue.Rule, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // Fine-grained matching: category and parameter narrow the scope
+            // Fine-grained matching: category and parameter narrow the scope (word-boundary match)
             if (!string.IsNullOrEmpty(s.Category) &&
-                !issue.Message.Contains(s.Category, StringComparison.OrdinalIgnoreCase))
+                !ContainsWord(issue.Message, s.Category))
                 continue;
 
             if (!string.IsNullOrEmpty(s.Parameter) &&
-                !issue.Message.Contains(s.Parameter, StringComparison.OrdinalIgnoreCase))
+                !ContainsWord(issue.Message, s.Parameter))
                 continue;
 
             // If elementIds specified, only suppress those specific elements
@@ -286,6 +281,19 @@ public static class CheckCommand
         if (DateTime.TryParse(expires, out var expiryDate))
             return DateTime.Now > expiryDate;
 
+        return false;
+    }
+
+    private static bool ContainsWord(string text, string word)
+    {
+        int idx = 0;
+        while ((idx = text.IndexOf(word, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            bool startOk = idx == 0 || !char.IsLetterOrDigit(text[idx - 1]);
+            bool endOk = idx + word.Length >= text.Length || !char.IsLetterOrDigit(text[idx + word.Length]);
+            if (startOk && endOk) return true;
+            idx += word.Length;
+        }
         return false;
     }
 }

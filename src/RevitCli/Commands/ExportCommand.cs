@@ -80,7 +80,8 @@ public static class ExportCommand
                     task.Value = progress.Progress;
 
                     var pollFailed = false;
-                    while (progress.Status != "completed" && progress.Status != "failed")
+                    var pollDeadline = DateTime.UtcNow.AddMinutes(10);
+                    while (progress.Status != "completed" && progress.Status != "failed" && DateTime.UtcNow < pollDeadline)
                     {
                         await Task.Delay(1000);
                         var pollResult = await client.GetExportProgressAsync(progress.TaskId);
@@ -104,7 +105,7 @@ public static class ExportCommand
             }
             else
             {
-                AnsiConsole.MarkupLine("[red]Export status unknown:[/] lost connection to Revit.");
+                AnsiConsole.MarkupLine("[red]Export timed out or lost connection to Revit.[/]");
                 Environment.ExitCode = 1;
             }
         }, formatOpt, sheetsOpt, viewsOpt, outputDirOpt);
@@ -146,7 +147,8 @@ public static class ExportCommand
         await output.WriteLineAsync($"Export started. Task ID: {progress.TaskId}");
         await output.WriteLineAsync($"Status: {progress.Status}, Progress: {progress.Progress}%");
 
-        while (progress.Status != "completed" && progress.Status != "failed")
+        var deadline = DateTime.UtcNow.AddMinutes(10);
+        while (progress.Status != "completed" && progress.Status != "failed" && DateTime.UtcNow < deadline)
         {
             await Task.Delay(1000);
             var pollResult = await client.GetExportProgressAsync(progress.TaskId);
@@ -163,6 +165,8 @@ public static class ExportCommand
 
         if (progress.Status == "failed")
             await output.WriteLineAsync($"Export failed: {progress.Message}");
+        else if (DateTime.UtcNow >= deadline)
+            await output.WriteLineAsync("Error: export timed out after 10 minutes.");
         return 1;
     }
 }

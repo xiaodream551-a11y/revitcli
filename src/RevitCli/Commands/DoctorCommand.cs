@@ -87,7 +87,7 @@ public static class DoctorCommand
         }
 
         // 5. Project profile
-        WriteProfileInfo(null, s => output.WriteLineAsync(s).Wait());
+        WriteProfileInfo(null, s => output.WriteLine(s));
 
         return 0;
     }
