@@ -132,10 +132,11 @@ public static class ScheduleCommand
                 await output.WriteLineAsync($"Error: schedule template '{templateName}' not found in .revitcli.yml.");
                 return 1;
             }
-            request.Category = category ?? template.Category;
+            request.Category = existingName != null ? category : (category ?? template.Category);
             request.Fields = ParseFields(fields) ?? template.Fields;
             request.Filter = filter ?? template.Filter;
             request.Sort = sort ?? template.Sort;
+            request.SortDescending = sortDesc || template.SortDescending;
             request.ExistingName = existingName;
         }
         else
@@ -194,6 +195,7 @@ public static class ScheduleCommand
             request.Fields = ParseFields(fields) ?? template.Fields;
             request.Filter = filter ?? template.Filter;
             request.Sort = sort ?? template.Sort;
+            request.SortDescending = sortDesc || template.SortDescending;
             request.Name = name ?? template.Name ?? templateName;
             request.PlaceOnSheet = placeOnSheet;
         }
