@@ -23,6 +23,7 @@ internal static class CliCommandCatalog
         ("init", "Create a .revitcli.yml profile from a template"),
         ("score", "Calculate model health score (0-100)"),
         ("coverage", "Show parameter fill rates by category"),
+        ("schedule", "Manage and export Revit schedules"),
         ("interactive", "Enter interactive REPL mode")
     };
 
@@ -38,6 +39,9 @@ internal static class CliCommandCatalog
         ("publish [name]", "Run export pipeline from .revitcli.yml profile"),
         ("score", "Calculate model health score (0-100)"),
         ("coverage", "Show parameter fill rates by category"),
+        ("schedule list", "List existing schedules in the model"),
+        ("schedule export", "Export schedule data (--category, --name, --fields, --output)"),
+        ("schedule create", "Create a ViewSchedule (--category, --fields, --name)"),
         ("init <template>", "Create .revitcli.yml from starter template"),
         ("doctor", "Check setup, server discovery, and connectivity"),
         ("batch <file>", "Execute commands from a JSON batch file"),
@@ -73,6 +77,7 @@ internal static class CliCommandCatalog
         root.AddCommand(InitCommand.Create());
         root.AddCommand(ScoreCommand.Create(client));
         root.AddCommand(CoverageCommand.Create(client));
+        root.AddCommand(ScheduleCommand.Create(client));
 
         if (includeBatchCommand)
             root.AddCommand(BatchCommand.Create(client, config));
