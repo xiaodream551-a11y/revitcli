@@ -50,13 +50,42 @@ public class SnapshotHasherTests
     [Fact]
     public void HashSheetMeta_Includes_NumberNameAndParameters()
     {
-        var s = new SnapshotSheet
+        var baseline = new SnapshotSheet
         {
             Number = "A-01", Name = "Plan", ViewId = 99,
             Parameters = new() { ["Revision"] = "v1" }
         };
-        var h = SnapshotHasher.HashSheetMeta(s);
-        Assert.Equal(16, h.Length);
+        var baseHash = SnapshotHasher.HashSheetMeta(baseline);
+        Assert.Equal(16, baseHash.Length);
+
+        // Changing each tracked field must change the hash.
+        var diffNumber = new SnapshotSheet
+        {
+            Number = "A-02", Name = "Plan", ViewId = 99,
+            Parameters = new() { ["Revision"] = "v1" }
+        };
+        Assert.NotEqual(baseHash, SnapshotHasher.HashSheetMeta(diffNumber));
+
+        var diffName = new SnapshotSheet
+        {
+            Number = "A-01", Name = "Elevation", ViewId = 99,
+            Parameters = new() { ["Revision"] = "v1" }
+        };
+        Assert.NotEqual(baseHash, SnapshotHasher.HashSheetMeta(diffName));
+
+        var diffViewId = new SnapshotSheet
+        {
+            Number = "A-01", Name = "Plan", ViewId = 100,
+            Parameters = new() { ["Revision"] = "v1" }
+        };
+        Assert.NotEqual(baseHash, SnapshotHasher.HashSheetMeta(diffViewId));
+
+        var diffParam = new SnapshotSheet
+        {
+            Number = "A-01", Name = "Plan", ViewId = 99,
+            Parameters = new() { ["Revision"] = "v2" }
+        };
+        Assert.NotEqual(baseHash, SnapshotHasher.HashSheetMeta(diffParam));
     }
 
     [Fact]
@@ -89,5 +118,25 @@ public class SnapshotHasherTests
         Assert.NotEqual(
             SnapshotHasher.HashSchedule("Doors", "S", cols, rows1),
             SnapshotHasher.HashSchedule("Doors", "S", cols, rows2));
+    }
+
+    [Fact]
+    public void HashSchedule_PipeInValue_DoesNotCollideWithSeparator()
+    {
+        // "A|B" in a single-column row must not hash the same as two separate
+        // rows with "A" and "B", since `|` is used as the column separator internally.
+        var cols = new List<string> { "Mark" };
+        var rowsPipeValue = new List<Dictionary<string, string>>
+        {
+            new() { ["Mark"] = "A|B" }
+        };
+        var rowsTwoValues = new List<Dictionary<string, string>>
+        {
+            new() { ["Mark"] = "A" },
+            new() { ["Mark"] = "B" }
+        };
+        Assert.NotEqual(
+            SnapshotHasher.HashSchedule("Doors", "S", cols, rowsPipeValue),
+            SnapshotHasher.HashSchedule("Doors", "S", cols, rowsTwoValues));
     }
 }

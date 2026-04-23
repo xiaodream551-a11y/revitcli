@@ -224,7 +224,7 @@ hash = SHA256(content).ToHex().Substring(0, 16);
 
 **Schedule hash**:
 ```
-content = $"{Name}\n{Category}" + "\n" + string.Join("\n", columns) 
+content = $"category={Category}\nname={Name}" + "\n" + string.Join("\n", columns) 
           + "\n" + string.Join("\n", rows.Select(r => string.Join("|", columns.Select(c => r.GetValueOrDefault(c, "")))));
 hash = SHA256(content).ToHex().Substring(0, 16);
 ```
