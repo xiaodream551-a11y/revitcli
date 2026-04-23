@@ -4,6 +4,75 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-04-23
+
+Model-as-Code Phase 1 — snapshot + diff infrastructure. This lays the
+foundation for incremental publish (v1.2) and CSV import (v1.3).
+
+### Added
+
+- **`revitcli snapshot`** — capture the model's semantic state as JSON:
+  elements grouped by category, sheets, schedules, and a counts summary.
+  Options: `--output FILE`, `--categories LIST`, `--no-sheets`,
+  `--no-schedules`, `--summary-only` (fast path, counts only).
+- **`revitcli diff FROM TO`** — diff two snapshot JSONs. Formats:
+  `table` (default), `json`, `markdown`. Options: `--report FILE`
+  (format inferred from `.md`/`.json` extension), `--categories LIST`,
+  `--max-rows N`. Errors on schema version mismatch; warns on
+  DocumentPath mismatch.
+- **Shared DTOs** (`shared/RevitCli.Shared/`):
+  `ModelSnapshot`, `SnapshotRequest`, `SnapshotDiff` with every property
+  carrying `[JsonPropertyName("camelCase")]` attributes for stable wire
+  format.
+- **`SnapshotHasher`** — pure static helper producing stable 16-char
+  SHA256 hashes for elements, sheet metadata, and schedules. Sorts
+  parameter keys Ordinally and escapes `\n`, `\`, `|` in values to
+  prevent collisions.
+- **`SnapshotDiffer`** — pure C# diff algorithm. Elements keyed by Id
+  within each category, sheets by Number, schedules by Id. Defensively
+  dedupes via `GroupBy().First()` so malformed input produces a clean
+  diff instead of a raw `ArgumentException`.
+- **`DiffRenderer`** — renders diffs as table / json / markdown with
+  truncation at `--max-rows` and pipe-escape protection for Markdown
+  table cells.
+- **Addin endpoint** — `POST /api/snapshot` via `SnapshotController`
+  wired into `RealRevitOperations.CaptureSnapshotAsync` (runs on the
+  Revit main thread through `RevitBridge`). Full Revit API traversal:
+  `FilteredElementCollector.OfCategory(...)` for elements,
+  `OfClass(typeof(ViewSheet))` for sheets,
+  `OfClass(typeof(ViewSchedule))` for schedules with body-cell hash.
+- **48 new tests** across shared/CLI layers: DTO roundtrip, hash
+  stability, diff algorithm edge cases, renderer formatting, CLI
+  commands, and HTTP client wiring.
+
+### Deferred to Phase 2 (v1.2)
+
+- `SnapshotSheet.ContentHash` — view-level element aggregation for
+  "sheet really changed?" detection. Currently left as empty string.
+- `revitcli publish --since SNAPSHOT` — incremental re-export of only
+  sheets whose content changed since the baseline.
+- Profile `publish.incremental: true` flag + baseline auto-management.
+
+### Known Carry-forward
+
+- Addin test project (`tests/RevitCli.Addin.Tests/`) has pre-existing
+  compile errors against Revit 2026 API (`UIApplication` reference
+  missing in test csproj). Not caused by this release; flagged for a
+  separate `chore: restore addin tests` commit.
+- `--verbose` flag on the `snapshot` command is specified in the design
+  doc but not yet implemented.
+- `--severity added|removed|modified|all` flag on the `diff` command is
+  specified in the design doc but not yet implemented. Workaround:
+  filter by category with `--categories` or post-process the JSON
+  output.
+- `snapshot` / `diff` do not yet appear in the interactive REPL help
+  listing (`CliCommandCatalog.InteractiveHelpEntries`) or in the
+  shell-completion option-per-command blocks. Top-level command
+  completion works.
+
+Spec: [docs/superpowers/specs/2026-04-23-model-as-code-design.md](docs/superpowers/specs/2026-04-23-model-as-code-design.md)
+Plan: [docs/superpowers/plans/2026-04-23-snapshot-and-diff.md](docs/superpowers/plans/2026-04-23-snapshot-and-diff.md)
+
 ## [1.0.0] - 2026-04-04
 
 RevitCli v1.0 — production-ready local BIMOps runner for Revit teams.

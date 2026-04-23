@@ -34,7 +34,7 @@ public class CompletionsCommandTests : IDisposable
         var script = stdout.ToString();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("status query export set config audit completions batch doctor check publish init score coverage schedule interactive", script);
+        Assert.Contains("status query export set config audit completions batch doctor check publish init score coverage schedule diff snapshot interactive", script);
         Assert.Contains("compgen -W \"show set\"", script);
         Assert.Contains("defaultOutput)", script);
         Assert.Contains("compgen -f -- \"$cur\"", script);
@@ -70,5 +70,33 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'interactive' = 'Enter interactive REPL mode'", script);
         Assert.Contains("$configKeys = @('serverUrl', 'defaultOutput', 'exportDir')", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $shells -ToolTip 'Shell'", script);
+    }
+
+    [Fact]
+    public async Task BashCompletions_Include_Snapshot_And_Diff()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "bash" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("snapshot", script);
+        Assert.Contains("diff", script);
+    }
+
+    [Fact]
+    public async Task ZshCompletions_Include_Snapshot_And_Diff()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "zsh" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("snapshot", script);
+        Assert.Contains("diff", script);
     }
 }

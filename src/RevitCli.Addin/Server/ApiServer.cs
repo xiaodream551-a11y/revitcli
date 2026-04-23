@@ -71,7 +71,8 @@ public class ApiServer : IDisposable
                 .WithController(() => new ExportController(_operations))
                 .WithController(() => new SetController(_operations))
                 .WithController(() => new AuditController(_operations))
-                .WithController(() => new ScheduleController(_operations)))
+                .WithController(() => new ScheduleController(_operations))
+                .WithController(() => new SnapshotController(_operations)))
             .WithModule(new ActionModule("/", HttpVerbs.Any, ctx =>
             {
                 ctx.Response.StatusCode = 404;

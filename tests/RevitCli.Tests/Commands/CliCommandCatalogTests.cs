@@ -65,4 +65,12 @@ public class CliCommandCatalogTests
         Assert.DoesNotContain("batch", names);
         Assert.Contains("completions", names);
     }
+
+    [Fact]
+    public void TopLevelCommands_Contains_SnapshotAndDiff()
+    {
+        var names = CliCommandCatalog.TopLevelCommandNames;
+        Assert.Contains("snapshot", names);
+        Assert.Contains("diff", names);
+    }
 }
