@@ -61,6 +61,14 @@ foundation for incremental publish (v1.2) and CSV import (v1.3).
   separate `chore: restore addin tests` commit.
 - `--verbose` flag on the `snapshot` command is specified in the design
   doc but not yet implemented.
+- `--severity added|removed|modified|all` flag on the `diff` command is
+  specified in the design doc but not yet implemented. Workaround:
+  filter by category with `--categories` or post-process the JSON
+  output.
+- `snapshot` / `diff` do not yet appear in the interactive REPL help
+  listing (`CliCommandCatalog.InteractiveHelpEntries`) or in the
+  shell-completion option-per-command blocks. Top-level command
+  completion works.
 
 Spec: [docs/superpowers/specs/2026-04-23-model-as-code-design.md](docs/superpowers/specs/2026-04-23-model-as-code-design.md)
 Plan: [docs/superpowers/plans/2026-04-23-snapshot-and-diff.md](docs/superpowers/plans/2026-04-23-snapshot-and-diff.md)

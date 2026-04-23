@@ -54,8 +54,12 @@ public static class DiffCommand
         ModelSnapshot fromSnap, toSnap;
         try
         {
-            fromSnap = JsonSerializer.Deserialize<ModelSnapshot>(File.ReadAllText(fromPath), JsonOpts)!;
-            toSnap = JsonSerializer.Deserialize<ModelSnapshot>(File.ReadAllText(toPath), JsonOpts)!;
+            fromSnap = JsonSerializer.Deserialize<ModelSnapshot>(
+                await File.ReadAllTextAsync(fromPath), JsonOpts)
+                ?? throw new JsonException("Snapshot deserializes to null — not a valid snapshot file.");
+            toSnap = JsonSerializer.Deserialize<ModelSnapshot>(
+                await File.ReadAllTextAsync(toPath), JsonOpts)
+                ?? throw new JsonException("Snapshot deserializes to null — not a valid snapshot file.");
         }
         catch (JsonException ex)
         {
