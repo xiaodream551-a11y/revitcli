@@ -86,9 +86,17 @@ public class SnapshotSheet
     [JsonPropertyName("parameters")]
     public Dictionary<string, string> Parameters { get; set; } = new();
 
+    /// <summary>sheet 本身(不含 placed views)的 hash. 填充于 P1.</summary>
     [JsonPropertyName("metaHash")]
     public string MetaHash { get; set; } = "";
 
+    /// <summary>
+    /// MetaHash + 所有 PlacedViewIds 上元素的 hash 聚合. Reflects structural content:
+    /// sheet metadata + element hashes of every non-type element in scope of each placed view.
+    /// Does NOT honor per-view Visibility/Graphics overrides — hiding a wall via V/G does not
+    /// change ContentHash. Populated starting in P2. Empty string on P1-era baselines; diff
+    /// callers should fall back to MetaHash when empty.
+    /// </summary>
     [JsonPropertyName("contentHash")]
     public string ContentHash { get; set; } = "";
 }
