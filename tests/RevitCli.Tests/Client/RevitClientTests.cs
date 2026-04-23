@@ -111,6 +111,34 @@ public class RevitClientTests
         Assert.True(result.Success);
         Assert.Equal(100, result.Data!.ViewId);
     }
+
+    [Fact]
+    public async Task CaptureSnapshotAsync_PostsRequestAndParsesResponse()
+    {
+        var snapshot = new ModelSnapshot { SchemaVersion = 1, TakenAt = "2026-04-23T00:00:00Z" };
+        var response = ApiResponse<ModelSnapshot>.Ok(snapshot);
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+
+        var result = await client.CaptureSnapshotAsync(new SnapshotRequest());
+
+        Assert.True(result.Success);
+        Assert.Equal("2026-04-23T00:00:00Z", result.Data!.TakenAt);
+        Assert.Equal("http://localhost:17839/api/snapshot", handler.LastRequestUri);
+        Assert.Contains("IncludeSheets", handler.LastRequestBody ?? "", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CaptureSnapshotAsync_ConnectionFailed_ReturnsFail()
+    {
+        var handler = new FakeHttpHandler(throwException: true);
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+
+        var result = await client.CaptureSnapshotAsync(new SnapshotRequest());
+
+        Assert.False(result.Success);
+        Assert.Contains("not running", result.Error, System.StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public class FakeHttpHandler : HttpMessageHandler
