@@ -2069,14 +2069,14 @@ public sealed class RealRevitOperations : IRevitOperations
                 {
                     if (request.SummaryOnly)
                     {
-                        items.Add(new SnapshotElement { Id = element.Id.Value });
+                        items.Add(new SnapshotElement { Id = ToCliElementId(element.Id) });
                     }
                     else
                     {
                         var info = MapElement(doc, element);
                         var snap = new SnapshotElement
                         {
-                            Id = element.Id.Value,
+                            Id = ToCliElementId(element.Id),
                             Name = info.Name ?? "",
                             TypeName = info.TypeName ?? "",
                             Parameters = new Dictionary<string, string>(info.Parameters)
@@ -2085,28 +2085,42 @@ public sealed class RealRevitOperations : IRevitOperations
                         items.Add(snap);
                     }
                 }
-                snapshot.Categories[catName] = items;
+                // Normalize category key so `--categories structural_columns` and the
+                // default `structuralcolumns` produce the same dictionary key, keeping
+                // diff stable across snapshots with different input casing/separators.
+                snapshot.Categories[Normalize(catName)] = items;
             }
 
             // Sheets
-            if (request.IncludeSheets && !request.SummaryOnly)
+            if (request.IncludeSheets)
             {
                 foreach (var sheet in new FilteredElementCollector(doc)
                     .OfClass(typeof(ViewSheet)).Cast<ViewSheet>())
                 {
+                    if (request.SummaryOnly)
+                    {
+                        // Fast path: count only, no parameter reads or placed-view resolution.
+                        snapshot.Sheets.Add(new SnapshotSheet { ViewId = ToCliElementId(sheet.Id) });
+                        continue;
+                    }
+
                     var placedIds = new List<long>();
                     try
                     {
                         foreach (var viewId in sheet.GetAllPlacedViews())
-                            placedIds.Add(viewId.Value);
+                            placedIds.Add(ToCliElementId(viewId));
                     }
-                    catch { /* empty sheet or API edge case — leave placedIds empty */ }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[RevitCli] GetAllPlacedViews failed on sheet {sheet.SheetNumber}: {ex.Message}");
+                    }
 
                     var sheetSnap = new SnapshotSheet
                     {
                         Number = sheet.SheetNumber ?? "",
                         Name = sheet.Name ?? "",
-                        ViewId = sheet.Id.Value,
+                        ViewId = ToCliElementId(sheet.Id),
                         PlacedViewIds = placedIds,
                         Parameters = ReadVisibleParameters(doc, sheet),
                         ContentHash = ""  // P2 will compute
@@ -2117,12 +2131,25 @@ public sealed class RealRevitOperations : IRevitOperations
             }
 
             // Schedules
-            if (request.IncludeSchedules && !request.SummaryOnly)
+            if (request.IncludeSchedules)
             {
                 foreach (var vs in new FilteredElementCollector(doc)
                     .OfClass(typeof(ViewSchedule)).Cast<ViewSchedule>())
                 {
                     if (vs.IsTitleblockRevisionSchedule) continue;
+
+                    if (request.SummaryOnly)
+                    {
+                        // Fast path: count only.
+                        snapshot.Schedules.Add(new SnapshotSchedule { Id = ToCliElementId(vs.Id) });
+                        continue;
+                    }
+
+                    // Some schedules (key schedules, note blocks) return null table data.
+                    var tableData = vs.GetTableData();
+                    if (tableData == null) continue;
+                    var bodySection = tableData.GetSectionData(SectionType.Body);
+                    if (bodySection == null) continue;
 
                     var columns = new List<string>();
                     var fieldCount = vs.Definition.GetFieldCount();
@@ -2133,7 +2160,6 @@ public sealed class RealRevitOperations : IRevitOperations
                     }
 
                     var rows = new List<Dictionary<string, string>>();
-                    var bodySection = vs.GetTableData().GetSectionData(SectionType.Body);
                     for (var r = 1; r < bodySection.NumberOfRows; r++)
                     {
                         var row = new Dictionary<string, string>();
@@ -2149,7 +2175,7 @@ public sealed class RealRevitOperations : IRevitOperations
 
                     snapshot.Schedules.Add(new SnapshotSchedule
                     {
-                        Id = vs.Id.Value,
+                        Id = ToCliElementId(vs.Id),
                         Name = vs.Name ?? "",
                         Category = cat,
                         RowCount = rows.Count,
@@ -2158,7 +2184,8 @@ public sealed class RealRevitOperations : IRevitOperations
                 }
             }
 
-            // Summary
+            // Summary — counts are now accurate in SummaryOnly mode because the
+            // sheets/schedules loops above run with a count-only fast path.
             snapshot.Summary = new SnapshotSummary
             {
                 SheetCount = snapshot.Sheets.Count,
