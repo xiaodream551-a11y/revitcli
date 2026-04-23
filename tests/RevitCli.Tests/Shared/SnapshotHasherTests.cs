@@ -139,4 +139,70 @@ public class SnapshotHasherTests
             SnapshotHasher.HashSchedule("Doors", "S", cols, rowsPipeValue),
             SnapshotHasher.HashSchedule("Doors", "S", cols, rowsTwoValues));
     }
+
+    [Fact]
+    public void HashSheetContent_StableForSameInputs()
+    {
+        var perView = new List<(long viewId, List<string> elementHashes)>
+        {
+            (200, new List<string> { "h-wall-1", "h-wall-2" }),
+            (201, new List<string> { "h-door-1" })
+        };
+        var h1 = SnapshotHasher.HashSheetContent("meta-hash-A", perView);
+        var h2 = SnapshotHasher.HashSheetContent("meta-hash-A", perView);
+        Assert.Equal(h1, h2);
+        Assert.Equal(16, h1.Length);
+    }
+
+    [Fact]
+    public void HashSheetContent_DiffersWhenMetaHashChanges()
+    {
+        var perView = new List<(long, List<string>)>
+        {
+            (200, new List<string> { "h-wall-1" })
+        };
+        var a = SnapshotHasher.HashSheetContent("meta-A", perView);
+        var b = SnapshotHasher.HashSheetContent("meta-B", perView);
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void HashSheetContent_DiffersWhenElementHashesChange()
+    {
+        var perViewA = new List<(long, List<string>)> { (200, new() { "h1" }) };
+        var perViewB = new List<(long, List<string>)> { (200, new() { "h2" }) };
+        Assert.NotEqual(
+            SnapshotHasher.HashSheetContent("m", perViewA),
+            SnapshotHasher.HashSheetContent("m", perViewB));
+    }
+
+    [Fact]
+    public void HashSheetContent_StableAcrossViewInsertionOrder()
+    {
+        var a = new List<(long, List<string>)>
+        {
+            (200, new() { "h1" }),
+            (201, new() { "h2" })
+        };
+        var b = new List<(long, List<string>)>
+        {
+            (201, new() { "h2" }),
+            (200, new() { "h1" })
+        };
+        Assert.Equal(
+            SnapshotHasher.HashSheetContent("m", a),
+            SnapshotHasher.HashSheetContent("m", b));
+    }
+
+    [Fact]
+    public void HashSheetContent_StableAcrossElementOrderWithinView()
+    {
+        // Element hashes within a view: sorted stably so hash doesn't depend on
+        // the order Revit returned elements in.
+        var a = new List<(long, List<string>)> { (200, new() { "h-a", "h-b", "h-c" }) };
+        var b = new List<(long, List<string>)> { (200, new() { "h-c", "h-a", "h-b" }) };
+        Assert.Equal(
+            SnapshotHasher.HashSheetContent("m", a),
+            SnapshotHasher.HashSheetContent("m", b));
+    }
 }
