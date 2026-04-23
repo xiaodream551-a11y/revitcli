@@ -109,6 +109,10 @@ public static class PublishCommand
                 effectiveBaselinePath = Path.GetFullPath(Path.Combine(profileDir, effectiveBaselinePath));
         }
         var effectiveSinceMode = SinceModeParser.Parse(sinceMode ?? pipeline.SinceMode);
+        // Auto-update baseline only when the user did NOT supply --since.
+        // Rationale: --since <path> is explicit user intent to compare against a specific
+        // baseline — we shouldn't silently overwrite that file just because the profile
+        // says incremental. The --update-baseline flag is the explicit opt-in for rewrite.
         var shouldUpdateBaseline = updateBaseline || (pipeline.Incremental && since == null);
 
         HashSet<string>? changedSheetNumbers = null;

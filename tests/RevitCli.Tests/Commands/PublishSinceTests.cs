@@ -182,6 +182,49 @@ publish:
     }
 
     [Fact]
+    public async Task Publish_Since_NoSheetChanges_UpdateBaseline_WritesFreshSnapshot()
+    {
+        var dir = TempDir();
+        try
+        {
+            var profilePath = WriteFixture(dir, ".revitcli.yml", @"
+version: 1
+exports:
+  dwg-all:
+    format: dwg
+    sheets: [all]
+    outputDir: ./out
+publish:
+  default:
+    presets: [dwg-all]
+");
+            var baseline = SnapWith(("A-01", "m1", "c1"));
+            var current  = SnapWith(("A-01", "m1", "c1"));
+            current.TakenAt = "2026-04-23T14:00:00Z"; // differs from baseline default (empty)
+            var baselinePath = WriteFixture(dir, "baseline.json", JsonSerializer.Serialize(baseline));
+
+            var handler = new FakeHttpHandler(JsonSerializer.Serialize(
+                ApiResponse<ModelSnapshot>.Ok(current)));
+            var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+            var writer = new StringWriter();
+
+            var exit = await PublishCommand.ExecuteAsync(
+                client, name: "default", profilePath: profilePath,
+                dryRun: false,
+                since: baselinePath, sinceMode: "content", updateBaseline: true,
+                writer);
+
+            Assert.Equal(0, exit);
+            // Baseline file should now contain the *current* snapshot's TakenAt, not baseline's.
+            var reloaded = JsonSerializer.Deserialize<ModelSnapshot>(
+                File.ReadAllText(baselinePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            Assert.Equal("2026-04-23T14:00:00Z", reloaded.TakenAt);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
     public async Task Publish_IncrementalProfile_UsesDefaultBaselinePath()
     {
         var dir = TempDir();
