@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -134,5 +135,36 @@ public class ProtocolTests : IDisposable
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal(5, result.Data.Passed);
+    }
+
+    [Fact]
+    public async Task CaptureSnapshot_ReturnsPlaceholderSnapshot()
+    {
+        var result = await _client.CaptureSnapshotAsync(new SnapshotRequest());
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(1, result.Data.SchemaVersion);
+        Assert.Equal("2025", result.Data.Revit.Version);
+        Assert.True(result.Data.Categories.ContainsKey("walls"));
+        Assert.Single(result.Data.Categories["walls"]);
+        Assert.Equal(1001, result.Data.Categories["walls"][0].Id);
+        Assert.Single(result.Data.Sheets);
+        Assert.Single(result.Data.Schedules);
+        Assert.Equal(1, result.Data.Summary.ElementCounts["walls"]);
+    }
+
+    [Fact]
+    public async Task CaptureSnapshot_WithIncludeCategoriesFilter_RequestReaches()
+    {
+        var result = await _client.CaptureSnapshotAsync(new SnapshotRequest
+        {
+            IncludeCategories = new List<string> { "walls" },
+            IncludeSheets = false
+        });
+
+        // Placeholder currently ignores filter; assert response is still well-formed.
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
     }
 }
