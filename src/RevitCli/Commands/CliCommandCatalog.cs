@@ -24,6 +24,7 @@ internal static class CliCommandCatalog
         ("score", "Calculate model health score (0-100)"),
         ("coverage", "Show parameter fill rates by category"),
         ("schedule", "Manage and export Revit schedules"),
+        ("diff", "Diff two snapshot JSON files"),
         ("interactive", "Enter interactive REPL mode")
     };
 
@@ -78,6 +79,7 @@ internal static class CliCommandCatalog
         root.AddCommand(ScoreCommand.Create(client));
         root.AddCommand(CoverageCommand.Create(client));
         root.AddCommand(ScheduleCommand.Create(client));
+        root.AddCommand(DiffCommand.Create());
 
         if (includeBatchCommand)
             root.AddCommand(BatchCommand.Create(client, config));
