@@ -19,21 +19,33 @@ public static class PublishCommand
         var nameArg = new Argument<string?>("name", () => null, "Publish pipeline name (default: 'default')");
         var profileOpt = new Option<string?>("--profile", "Path to .revitcli.yml profile");
         var dryRunOpt = new Option<bool>("--dry-run", "Show what would be exported without exporting");
+        var sinceOpt = new Option<string?>("--since", "Baseline snapshot JSON file; only re-export sheets whose content changed since");
+        var sinceModeOpt = new Option<string?>("--since-mode", "content | meta (default: content, or from profile)");
+        var updateBaselineOpt = new Option<bool>("--update-baseline", "After successful publish, write the current snapshot back to the --since path");
 
         var command = new Command("publish", "Run export pipeline from .revitcli.yml profile")
         {
-            nameArg, profileOpt, dryRunOpt
+            nameArg, profileOpt, dryRunOpt, sinceOpt, sinceModeOpt, updateBaselineOpt
         };
 
-        command.SetHandler(async (name, profilePath, dryRun) =>
+        command.SetHandler(async (name, profilePath, dryRun, since, sinceMode, updateBaseline) =>
         {
-            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, dryRun, Console.Out);
-        }, nameArg, profileOpt, dryRunOpt);
+            Environment.ExitCode = await ExecuteAsync(
+                client, name, profilePath, dryRun, since, sinceMode, updateBaseline, Console.Out);
+        }, nameArg, profileOpt, dryRunOpt, sinceOpt, sinceModeOpt, updateBaselineOpt);
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath, bool dryRun, TextWriter output)
+    public static async Task<int> ExecuteAsync(
+        RevitClient client,
+        string? name,
+        string? profilePath,
+        bool dryRun,
+        string? since,
+        string? sinceMode,
+        bool updateBaseline,
+        TextWriter output)
     {
         // Load profile
         ProjectProfile? profile;
@@ -86,6 +98,84 @@ public static class PublishCommand
             return 1;
         }
 
+        // ── Incremental resolution ──────────────────────────────────────────
+        // Effective baseline path: CLI --since wins; else profile.incremental → default
+        string? effectiveBaselinePath = since;
+        if (effectiveBaselinePath == null && pipeline.Incremental)
+        {
+            effectiveBaselinePath = pipeline.BaselinePath ?? ".revitcli/last-publish.json";
+            // Resolve relative to profile dir
+            if (profileDir != null && !Path.IsPathRooted(effectiveBaselinePath))
+                effectiveBaselinePath = Path.GetFullPath(Path.Combine(profileDir, effectiveBaselinePath));
+        }
+        var effectiveSinceMode = SinceModeParser.Parse(sinceMode ?? pipeline.SinceMode);
+        var shouldUpdateBaseline = updateBaseline || (pipeline.Incremental && since == null);
+
+        HashSet<string>? changedSheetNumbers = null;
+        ModelSnapshot? currentSnapshot = null;
+        if (effectiveBaselinePath != null)
+        {
+            var baseline = BaselineManager.Load(effectiveBaselinePath);
+            if (baseline == null)
+            {
+                await output.WriteLineAsync($"Error: baseline not found or unreadable: {effectiveBaselinePath}");
+                await output.WriteLineAsync($"  First time? Run: revitcli snapshot --output {effectiveBaselinePath}");
+                return 1;
+            }
+
+            await output.WriteLineAsync($"Capturing current snapshot for diff against baseline ...");
+            var snapResult = await client.CaptureSnapshotAsync(new SnapshotRequest());
+            if (!snapResult.Success)
+            {
+                await output.WriteLineAsync($"Error: {snapResult.Error}");
+                if (snapResult.Error?.Contains("not running") == true)
+                    await output.WriteLineAsync("  Run 'revitcli doctor' to diagnose connection issues.");
+                return 1;
+            }
+            currentSnapshot = snapResult.Data!;
+
+            var diff = SnapshotDiffer.Diff(
+                baseline, currentSnapshot,
+                Path.GetFileName(effectiveBaselinePath), "current",
+                effectiveSinceMode);
+
+            changedSheetNumbers = new HashSet<string>();
+            foreach (var m in diff.Sheets.Modified)
+            {
+                if (m.Key.StartsWith("sheet:"))
+                    changedSheetNumbers.Add(m.Key.Substring("sheet:".Length));
+            }
+            foreach (var a in diff.Sheets.Added)
+            {
+                if (a.Key.StartsWith("sheet:"))
+                    changedSheetNumbers.Add(a.Key.Substring("sheet:".Length));
+            }
+
+            if (changedSheetNumbers.Count == 0)
+            {
+                await output.WriteLineAsync(
+                    $"Publish '{pipelineName}': no sheets changed since baseline ({effectiveSinceMode.ToString().ToLower()} mode). Nothing to export.");
+                // Still refresh baseline if incremental — so schedule-only or element-only
+                // changes that didn't surface at the sheet level don't accumulate silently.
+                if (shouldUpdateBaseline && !dryRun)
+                {
+                    try
+                    {
+                        BaselineManager.Save(effectiveBaselinePath, currentSnapshot);
+                        await output.WriteLineAsync($"Baseline refreshed: {effectiveBaselinePath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        await output.WriteLineAsync($"Warning: failed to update baseline: {ex.Message}");
+                    }
+                }
+                return 0;
+            }
+
+            await output.WriteLineAsync(
+                $"Incremental publish: {changedSheetNumbers.Count} sheet(s) changed ({effectiveSinceMode.ToString().ToLower()} mode).");
+        }
+
         // Run precheck if defined
         if (!string.IsNullOrWhiteSpace(pipeline.Precheck))
         {
@@ -115,6 +205,29 @@ public static class PublishCommand
                 continue;
             }
 
+            // Incremental: narrow sheet selector to changed set
+            var effectiveSheets = preset.Sheets;
+            if (changedSheetNumbers != null)
+            {
+                if (preset.Sheets == null || preset.Sheets.Contains("all", StringComparer.OrdinalIgnoreCase))
+                {
+                    effectiveSheets = new List<string>(changedSheetNumbers);
+                }
+                else
+                {
+                    effectiveSheets = preset.Sheets
+                        .Where(s => changedSheetNumbers.Contains(s))
+                        .ToList();
+                }
+
+                if (effectiveSheets.Count == 0)
+                {
+                    await output.WriteLineAsync($"  Skipping '{presetName}': no matching changed sheets.");
+                    succeeded++;
+                    continue;
+                }
+            }
+
             // Resolve output dir relative to profile file
             var outputDir = preset.OutputDir ?? profile.Defaults.OutputDir ?? "./exports";
             if (profileDir != null && !Path.IsPathRooted(outputDir))
@@ -122,7 +235,11 @@ public static class PublishCommand
 
             if (dryRun)
             {
-                await output.WriteLineAsync($"[dry-run] Would export '{presetName}': format={preset.Format}, outputDir={outputDir}");
+                var sheetSummary = effectiveSheets != null && effectiveSheets.Count > 0
+                    ? string.Join(",", effectiveSheets)
+                    : "(preset default)";
+                await output.WriteLineAsync(
+                    $"[dry-run] Would export '{presetName}': format={preset.Format}, sheets=[{sheetSummary}], outputDir={outputDir}");
                 succeeded++;
                 continue;
             }
@@ -132,7 +249,7 @@ public static class PublishCommand
             var request = new ExportRequest
             {
                 Format = preset.Format,
-                Sheets = preset.Sheets ?? new List<string>(),
+                Sheets = effectiveSheets ?? new List<string>(),
                 Views = preset.Views ?? new List<string>(),
                 OutputDir = outputDir
             };
@@ -158,6 +275,24 @@ public static class PublishCommand
 
         var exitCode = failed > 0 ? 1 : 0;
 
+        // Update baseline if all presets succeeded and caller asked for it
+        if (exitCode == 0 && shouldUpdateBaseline && currentSnapshot != null && effectiveBaselinePath != null && !dryRun)
+        {
+            try
+            {
+                BaselineManager.Save(effectiveBaselinePath, currentSnapshot);
+                await output.WriteLineAsync($"Baseline updated: {effectiveBaselinePath}");
+            }
+            catch (Exception ex)
+            {
+                await output.WriteLineAsync($"Warning: failed to update baseline: {ex.Message}");
+            }
+        }
+        else if (exitCode != 0 && shouldUpdateBaseline)
+        {
+            await output.WriteLineAsync($"Baseline NOT updated (publish had failures; baseline retained at {effectiveBaselinePath}).");
+        }
+
         // Journal log + receipt
         if (!dryRun)
         {
@@ -168,6 +303,8 @@ public static class PublishCommand
                 succeeded,
                 failed,
                 presets = pipeline.Presets,
+                incremental = changedSheetNumbers != null,
+                changedSheets = changedSheetNumbers?.Count ?? 0,
                 timestamp = DateTime.UtcNow.ToString("o"),
                 user = Environment.UserName,
                 profileHash = resolvedProfilePath != null && File.Exists(resolvedProfilePath)
@@ -177,7 +314,6 @@ public static class PublishCommand
 
             Output.JournalLogger.Log(profileDir, receipt);
 
-            // Write receipt file
             try
             {
                 var receiptDir = profileDir ?? Directory.GetCurrentDirectory();
@@ -203,6 +339,7 @@ public static class PublishCommand
                 succeeded,
                 failed,
                 presets = pipeline.Presets,
+                incremental = changedSheetNumbers != null,
                 status = exitCode == 0 ? "passed" : "failed",
                 timestamp = DateTime.UtcNow.ToString("o")
             });
