@@ -114,6 +114,71 @@ public class SnapshotDifferTests
     }
 
     [Fact]
+    public void Diff_Schedule_Added_AppearsInAddedList()
+    {
+        var a = MakeSnap();
+        var b = MakeSnap();
+        b.Schedules.Add(new SnapshotSchedule
+        {
+            Id = 100, Name = "Door Schedule", Category = "doors", RowCount = 5, Hash = "sh1"
+        });
+        var d = SnapshotDiffer.Diff(a, b);
+        var added = Assert.Single(d.Schedules.Added);
+        Assert.Equal(100, added.Id);
+        Assert.Equal("schedule:Door Schedule", added.Key);
+    }
+
+    [Fact]
+    public void Diff_Schedule_Removed_AppearsInRemovedList()
+    {
+        var a = MakeSnap();
+        a.Schedules.Add(new SnapshotSchedule
+        {
+            Id = 100, Name = "Door Schedule", Category = "doors", RowCount = 5, Hash = "sh1"
+        });
+        var b = MakeSnap();
+        var d = SnapshotDiffer.Diff(a, b);
+        var removed = Assert.Single(d.Schedules.Removed);
+        Assert.Equal(100, removed.Id);
+    }
+
+    [Fact]
+    public void Diff_Schedule_HashChanged_AppearsAsModified()
+    {
+        var a = MakeSnap();
+        a.Schedules.Add(new SnapshotSchedule
+        {
+            Id = 100, Name = "Door Schedule", Category = "doors", RowCount = 5, Hash = "sh1"
+        });
+        var b = MakeSnap();
+        b.Schedules.Add(new SnapshotSchedule
+        {
+            Id = 100, Name = "Door Schedule", Category = "doors", RowCount = 6, Hash = "sh2"
+        });
+        var d = SnapshotDiffer.Diff(a, b);
+        var mod = Assert.Single(d.Schedules.Modified);
+        Assert.Equal(100, mod.Id);
+        Assert.Equal("sh1", mod.OldHash);
+        Assert.Equal("sh2", mod.NewHash);
+    }
+
+    [Fact]
+    public void Diff_Summary_Schedules_ReflectsCounts()
+    {
+        var a = MakeSnap();
+        a.Schedules.Add(new SnapshotSchedule { Id = 1, Name = "A", Hash = "h1" });
+        a.Schedules.Add(new SnapshotSchedule { Id = 2, Name = "B", Hash = "h2" });
+        var b = MakeSnap();
+        b.Schedules.Add(new SnapshotSchedule { Id = 1, Name = "A", Hash = "h1_changed" });
+        b.Schedules.Add(new SnapshotSchedule { Id = 3, Name = "C", Hash = "h3" });
+        // a has {1,2}, b has {1,3} — 1 is modified, 2 removed, 3 added
+        var d = SnapshotDiffer.Diff(a, b);
+        Assert.Equal(1, d.Summary.Schedules.Added);
+        Assert.Equal(1, d.Summary.Schedules.Removed);
+        Assert.Equal(1, d.Summary.Schedules.Modified);
+    }
+
+    [Fact]
     public void Diff_Summary_CountsPerCategory()
     {
         var a = MakeSnap(("walls", 1, "A", "h1"));

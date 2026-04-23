@@ -52,8 +52,11 @@ public static class SnapshotDiffer
     private static CategoryDiff DiffElementList(string categoryName,
         List<SnapshotElement> a, List<SnapshotElement> b)
     {
-        var aById = a.ToDictionary(e => e.Id);
-        var bById = b.ToDictionary(e => e.Id);
+        // Defensively dedupe by Id (first occurrence wins). A well-formed snapshot
+        // shouldn't have duplicate ElementIds in the same category, but matching the
+        // sheet dedup behavior avoids a confusing ArgumentException on malformed input.
+        var aById = a.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+        var bById = b.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
         var diff = new CategoryDiff();
 
         foreach (var id in bById.Keys.Except(aById.Keys))
@@ -136,8 +139,9 @@ public static class SnapshotDiffer
 
     private static CategoryDiff DiffSchedules(List<SnapshotSchedule> a, List<SnapshotSchedule> b)
     {
-        var aById = a.ToDictionary(s => s.Id);
-        var bById = b.ToDictionary(s => s.Id);
+        // Defensively dedupe by Id (first occurrence wins), matching sheet dedup behavior.
+        var aById = a.GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First());
+        var bById = b.GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First());
         var diff = new CategoryDiff();
 
         foreach (var id in bById.Keys.Except(aById.Keys))
@@ -150,6 +154,8 @@ public static class SnapshotDiffer
             var sb = bById[id];
             if (sa.Hash != sb.Hash)
             {
+                // Changed stays empty — schedules carry only a rollup Hash, not per-field
+                // parameter detail. Deferred to a future phase if needed.
                 diff.Modified.Add(new ModifiedItem
                 {
                     Id = id,
