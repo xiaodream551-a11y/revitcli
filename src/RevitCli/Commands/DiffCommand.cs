@@ -81,6 +81,9 @@ public static class DiffCommand
                 StringComparer.OrdinalIgnoreCase);
             foreach (var key in new System.Collections.Generic.List<string>(diff.Categories.Keys))
                 if (!allow.Contains(key)) diff.Categories.Remove(key);
+            // Keep Summary.PerCategory in sync so the header totals match the visible sections.
+            foreach (var key in new System.Collections.Generic.List<string>(diff.Summary.PerCategory.Keys))
+                if (!allow.Contains(key)) diff.Summary.PerCategory.Remove(key);
         }
 
         var effectiveFormat = outputFormat;

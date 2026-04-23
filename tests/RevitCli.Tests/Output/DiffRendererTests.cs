@@ -83,4 +83,29 @@ public class DiffRendererTests
         var output = DiffRenderer.Render(SampleDiff(), "xml-whatever", maxRows: 20);
         Assert.Contains("walls", output);
     }
+
+    [Fact]
+    public void RenderMarkdown_EscapesPipeInCellValues()
+    {
+        var d = new SnapshotDiff { SchemaVersion = 1 };
+        d.Categories["walls"] = new CategoryDiff
+        {
+            Modified = new()
+            {
+                new ModifiedItem
+                {
+                    Id = 1, Key = "walls:Level|One",
+                    Changed = new() { ["Note"] = new ParamChange { From = "a|b", To = "c|d" } },
+                    OldHash = "h1", NewHash = "h2"
+                }
+            }
+        };
+        d.Summary.PerCategory["walls"] = new CategoryCount { Modified = 1 };
+
+        var output = DiffRenderer.Render(d, "markdown", maxRows: 20);
+
+        Assert.Contains("walls:Level\\|One", output);
+        Assert.Contains("\"a\\|b\"", output);
+        Assert.Contains("\"c\\|d\"", output);
+    }
 }

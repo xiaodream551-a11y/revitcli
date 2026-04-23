@@ -115,8 +115,8 @@ public static class DiffRenderer
                 var m = d.Modified[i];
                 var changes = new List<string>();
                 foreach (var c in m.Changed)
-                    changes.Add($"{c.Key}: \"{c.Value.From}\" → \"{c.Value.To}\"");
-                sb.AppendLine($"| {m.Id} | {m.Key} | {string.Join("; ", changes)} |");
+                    changes.Add($"{EscapeMdCell(c.Key)}: \"{EscapeMdCell(c.Value.From)}\" → \"{EscapeMdCell(c.Value.To)}\"");
+                sb.AppendLine($"| {m.Id} | {EscapeMdCell(m.Key)} | {string.Join("; ", changes)} |");
             }
             if (d.Modified.Count > show)
                 sb.AppendLine($"\n...and {d.Modified.Count - show} more");
@@ -138,4 +138,8 @@ public static class DiffRenderer
             if (d.Removed.Count > show) sb.AppendLine($"...and {d.Removed.Count - show} more");
         }
     }
+
+    // Escape a value for embedding inside a Markdown table cell. Pipes would otherwise
+    // be parsed as column separators and break the table.
+    private static string EscapeMdCell(string s) => s.Replace("|", "\\|");
 }
