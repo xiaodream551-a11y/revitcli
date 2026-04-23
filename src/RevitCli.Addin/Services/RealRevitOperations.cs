@@ -2027,4 +2027,13 @@ public sealed class RealRevitOperations : IRevitOperations
             };
         });
     }
+
+    public Task<ModelSnapshot> CaptureSnapshotAsync(SnapshotRequest request)
+    {
+        // Task 11 fills this with the real Revit API traversal.
+        // This stub keeps the addin compiling from Task 3 onward.
+        throw new NotImplementedException(
+            "CaptureSnapshotAsync will be implemented in Task 11. " +
+            "If you're seeing this at runtime, check Model-as-Code plan progress.");
+    }
 }
