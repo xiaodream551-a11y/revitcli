@@ -8,7 +8,8 @@ namespace RevitCli.Output;
 public static class SnapshotDiffer
 {
     public static SnapshotDiff Diff(ModelSnapshot from, ModelSnapshot to,
-                                    string? fromLabel = null, string? toLabel = null)
+                                    string? fromLabel = null, string? toLabel = null,
+                                    SinceMode sinceMode = SinceMode.Meta)
     {
         if (from.SchemaVersion != to.SchemaVersion)
             throw new InvalidOperationException(
@@ -38,7 +39,7 @@ public static class SnapshotDiffer
         }
 
         // Sheets — key on Number
-        result.Sheets = DiffSheets(from.Sheets, to.Sheets);
+        result.Sheets = DiffSheets(from.Sheets, to.Sheets, sinceMode);
 
         // Schedules — key on Id
         result.Schedules = DiffSchedules(from.Schedules, to.Schedules);
@@ -103,7 +104,7 @@ public static class SnapshotDiffer
         return changes;
     }
 
-    private static CategoryDiff DiffSheets(List<SnapshotSheet> a, List<SnapshotSheet> b)
+    private static CategoryDiff DiffSheets(List<SnapshotSheet> a, List<SnapshotSheet> b, SinceMode sinceMode)
     {
         var aByNum = a.GroupBy(s => s.Number).ToDictionary(g => g.Key, g => g.First());
         var bByNum = b.GroupBy(s => s.Number).ToDictionary(g => g.Key, g => g.First());
@@ -123,18 +124,31 @@ public static class SnapshotDiffer
         {
             var sa = aByNum[num];
             var sb = bByNum[num];
-            if (sa.MetaHash != sb.MetaHash)
+            if (SheetChanged(sa, sb, sinceMode))
             {
                 diff.Modified.Add(new ModifiedItem
                 {
                     Id = sb.ViewId,
                     Key = $"sheet:{num}",
-                    OldHash = sa.MetaHash, NewHash = sb.MetaHash,
+                    OldHash = sinceMode == SinceMode.Content ? sa.ContentHash : sa.MetaHash,
+                    NewHash = sinceMode == SinceMode.Content ? sb.ContentHash : sb.MetaHash,
                     Changed = DiffParameters(sa.Parameters, sb.Parameters)
                 });
             }
         }
         return diff;
+    }
+
+    private static bool SheetChanged(SnapshotSheet a, SnapshotSheet b, SinceMode sinceMode)
+    {
+        if (sinceMode == SinceMode.Meta) return a.MetaHash != b.MetaHash;
+
+        // Content mode: use ContentHash if both sides populated; otherwise fall back to MetaHash.
+        // A P1 baseline (empty ContentHash on both) effectively runs Meta-mode automatically.
+        if (string.IsNullOrEmpty(a.ContentHash) || string.IsNullOrEmpty(b.ContentHash))
+            return a.MetaHash != b.MetaHash;
+
+        return a.ContentHash != b.ContentHash;
     }
 
     private static CategoryDiff DiffSchedules(List<SnapshotSchedule> a, List<SnapshotSchedule> b)
