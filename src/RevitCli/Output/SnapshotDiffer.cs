@@ -126,12 +126,18 @@ public static class SnapshotDiffer
             var sb = bByNum[num];
             if (SheetChanged(sa, sb, sinceMode))
             {
+                // Report the hash that the comparison actually used. In Content mode with
+                // a P1-era baseline (empty ContentHash), SheetChanged falls back to MetaHash
+                // — so expose MetaHash here too, not the empty ContentHash string.
+                bool usedContentHash = sinceMode == SinceMode.Content
+                    && !string.IsNullOrEmpty(sa.ContentHash)
+                    && !string.IsNullOrEmpty(sb.ContentHash);
                 diff.Modified.Add(new ModifiedItem
                 {
                     Id = sb.ViewId,
                     Key = $"sheet:{num}",
-                    OldHash = sinceMode == SinceMode.Content ? sa.ContentHash : sa.MetaHash,
-                    NewHash = sinceMode == SinceMode.Content ? sb.ContentHash : sb.MetaHash,
+                    OldHash = usedContentHash ? sa.ContentHash : sa.MetaHash,
+                    NewHash = usedContentHash ? sb.ContentHash : sb.MetaHash,
                     Changed = DiffParameters(sa.Parameters, sb.Parameters)
                 });
             }

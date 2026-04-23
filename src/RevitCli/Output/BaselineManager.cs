@@ -48,7 +48,9 @@ public static class BaselineManager
 
         var tmp = fullPath + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(snapshot, WriteOpts));
-        if (File.Exists(fullPath)) File.Delete(fullPath);
-        File.Move(tmp, fullPath);
+        // Single-syscall rename: atomic on both Linux (rename(2)) and Windows
+        // (MoveFileExW with REPLACE_EXISTING). If the process crashes mid-rename,
+        // the filesystem guarantees either old or new, never gone-then-new.
+        File.Move(tmp, fullPath, overwrite: true);
     }
 }
