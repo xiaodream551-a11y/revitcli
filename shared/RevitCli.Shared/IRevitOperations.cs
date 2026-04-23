@@ -14,4 +14,5 @@ public interface IRevitOperations
     Task<ScheduleInfo[]> ListSchedulesAsync();
     Task<ScheduleData> ExportScheduleAsync(ScheduleExportRequest request);
     Task<ScheduleCreateResult> CreateScheduleAsync(ScheduleCreateRequest request);
+    Task<ModelSnapshot> CaptureSnapshotAsync(SnapshotRequest request);
 }

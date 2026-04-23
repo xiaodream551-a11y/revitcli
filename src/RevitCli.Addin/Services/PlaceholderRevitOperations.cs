@@ -99,4 +99,57 @@ public class PlaceholderRevitOperations : IRevitOperations
             PlacedOnSheet = null
         });
     }
+
+    public Task<ModelSnapshot> CaptureSnapshotAsync(SnapshotRequest request)
+    {
+        var snapshot = new ModelSnapshot
+        {
+            SchemaVersion = 1,
+            TakenAt = "2026-04-23T00:00:00Z",
+            Revit = new SnapshotRevit
+            {
+                Version = "2025",
+                Document = "Placeholder.rvt",
+                DocumentPath = "/tmp/Placeholder.rvt"
+            },
+            Model = new SnapshotModel { SizeBytes = 0, FileHash = "" },
+            Categories = new Dictionary<string, List<SnapshotElement>>
+            {
+                ["walls"] = new()
+                {
+                    new SnapshotElement
+                    {
+                        Id = 1001, Name = "Placeholder wall", TypeName = "W1",
+                        Parameters = new() { ["Mark"] = "W1" },
+                        Hash = "placeholder111111"
+                    }
+                }
+            },
+            Sheets = new()
+            {
+                new SnapshotSheet
+                {
+                    Number = "A-01", Name = "Placeholder sheet",
+                    ViewId = 2001, PlacedViewIds = new() { 3001 },
+                    Parameters = new(),
+                    MetaHash = "placeholder_sheet",
+                    ContentHash = ""
+                }
+            },
+            Schedules = new()
+            {
+                new SnapshotSchedule
+                {
+                    Id = 4001, Name = "Placeholder schedule",
+                    Category = "walls", RowCount = 1, Hash = "placeholder_sch"
+                }
+            },
+            Summary = new SnapshotSummary
+            {
+                ElementCounts = new() { ["walls"] = 1 },
+                SheetCount = 1, ScheduleCount = 1
+            }
+        };
+        return Task.FromResult(snapshot);
+    }
 }
