@@ -130,6 +130,13 @@ public sealed class RealRevitOperations : IRevitOperations
 
     private static readonly Dictionary<string, BuiltInCategory> CategoryAliases = BuildCategoryAliases();
 
+    private static readonly string[] DefaultSnapshotCategories = new[]
+    {
+        "walls", "doors", "windows", "rooms",
+        "floors", "roofs", "stairs", "columns",
+        "structuralcolumns", "ceilings", "furniture", "levels"
+    };
+
     private static Dictionary<string, BuiltInCategory> BuildCategoryAliases()
     {
         var map = new Dictionary<string, BuiltInCategory>(StringComparer.OrdinalIgnoreCase);
@@ -2030,10 +2037,147 @@ public sealed class RealRevitOperations : IRevitOperations
 
     public Task<ModelSnapshot> CaptureSnapshotAsync(SnapshotRequest request)
     {
-        // Task 11 fills this with the real Revit API traversal.
-        // This stub keeps the addin compiling from Task 3 onward.
-        throw new NotImplementedException(
-            "CaptureSnapshotAsync will be implemented in Task 11. " +
-            "If you're seeing this at runtime, check Model-as-Code plan progress.");
+        return _bridge.InvokeAsync(app =>
+        {
+            var doc = RequireActiveDocument(app);
+
+            var snapshot = new ModelSnapshot
+            {
+                SchemaVersion = 1,
+                TakenAt = DateTime.UtcNow.ToString("o"),
+                Revit = new SnapshotRevit
+                {
+                    Version = app.Application.VersionNumber ?? "",
+                    Document = string.IsNullOrEmpty(doc.Title)
+                        ? "" : System.IO.Path.GetFileNameWithoutExtension(doc.Title),
+                    DocumentPath = doc.PathName ?? ""
+                },
+                Model = new SnapshotModel { SizeBytes = 0, FileHash = "" }
+            };
+
+            // Elements
+            var requested = request.IncludeCategories ?? new List<string>(DefaultSnapshotCategories);
+            foreach (var catName in requested)
+            {
+                BuiltInCategory bic;
+                try { bic = ResolveCategory(doc, catName); }
+                catch (ArgumentException) { continue; }
+
+                var items = new List<SnapshotElement>();
+                foreach (var element in new FilteredElementCollector(doc)
+                    .OfCategory(bic).WhereElementIsNotElementType())
+                {
+                    if (request.SummaryOnly)
+                    {
+                        items.Add(new SnapshotElement { Id = element.Id.Value });
+                    }
+                    else
+                    {
+                        var info = MapElement(doc, element);
+                        var snap = new SnapshotElement
+                        {
+                            Id = element.Id.Value,
+                            Name = info.Name ?? "",
+                            TypeName = info.TypeName ?? "",
+                            Parameters = new Dictionary<string, string>(info.Parameters)
+                        };
+                        snap.Hash = SnapshotHasher.HashElement(snap);
+                        items.Add(snap);
+                    }
+                }
+                snapshot.Categories[catName] = items;
+            }
+
+            // Sheets
+            if (request.IncludeSheets && !request.SummaryOnly)
+            {
+                foreach (var sheet in new FilteredElementCollector(doc)
+                    .OfClass(typeof(ViewSheet)).Cast<ViewSheet>())
+                {
+                    var placedIds = new List<long>();
+                    try
+                    {
+                        foreach (var viewId in sheet.GetAllPlacedViews())
+                            placedIds.Add(viewId.Value);
+                    }
+                    catch { /* empty sheet or API edge case — leave placedIds empty */ }
+
+                    var sheetSnap = new SnapshotSheet
+                    {
+                        Number = sheet.SheetNumber ?? "",
+                        Name = sheet.Name ?? "",
+                        ViewId = sheet.Id.Value,
+                        PlacedViewIds = placedIds,
+                        Parameters = ReadVisibleParameters(doc, sheet),
+                        ContentHash = ""  // P2 will compute
+                    };
+                    sheetSnap.MetaHash = SnapshotHasher.HashSheetMeta(sheetSnap);
+                    snapshot.Sheets.Add(sheetSnap);
+                }
+            }
+
+            // Schedules
+            if (request.IncludeSchedules && !request.SummaryOnly)
+            {
+                foreach (var vs in new FilteredElementCollector(doc)
+                    .OfClass(typeof(ViewSchedule)).Cast<ViewSchedule>())
+                {
+                    if (vs.IsTitleblockRevisionSchedule) continue;
+
+                    var columns = new List<string>();
+                    var fieldCount = vs.Definition.GetFieldCount();
+                    for (var i = 0; i < fieldCount; i++)
+                    {
+                        var f = vs.Definition.GetField(i);
+                        if (!f.IsHidden) columns.Add(f.GetName());
+                    }
+
+                    var rows = new List<Dictionary<string, string>>();
+                    var bodySection = vs.GetTableData().GetSectionData(SectionType.Body);
+                    for (var r = 1; r < bodySection.NumberOfRows; r++)
+                    {
+                        var row = new Dictionary<string, string>();
+                        for (var c = 0; c < columns.Count; c++)
+                            row[columns[c]] = vs.GetCellText(SectionType.Body, r, c);
+                        rows.Add(row);
+                    }
+
+                    var cat = "";
+                    try { cat = vs.Definition.CategoryId is { } catId
+                        ? Category.GetCategory(doc, catId)?.Name ?? "" : ""; }
+                    catch { cat = ""; }
+
+                    snapshot.Schedules.Add(new SnapshotSchedule
+                    {
+                        Id = vs.Id.Value,
+                        Name = vs.Name ?? "",
+                        Category = cat,
+                        RowCount = rows.Count,
+                        Hash = SnapshotHasher.HashSchedule(cat, vs.Name ?? "", columns, rows)
+                    });
+                }
+            }
+
+            // Summary
+            snapshot.Summary = new SnapshotSummary
+            {
+                SheetCount = snapshot.Sheets.Count,
+                ScheduleCount = snapshot.Schedules.Count
+            };
+            foreach (var kv in snapshot.Categories)
+                snapshot.Summary.ElementCounts[kv.Key] = kv.Value.Count;
+
+            // If SummaryOnly, clear bulky lists so the snapshot is light
+            if (request.SummaryOnly)
+            {
+                // Keep counts; drop element lists, sheets, schedules
+                foreach (var key in new List<string>(snapshot.Categories.Keys))
+                    snapshot.Categories[key] = new List<SnapshotElement>();
+                snapshot.Sheets = new List<SnapshotSheet>();
+                snapshot.Schedules = new List<SnapshotSchedule>();
+            }
+
+            return snapshot;
+        });
     }
 }
