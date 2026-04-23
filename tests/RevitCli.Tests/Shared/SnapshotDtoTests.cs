@@ -36,6 +36,13 @@ public class SnapshotDtoTests
         };
 
         var json = JsonSerializer.Serialize(original);
+
+        // Lock the wire contract: JSON must use camelCase (project convention).
+        Assert.Contains("\"schemaVersion\"", json);
+        Assert.Contains("\"takenAt\"", json);
+        Assert.Contains("\"documentPath\"", json);
+        Assert.DoesNotContain("\"SchemaVersion\"", json);
+
         var restored = JsonSerializer.Deserialize<ModelSnapshot>(json, JsonOpts)!;
 
         Assert.Equal(1, restored.SchemaVersion);
