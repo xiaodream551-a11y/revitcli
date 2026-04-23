@@ -130,6 +130,15 @@ public class PublishPipeline
 
     [YamlMember(Alias = "precheck")]
     public string? Precheck { get; set; }
+
+    [YamlMember(Alias = "incremental")]
+    public bool Incremental { get; set; } = false;
+
+    [YamlMember(Alias = "baselinePath")]
+    public string? BaselinePath { get; set; }
+
+    [YamlMember(Alias = "sinceMode")]
+    public string SinceMode { get; set; } = "content";
 }
 
 public class ScheduleTemplate
