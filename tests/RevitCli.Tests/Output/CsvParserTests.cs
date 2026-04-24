@@ -24,6 +24,40 @@ public class CsvParserTests
     }
 
     [Fact]
+    public void Parse_Utf16LeWithBom_DetectsAndDecodes()
+    {
+        var bom = new byte[] { 0xFF, 0xFE };
+        var body = Encoding.Unicode.GetBytes("Mark,Lock\nW01,YALE-500\n");
+        var bytes = new byte[bom.Length + body.Length];
+        bom.CopyTo(bytes, 0);
+        body.CopyTo(bytes, bom.Length);
+
+        var data = CsvParser.Parse(bytes);
+
+        Assert.Equal("utf-16le", data.EncodingName);
+        Assert.Equal(new[] { "Mark", "Lock" }, data.Headers);
+        Assert.Single(data.Rows);
+        Assert.Equal(new[] { "W01", "YALE-500" }, data.Rows[0]);
+    }
+
+    [Fact]
+    public void Parse_Utf16BeWithBom_DetectsAndDecodes()
+    {
+        var bom = new byte[] { 0xFE, 0xFF };
+        var body = Encoding.BigEndianUnicode.GetBytes("Mark,Lock\nW01,YALE-500\n");
+        var bytes = new byte[bom.Length + body.Length];
+        bom.CopyTo(bytes, 0);
+        body.CopyTo(bytes, bom.Length);
+
+        var data = CsvParser.Parse(bytes);
+
+        Assert.Equal("utf-16be", data.EncodingName);
+        Assert.Equal(new[] { "Mark", "Lock" }, data.Headers);
+        Assert.Single(data.Rows);
+        Assert.Equal(new[] { "W01", "YALE-500" }, data.Rows[0]);
+    }
+
+    [Fact]
     public void Parse_Utf8NoBom_AutoDetectsUtf8_WithChinese()
     {
         var bytes = Encoding.UTF8.GetBytes("Mark,锁具型号,耐火等级\nW01,YALE-500,甲级\nW02,YALE-700,乙级\n");

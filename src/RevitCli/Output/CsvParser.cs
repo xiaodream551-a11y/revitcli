@@ -161,6 +161,7 @@ public static class CsvParser
         if (rows.Count == 0)
             return (new List<string>(), new List<List<string>>());
 
+        // Headers trimmed (consumers compare by name); row cells preserved as-is so callers decide trim policy per use.
         var headers = rows[0].Select(h => h.Trim()).ToList();
         var dataRows = rows.Skip(1).ToList();
         return (headers, dataRows);
