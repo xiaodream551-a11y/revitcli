@@ -38,7 +38,7 @@ public class PlaceholderRevitOperations : IRevitOperations
     {
         return Task.FromResult(new ExportProgress
         {
-            TaskId = Guid.NewGuid().ToString("N")[..8],
+            TaskId = Guid.NewGuid().ToString("N").Substring(0, 8),
             Status = "completed",
             Progress = 100
         });

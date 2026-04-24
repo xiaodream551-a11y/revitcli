@@ -1205,12 +1205,16 @@ public sealed class RealRevitOperations : IRevitOperations
             group.Add((room.Name, ToCliElementId(room.Id)));
         }
 
-        foreach (var (number, group) in numberGroups)
+        foreach (var kvp in numberGroups)
         {
+            var number = kvp.Key;
+            var group = kvp.Value;
             if (group.Count > 1)
             {
-                foreach (var (name, id) in group)
+                foreach (var entry in group)
                 {
+                    var name = entry.Item1;
+                    var id = entry.Item2;
                     issues.Add(new AuditIssue
                     {
                         Rule = "duplicate-room-numbers",
@@ -1454,7 +1458,7 @@ public sealed class RealRevitOperations : IRevitOperations
         {
             var doc = RequireActiveDocument(app);
             var format = request.Format.ToLowerInvariant();
-            var taskId = Guid.NewGuid().ToString("N")[..8];
+            var taskId = Guid.NewGuid().ToString("N").Substring(0, 8);
 
             // Ensure output directory exists
             if (!Directory.Exists(request.OutputDir))

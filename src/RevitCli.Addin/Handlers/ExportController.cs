@@ -22,7 +22,7 @@ public class ExportController : WebApiController
     public async Task Export()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         ExportRequest? request;
         try
@@ -100,7 +100,7 @@ public class ExportController : WebApiController
     public async Task GetProgress(string taskId)
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         try
         {

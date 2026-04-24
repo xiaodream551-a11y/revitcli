@@ -21,7 +21,7 @@ public class SnapshotController : WebApiController
     public async Task CaptureSnapshot()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         SnapshotRequest? request;
         try
