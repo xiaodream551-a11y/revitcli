@@ -10,13 +10,6 @@ public class ImportGroup
     public string Param { get; init; } = "";
     public string Value { get; init; } = "";
     public List<long> ElementIds { get; init; } = new();
-    public List<ImportSource> Sources { get; init; } = new();
-}
-
-public class ImportSource
-{
-    public int RowNumber { get; init; }            // 1-based, header = row 1
-    public string MatchByValue { get; init; } = "";
 }
 
 public class ImportMiss
@@ -69,8 +62,10 @@ public static class ImportPlanner
 
         // Index elements by matchBy parameter value.
         var index = new Dictionary<string, List<long>>(StringComparer.Ordinal);
+        var seenIds = new HashSet<long>();
         foreach (var el in elements)
         {
+            if (!seenIds.Add(el.Id)) continue;            // deduplicate by element Id
             if (!el.Parameters.TryGetValue(matchBy, out var key)) continue;
             var trimmed = key?.Trim() ?? "";
             if (trimmed.Length == 0) continue;
@@ -127,21 +122,30 @@ public static class ImportPlanner
             List<long> targets;
             if (matched.Count > 1)
             {
-                targets = onDuplicate switch
+                if (onDuplicate == "first")
                 {
-                    "first" => new List<long> { matched[0] },
-                    "all" => matched,
-                    _ => null!
-                };
-                if (targets == null!)
+                    targets = new List<long> { matched[0] };
+                }
+                else if (onDuplicate == "all")
+                {
+                    // share reference — read-only iteration, no mutation
+                    targets = matched;
+                }
+                else if (onDuplicate == "error")
                 {
                     plan.Duplicates.Add(new ImportDuplicate
                     {
                         RowNumber = rowNum,
                         MatchByValue = matchKey,
-                        ElementIds = matched
+                        ElementIds = new List<long>(matched)   // defensive copy — see Fix 2
                     });
                     continue;
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        $"Unknown onDuplicate value: '{onDuplicate}'. Expected: error, first, all.",
+                        nameof(onDuplicate));
                 }
             }
             else
@@ -170,6 +174,9 @@ public static class ImportPlanner
                     var key = (id, revitParam);
                     if (assignments.TryGetValue(key, out var prev))
                     {
+                        // Emit at most one warning per (element, param) — prevents log spam when a CSV
+                        // is reordered or sliced; user sees the first override and the final value
+                        // (assignments[key] = ... still records the latest, so result is deterministic).
                         if (prev.Value != raw && warnedKeys.Add(key))
                             plan.Warnings.Add(
                                 $"Row {rowNum}: '{matchKey}' / '{revitParam}' " +
@@ -189,18 +196,11 @@ public static class ImportPlanner
         foreach (var grp in grouped)
         {
             var ids = grp.Select(kv => kv.Key.Id).Distinct().OrderBy(x => x).ToList();
-            var sources = grp
-                .Select(kv => new ImportSource { RowNumber = kv.Value.Row, MatchByValue = kv.Value.MatchKey })
-                .GroupBy(s => s.RowNumber)
-                .Select(g => g.First())
-                .OrderBy(s => s.RowNumber)
-                .ToList();
             plan.Groups.Add(new ImportGroup
             {
                 Param = grp.Key.Param,
                 Value = grp.Key.Value,
-                ElementIds = ids,
-                Sources = sources
+                ElementIds = ids
             });
         }
 

@@ -201,4 +201,36 @@ public class ImportPlannerTests
         Assert.Single(plan.Skipped);
         Assert.Contains("empty", plan.Skipped[0].Reason);
     }
+
+    [Fact]
+    public void Plan_OnMissingSkip_DropsMissSilently_NoRecord()
+    {
+        var elements = Elements((101, "W01", null));
+        var csv = Csv(
+            new List<string> { "Mark", "Lock" },
+            new List<string> { "W99", "X" });
+        var mapping = new Dictionary<string, string> { ["Lock"] = "Lock" };
+
+        var plan = ImportPlanner.Plan(csv, elements, mapping, "Mark", "skip", "error");
+
+        Assert.Empty(plan.Groups);
+        Assert.Empty(plan.Misses);          // skip drops without recording
+        Assert.Empty(plan.Skipped);         // not the same as Skipped (which tracks empty cells)
+    }
+
+    [Fact]
+    public void Plan_OnMissingWarn_RecordsMiss_LikeError_ButCallerInterprets()
+    {
+        var elements = Elements((101, "W01", null));
+        var csv = Csv(
+            new List<string> { "Mark", "Lock" },
+            new List<string> { "W99", "X" });
+        var mapping = new Dictionary<string, string> { ["Lock"] = "Lock" };
+
+        var plan = ImportPlanner.Plan(csv, elements, mapping, "Mark", "warn", "error");
+
+        Assert.Empty(plan.Groups);
+        Assert.Single(plan.Misses);
+        Assert.Equal("W99", plan.Misses[0].MatchByValue);
+    }
 }
