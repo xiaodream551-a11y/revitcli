@@ -26,7 +26,8 @@ internal static class CliCommandCatalog
         ("schedule", "Manage and export Revit schedules"),
         ("diff", "Diff two snapshot JSON files"),
         ("snapshot", "Capture model's semantic state as JSON"),
-        ("interactive", "Enter interactive REPL mode")
+        ("interactive", "Enter interactive REPL mode"),
+        ("import", "Batch-write Revit element parameters from a CSV file")
     };
 
     internal static readonly (string Command, string Description)[] InteractiveHelpEntries =
@@ -82,6 +83,8 @@ internal static class CliCommandCatalog
         root.AddCommand(ScheduleCommand.Create(client));
         root.AddCommand(DiffCommand.Create());
         root.AddCommand(SnapshotCommand.Create(client));
+
+        root.AddCommand(ImportCommand.Create(client));
 
         if (includeBatchCommand)
             root.AddCommand(BatchCommand.Create(client, config));
