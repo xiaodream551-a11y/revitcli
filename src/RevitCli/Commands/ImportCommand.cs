@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using RevitCli.Client;
 using RevitCli.Output;
 using RevitCli.Shared;
-using Spectre.Console;
 
 namespace RevitCli.Commands;
 
