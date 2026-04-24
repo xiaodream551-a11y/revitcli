@@ -2091,6 +2091,16 @@ public sealed class RealRevitOperations : IRevitOperations
                 snapshot.Categories[Normalize(catName)] = items;
             }
 
+            // Build an element-hash index by Id for ContentHash computation below.
+            // SummaryOnly elements have empty Hash; SummaryOnly short-circuits sheets
+            // anyway, so the index is only read in the full-snapshot path.
+            var elementHashById = new Dictionary<long, string>();
+            foreach (var kv in snapshot.Categories)
+            {
+                foreach (var el in kv.Value)
+                    elementHashById[el.Id] = el.Hash;
+            }
+
             // Sheets
             if (request.IncludeSheets)
             {
@@ -2122,10 +2132,11 @@ public sealed class RealRevitOperations : IRevitOperations
                         Name = sheet.Name ?? "",
                         ViewId = ToCliElementId(sheet.Id),
                         PlacedViewIds = placedIds,
-                        Parameters = ReadVisibleParameters(doc, sheet),
-                        ContentHash = ""  // P2 will compute
+                        Parameters = ReadVisibleParameters(doc, sheet)
                     };
                     sheetSnap.MetaHash = SnapshotHasher.HashSheetMeta(sheetSnap);
+                    sheetSnap.ContentHash = ComputeSheetContentHash(
+                        doc, sheetSnap.MetaHash, placedIds, elementHashById);
                     snapshot.Sheets.Add(sheetSnap);
                 }
             }
@@ -2206,5 +2217,42 @@ public sealed class RealRevitOperations : IRevitOperations
 
             return snapshot;
         });
+    }
+
+    /// <summary>
+    /// Compute a sheet's ContentHash: per placed view, enumerate non-type elements in view scope
+    /// and look up each element's already-computed Hash from the snapshot's element index. Elements
+    /// outside snapshot categories (annotations, detail items) are intentionally skipped — ContentHash
+    /// tracks the structural scope we snapshot, not everything rendered.
+    /// </summary>
+    private static string ComputeSheetContentHash(
+        Document doc,
+        string metaHash,
+        List<long> placedViewIds,
+        Dictionary<long, string> elementHashById)
+    {
+        var perView = new List<(long viewId, List<string> elementHashes)>();
+        foreach (var viewIdLong in placedViewIds)
+        {
+            var hashes = new List<string>();
+            try
+            {
+                var viewId = new ElementId(viewIdLong);
+                foreach (var element in new FilteredElementCollector(doc, viewId)
+                    .WhereElementIsNotElementType())
+                {
+                    var id = ToCliElementId(element.Id);
+                    if (elementHashById.TryGetValue(id, out var h))
+                        hashes.Add(h);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[RevitCli] ComputeSheetContentHash view {viewIdLong}: {ex.Message}");
+            }
+            perView.Add((viewIdLong, hashes));
+        }
+        return SnapshotHasher.HashSheetContent(metaHash, perView);
     }
 }

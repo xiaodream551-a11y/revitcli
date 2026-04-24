@@ -38,6 +38,29 @@ public static class SnapshotHasher
         return Sha256Short(sb.ToString());
     }
 
+    /// <summary>
+    /// Compose a sheet's ContentHash from its MetaHash and the element-hash set of each placed view.
+    /// Views are sorted by viewId; element hashes within a view are sorted ordinally. Result is
+    /// stable across collector iteration order.
+    /// </summary>
+    public static string HashSheetContent(
+        string sheetMetaHash,
+        List<(long viewId, List<string> elementHashes)> perView)
+    {
+        var sb = new StringBuilder();
+        sb.Append("meta=").Append(Escape(sheetMetaHash ?? "")).Append('\n');
+        foreach (var (viewId, hashes) in (perView ?? new List<(long, List<string>)>())
+                 .OrderBy(v => v.viewId))
+        {
+            sb.Append("view=").Append(viewId).Append('\n');
+            foreach (var h in (hashes ?? new List<string>()).OrderBy(h => h, StringComparer.Ordinal))
+            {
+                sb.Append("  ").Append(Escape(h ?? "")).Append('\n');
+            }
+        }
+        return Sha256Short(sb.ToString());
+    }
+
     public static string HashSchedule(
         string category,
         string name,

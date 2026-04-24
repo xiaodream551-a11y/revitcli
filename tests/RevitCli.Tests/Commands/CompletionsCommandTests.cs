@@ -99,4 +99,33 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("snapshot", script);
         Assert.Contains("diff", script);
     }
+
+    [Fact]
+    public async Task BashCompletions_PublishIncludes_SinceFlags()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "bash" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("--since", script);
+        Assert.Contains("--since-mode", script);
+        Assert.Contains("--update-baseline", script);
+    }
+
+    [Fact]
+    public async Task ZshCompletions_PublishIncludes_SinceFlags()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "zsh" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("--since", script);
+        Assert.Contains("--since-mode", script);
+    }
 }

@@ -10,6 +10,9 @@ public static class CompletionsCommand
     private static readonly string[] ExportOptions = { "--format", "--sheets", "--output-dir" };
     private static readonly string[] SetOptions = { "--filter", "--id", "--param", "--value", "--dry-run" };
     private static readonly string[] AuditOptions = { "--rules", "--list" };
+    private static readonly string[] PublishOptions =
+        { "--profile", "--dry-run", "--since", "--since-mode", "--update-baseline" };
+    private static readonly string[] SinceModes = { "content", "meta" };
 
     public static Command Create()
     {
@@ -49,6 +52,8 @@ public static class CompletionsCommand
         var exportOptions = JoinWords(ExportOptions);
         var setOptions = JoinWords(SetOptions);
         var auditOptions = JoinWords(AuditOptions);
+        var publishOptions = JoinWords(PublishOptions);
+        var sinceModes = JoinWords(SinceModes);
         var configSubcommands = JoinWords(CliCommandCatalog.ConfigSubcommands);
         var configKeys = JoinWords(ConfigCommand.ValidKeys);
         var outputFormats = JoinWords(QueryCommand.ValidOutputFormats);
@@ -143,6 +148,19 @@ public static class CompletionsCommand
             "                return",
             "            fi",
             "            ;;",
+            "        publish)",
+            "            case \"$prev\" in",
+            "                --since|--profile)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --since-mode)",
+            $"                    COMPREPLY=($(compgen -W \"{sinceModes}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            $"            COMPREPLY=($(compgen -W \"{publishOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        status|doctor|interactive)",
             "            COMPREPLY=()",
             "            ;;",
@@ -230,6 +248,14 @@ public static class CompletionsCommand
             "                batch)",
             "                    _arguments '1:file:_files'",
             "                    ;;",
+            "                publish)",
+            "                    _arguments \\",
+            "                        '--profile[Path to .revitcli.yml profile]:file:_files' \\",
+            "                        '--dry-run[Preview without exporting]' \\",
+            "                        '--since[Baseline snapshot JSON file]:file:_files' \\",
+            "                        '--since-mode[content or meta]:mode:(content meta)' \\",
+            "                        '--update-baseline[Update baseline after successful publish]'",
+            "                    ;;",
             "            esac",
             "            ;;",
             "    esac",
@@ -246,6 +272,8 @@ public static class CompletionsCommand
         var exportOptions = FormatPowerShellArray(ExportOptions);
         var setOptions = FormatPowerShellArray(SetOptions);
         var auditOptions = FormatPowerShellArray(AuditOptions);
+        var publishOptions = FormatPowerShellArray(PublishOptions);
+        var sinceModes = FormatPowerShellArray(SinceModes);
         var outputFormats = FormatPowerShellArray(QueryCommand.ValidOutputFormats);
         var exportFormats = FormatPowerShellArray(ExportCommand.ValidFormats);
         var configSubcommands = FormatPowerShellArray(CliCommandCatalog.ConfigSubcommands);
@@ -266,7 +294,11 @@ public static class CompletionsCommand
             $"        'export' = @({exportOptions})",
             $"        'set' = @({setOptions})",
             $"        'audit' = @({auditOptions})",
+            $"        'publish' = @({publishOptions})",
             "    }",
+
+            "",
+            $"    $sinceModes = @({sinceModes})",
             "",
             $"    $outputFormats = @({outputFormats})",
             $"    $exportFormats = @({exportFormats})",
@@ -367,6 +399,14 @@ public static class CompletionsCommand
             "                New-RevitCliCompletionResults -Values $shells -ToolTip 'Shell'",
             "                return",
             "            }",
+            "            return",
+            "        }",
+            "        'publish' {",
+            "            if ($previous -eq '--since-mode') {",
+            "                New-RevitCliCompletionResults -Values $sinceModes -ToolTip 'Since mode'",
+            "                return",
+            "            }",
+            "            New-RevitCliCompletionResults -Values $commandOptions['publish'] -ToolTip 'Option'",
             "            return",
             "        }",
             "    }",
