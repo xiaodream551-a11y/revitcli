@@ -45,6 +45,7 @@ internal static class CliCommandCatalog
         ("schedule list", "List existing schedules in the model"),
         ("schedule export", "Export schedule data (--category, --name, --fields, --output)"),
         ("schedule create", "Create a ViewSchedule (--category, --fields, --name)"),
+        ("import <file> --category <cat> --match-by <param>", "Batch-write params from CSV (--dry-run, --on-missing, --on-duplicate)"),
         ("init <template>", "Create .revitcli.yml from starter template"),
         ("doctor", "Check setup, server discovery, and connectivity"),
         ("batch <file>", "Execute commands from a JSON batch file"),

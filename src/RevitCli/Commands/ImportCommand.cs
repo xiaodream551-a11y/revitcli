@@ -30,6 +30,7 @@ public static class ImportCommand
             onMissingOpt, onDuplicateOpt, encodingOpt, batchSizeOpt
         };
 
+        // 9 bindings (1 arg + 8 options) exceed the typed SetHandler<T1..T8> overload cap; use InvocationContext form.
         command.SetHandler(async ctx =>
         {
             var file      = ctx.ParseResult.GetValueForArgument(fileArg);
@@ -41,7 +42,7 @@ public static class ImportCommand
             var onDup     = ctx.ParseResult.GetValueForOption(onDuplicateOpt)!;
             var encoding  = ctx.ParseResult.GetValueForOption(encodingOpt)!;
             var batchSize = ctx.ParseResult.GetValueForOption(batchSizeOpt);
-            ctx.ExitCode = await ExecuteAsync(
+            Environment.ExitCode = await ExecuteAsync(
                 client, file, category, matchBy, map, dryRun, onMissing, onDup, encoding, batchSize, Console.Out);
         });
 
@@ -123,7 +124,7 @@ public static class ImportCommand
         if (dryRun || plan.Groups.Count == 0)
             return 0;
 
-        var (totalAffected, failures) = await ApplyPlan(client, plan, batchSize, output);
+        var (totalAffected, failures) = await ApplyPlan(client, plan, batchSize);
 
         await output.WriteLineAsync($"Modified {totalAffected} element-parameter pair(s) across {plan.Groups.Count} group(s).");
         if (failures.Count > 0)
@@ -206,7 +207,7 @@ public static class ImportCommand
     }
 
     private static async Task<(int Affected, List<(ImportGroup, string)> Failures)> ApplyPlan(
-        RevitClient client, ImportPlan plan, int batchSize, TextWriter output)
+        RevitClient client, ImportPlan plan, int batchSize)
     {
         var failures = new List<(ImportGroup, string)>();
         var affected = 0;
