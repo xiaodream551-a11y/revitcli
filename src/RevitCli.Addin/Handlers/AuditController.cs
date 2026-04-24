@@ -21,7 +21,7 @@ public class AuditController : WebApiController
     public async Task RunAudit()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         AuditRequest? request;
         try

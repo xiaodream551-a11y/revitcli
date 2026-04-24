@@ -21,7 +21,7 @@ public class ElementsController : WebApiController
     public async Task QueryElements([QueryField] string? category, [QueryField] string? filter)
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         try
         {
@@ -53,7 +53,7 @@ public class ElementsController : WebApiController
     public async Task GetElement(long id)
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         try
         {

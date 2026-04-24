@@ -22,7 +22,7 @@ public class StatusController : WebApiController
         var status = await _operations.GetStatusAsync();
         var response = ApiResponse<StatusInfo>.Ok(status);
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
         await writer.WriteAsync(JsonSerializer.Serialize(response));
     }
 }

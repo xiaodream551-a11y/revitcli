@@ -21,7 +21,7 @@ public class ScheduleController : WebApiController
     public async Task ListSchedules()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         try
         {
@@ -47,7 +47,7 @@ public class ScheduleController : WebApiController
     public async Task ExportSchedule()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         ScheduleExportRequest? request;
         try
@@ -101,7 +101,7 @@ public class ScheduleController : WebApiController
     public async Task CreateSchedule()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         ScheduleCreateRequest? request;
         try

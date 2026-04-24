@@ -21,7 +21,7 @@ public class SetController : WebApiController
     public async Task SetParameter()
     {
         HttpContext.Response.ContentType = "application/json";
-        await using var writer = HttpContext.OpenResponseText();
+        using var writer = HttpContext.OpenResponseText();
 
         SetRequest? request;
         try
