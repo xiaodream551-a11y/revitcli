@@ -4,6 +4,81 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-04-23
+
+Model-as-Code Phase 2 — incremental publish. Pairs `publish --since` with the
+snapshot/diff infrastructure from v1.1.0 so a 50-sheet project can re-export
+only the 3 sheets that changed, not the whole set.
+
+### Added
+
+- **`revitcli publish --since SNAPSHOT`** — diff a baseline snapshot against
+  the current model and narrow each export preset's sheet selector to only the
+  changed sheets. Options: `--since-mode content|meta` (default content),
+  `--update-baseline` (rewrite the baseline on successful publish).
+- **Profile `publish.<pipeline>.incremental: true`** — enable incremental
+  publish by default. Baseline path defaults to `.revitcli/last-publish.json`
+  and can be overridden with `publish.<pipeline>.baselinePath: <path>`.
+  `sinceMode: content|meta` picks the diff granularity.
+- **`SnapshotSheet.ContentHash`** — now populated (empty in v1.1.0). For each
+  sheet, hashes its `MetaHash` + the element hashes of every non-type element
+  in scope of each placed view. Skipped in `--summary-only` mode.
+- **`SnapshotHasher.HashSheetContent`** — stable hash helper for sheet
+  content, shared between CLI and addin.
+- **`BaselineManager`** — atomic read/write of baseline snapshot files
+  (tmp-then-rename via `File.Move(overwrite: true)`), used by publish to
+  persist the post-publish state.
+- **`SinceMode` enum** — content vs meta; used by `SnapshotDiffer.Diff`'s new
+  optional `sinceMode` parameter.
+- **Shell completions for publish** — `--since`, `--since-mode`, and
+  `--update-baseline` now tab-complete in bash, zsh, and PowerShell.
+
+### Changed
+
+- **`SnapshotDiffer.Diff`** — new signature accepts `SinceMode sinceMode =
+  SinceMode.Meta`. Existing callers (v1.1.0 `revitcli diff` command) keep
+  MetaHash-only behavior; new P2 call sites pass `SinceMode.Content`
+  explicitly. A P1 baseline (empty ContentHash) falls back to MetaHash
+  comparison automatically — no schema bump, no forced baseline rebuild.
+- **Publish receipts / webhook payloads** now include `incremental` (bool)
+  and `changedSheets` (int) fields when `--since` or `incremental: true` is
+  active.
+
+### Backward compatibility
+
+- `schemaVersion` stays at `1`. A v1.1.0 baseline diffs cleanly against a
+  v1.2.0 snapshot (content mode gracefully degrades to meta for sheets where
+  either side has empty ContentHash).
+- `revitcli diff` command output format unchanged.
+- `revitcli snapshot` output is byte-identical for sheet MetaHash; only
+  `contentHash` field transitions from `""` to real hashes.
+
+### Known Carry-forward
+
+- ContentHash does not honor Visibility/Graphics overrides — hiding a wall
+  via V/G won't change `ContentHash`. This is intentional for performance;
+  documented on `SnapshotSheet.ContentHash`.
+- No progress signal during snapshot. Typical 100-sheet model should complete
+  in <30s; if you hit this limit, open an issue.
+- `--verbose` on `snapshot` and `--severity` on `diff` still unimplemented
+  (carry-forward from v1.1.0).
+- Revit 2024 (`-p:RevitYear=2024`, net48) build compat for the new
+  `new ElementId(long)` call in `ComputeSheetContentHash` not verified —
+  all existing call sites in the codebase use the same pattern and were
+  presumed compiling in 2024 builds; needs a controller-driven test before
+  a 2024 release. Revit 2026 verified end-to-end.
+
+### End-to-end verification
+
+Built on a real Revit 2026 model (9 walls, 9 doors, 2 windows, 16 schedules,
+1 sheet added for this test). Snapshot writes non-empty contentHash. No-change
+incremental publish prints "no sheets changed". After renaming the test
+sheet, incremental publish correctly narrows the export to just that one
+sheet.
+
+Spec: [docs/superpowers/specs/2026-04-23-model-as-code-design.md](docs/superpowers/specs/2026-04-23-model-as-code-design.md)
+Plan: [docs/superpowers/plans/2026-04-23-publish-since-incremental.md](docs/superpowers/plans/2026-04-23-publish-since-incremental.md)
+
 ## [1.1.0] - 2026-04-23
 
 Model-as-Code Phase 1 — snapshot + diff infrastructure. This lays the
