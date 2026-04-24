@@ -4,6 +4,8 @@ using RevitCli.Client;
 using RevitCli.Commands;
 using RevitCli.Config;
 
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
 // --version: handled early before any other setup
 if (args.Length == 1 && args[0] is "--version" or "-v")
 {
