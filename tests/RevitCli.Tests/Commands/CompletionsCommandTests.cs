@@ -128,4 +128,56 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("--since", script);
         Assert.Contains("--since-mode", script);
     }
+
+    [Fact]
+    public async Task BashCompletions_Include_ImportFlags()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "bash" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("import)", script);
+        Assert.Contains("--match-by", script);
+        Assert.Contains("--on-missing", script);
+        Assert.Contains("--on-duplicate", script);
+        Assert.Contains("--encoding", script);
+        Assert.Contains("error warn skip", script);
+        Assert.Contains("error first all", script);
+        Assert.Contains("auto utf-8 gbk", script);
+    }
+
+    [Fact]
+    public async Task ZshCompletions_Include_ImportFlags()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "zsh" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("import)", script);
+        Assert.Contains("--match-by[", script);
+        Assert.Contains("(error warn skip)", script);
+        Assert.Contains("(auto utf-8 gbk)", script);
+    }
+
+    [Fact]
+    public async Task PwshCompletions_Include_ImportFlags()
+    {
+        var stdout = new StringWriter();
+        Console.SetOut(stdout);
+
+        var exitCode = await CompletionsCommand.Create().InvokeAsync(new[] { "powershell" });
+        var script = stdout.ToString();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("'import'", script);
+        Assert.Contains("'--match-by'", script);
+        Assert.Contains("'--encoding'", script);
+        Assert.Contains("'auto', 'utf-8', 'gbk'", script);
+    }
 }

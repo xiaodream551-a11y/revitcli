@@ -13,6 +13,11 @@ public static class CompletionsCommand
     private static readonly string[] PublishOptions =
         { "--profile", "--dry-run", "--since", "--since-mode", "--update-baseline" };
     private static readonly string[] SinceModes = { "content", "meta" };
+    private static readonly string[] ImportOptions =
+        { "--category", "--match-by", "--map", "--dry-run", "--on-missing", "--on-duplicate", "--encoding", "--batch-size" };
+    private static readonly string[] OnMissingValues = { "error", "warn", "skip" };
+    private static readonly string[] OnDuplicateValues = { "error", "first", "all" };
+    private static readonly string[] EncodingValues = { "auto", "utf-8", "gbk" };
 
     public static Command Create()
     {
@@ -54,6 +59,10 @@ public static class CompletionsCommand
         var auditOptions = JoinWords(AuditOptions);
         var publishOptions = JoinWords(PublishOptions);
         var sinceModes = JoinWords(SinceModes);
+        var importOptions = JoinWords(ImportOptions);
+        var onMissingValues = JoinWords(OnMissingValues);
+        var onDuplicateValues = JoinWords(OnDuplicateValues);
+        var encodingValues = JoinWords(EncodingValues);
         var configSubcommands = JoinWords(CliCommandCatalog.ConfigSubcommands);
         var configKeys = JoinWords(ConfigCommand.ValidKeys);
         var outputFormats = JoinWords(QueryCommand.ValidOutputFormats);
@@ -161,6 +170,23 @@ public static class CompletionsCommand
             "            esac",
             $"            COMPREPLY=($(compgen -W \"{publishOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        import)",
+            "            case \"$prev\" in",
+            "                --on-missing)",
+            $"                    COMPREPLY=($(compgen -W \"{onMissingValues}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --on-duplicate)",
+            $"                    COMPREPLY=($(compgen -W \"{onDuplicateValues}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --encoding)",
+            $"                    COMPREPLY=($(compgen -W \"{encodingValues}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            $"            COMPREPLY=($(compgen -W \"{importOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        status|doctor|interactive)",
             "            COMPREPLY=()",
             "            ;;",
@@ -256,6 +282,18 @@ public static class CompletionsCommand
             "                        '--since-mode[content or meta]:mode:(content meta)' \\",
             "                        '--update-baseline[Update baseline after successful publish]'",
             "                    ;;",
+            "                import)",
+            "                    _arguments \\",
+            "                        '1:file:_files' \\",
+            "                        '--category[Revit category]:category:' \\",
+            "                        '--match-by[Match-by parameter]:param:' \\",
+            "                        '--map[Explicit col:Param mapping]:mapping:' \\",
+            "                        '--dry-run[Preview only]' \\",
+            "                        '--on-missing[Behavior on missing match]:mode:(error warn skip)' \\",
+            "                        '--on-duplicate[Behavior on duplicate match]:mode:(error first all)' \\",
+            "                        '--encoding[CSV encoding]:enc:(auto utf-8 gbk)' \\",
+            "                        '--batch-size[Max ElementIds per SetRequest]:n:'",
+            "                    ;;",
             "            esac",
             "            ;;",
             "    esac",
@@ -274,6 +312,10 @@ public static class CompletionsCommand
         var auditOptions = FormatPowerShellArray(AuditOptions);
         var publishOptions = FormatPowerShellArray(PublishOptions);
         var sinceModes = FormatPowerShellArray(SinceModes);
+        var importOptions = FormatPowerShellArray(ImportOptions);
+        var onMissingValues = FormatPowerShellArray(OnMissingValues);
+        var onDuplicateValues = FormatPowerShellArray(OnDuplicateValues);
+        var encodingValues = FormatPowerShellArray(EncodingValues);
         var outputFormats = FormatPowerShellArray(QueryCommand.ValidOutputFormats);
         var exportFormats = FormatPowerShellArray(ExportCommand.ValidFormats);
         var configSubcommands = FormatPowerShellArray(CliCommandCatalog.ConfigSubcommands);
@@ -295,10 +337,14 @@ public static class CompletionsCommand
             $"        'set' = @({setOptions})",
             $"        'audit' = @({auditOptions})",
             $"        'publish' = @({publishOptions})",
+            $"        'import' = @({importOptions})",
             "    }",
 
             "",
             $"    $sinceModes = @({sinceModes})",
+            $"    $onMissingValues = @({onMissingValues})",
+            $"    $onDuplicateValues = @({onDuplicateValues})",
+            $"    $encodingValues = @({encodingValues})",
             "",
             $"    $outputFormats = @({outputFormats})",
             $"    $exportFormats = @({exportFormats})",
@@ -407,6 +453,22 @@ public static class CompletionsCommand
             "                return",
             "            }",
             "            New-RevitCliCompletionResults -Values $commandOptions['publish'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'import' {",
+            "            if ($previous -eq '--on-missing') {",
+            "                New-RevitCliCompletionResults -Values $onMissingValues -ToolTip 'On-missing mode'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--on-duplicate') {",
+            "                New-RevitCliCompletionResults -Values $onDuplicateValues -ToolTip 'On-duplicate mode'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--encoding') {",
+            "                New-RevitCliCompletionResults -Values $encodingValues -ToolTip 'Encoding'",
+            "                return",
+            "            }",
+            "            New-RevitCliCompletionResults -Values $commandOptions['import'] -ToolTip 'Option'",
             "            return",
             "        }",
             "    }",
