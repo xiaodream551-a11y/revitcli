@@ -4,6 +4,108 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-04-24
+
+Model-as-Code Phase 3 — `revitcli import FILE.csv`. Closes the loop: snapshot
+(P1) reads the model, publish --since (P2) re-exports only what changed, and
+import (P3) writes parameter values back from CSV in batched transactions.
+
+### Added — CSV import
+
+- **`revitcli import FILE.csv`** — declarative bulk parameter writeback.
+  Required: `--category` (e.g. `doors`, `墙`), `--match-by` (e.g. `Mark`).
+  Optional: `--map "col:Param,col2:Param2"` (default identity), `--dry-run`,
+  `--on-missing error|warn|skip` (default `warn`),
+  `--on-duplicate error|first|all` (default `error`),
+  `--encoding utf-8|gbk|auto` (default `auto`),
+  `--batch-size N` (default 100, max 1000).
+  Exit codes: 0 (success / dry-run / no rows), 1 (setup / parse / IO / fatal
+  miss-or-dup), 2 (some groups failed at write time).
+- **`Output/CsvParser`** — RFC 4180 parser with auto encoding detection:
+  BOM (UTF-8 / UTF-16 LE / UTF-16 BE) → strict UTF-8 → GBK fallback. Required
+  because Excel-exported Chinese CSV is GBK by default. Handles quoted values,
+  escaped doubled-quotes, embedded commas/newlines, CRLF or LF.
+- **`Output/CsvMapping`** — parses `--map` into a column→param dict;
+  unspecified columns default to identity; `--match-by` column excluded from
+  writes. Throws on malformed pairs or unknown columns.
+- **`Output/ImportPlanner`** — pure-C# matching + grouping algorithm. Indexes
+  Revit elements by trimmed `--match-by` value (case-sensitive ordinal),
+  classifies CSV rows into Misses / Duplicates / Skipped per `--on-missing`
+  and `--on-duplicate`, groups final writes by `(param, value)` so each
+  unique pair becomes one batched `SetRequest`. Last-write-wins on repeated
+  `(element, param)` with one warning per conflicting key.
+- **`Commands/ImportCommand`** — orchestrator that wires CSV → mapping →
+  query → planner → batched `SetParameter`. Single code path (TTY and pipe
+  both produce plain text — `import` output is mostly counts).
+- **`tests/RevitCli.Tests/TestInit.cs`** — `[ModuleInitializer]` registers
+  `CodePagesEncodingProvider` once at test-assembly load so test code that
+  builds GBK input via `Encoding.GetEncoding("gbk")` works without per-class
+  fixture boilerplate.
+- **Shell completions for import** — bash, zsh, and PowerShell tab-complete
+  `--match-by`, `--map`, `--on-missing`, `--on-duplicate`, `--encoding`, plus
+  static value lists for the latter three.
+
+### Changed
+
+- `src/RevitCli/Program.cs`: registers `CodePagesEncodingProvider` at startup
+  so `Encoding.GetEncoding("gbk")` works on .NET 8 / Linux for production use.
+- `src/RevitCli/RevitCli.csproj`: adds `System.Text.Encoding.CodePages 9.0.0`.
+- `src/RevitCli/Commands/CliCommandCatalog.cs`: registers `import` in
+  `TopLevelCommands`, `CreateRootCommand`, and `InteractiveHelpEntries`.
+
+### Backward compatibility
+
+- No changes to existing commands, profiles, DTOs, or addin endpoints.
+- `import` reuses the existing `/api/elements` (query) and `/api/elements/set`
+  (write) endpoints — **no addin upgrade required**. Users on v1.2.0 addin
+  + v1.3.0 CLI gain `import` immediately.
+
+### Test count
+
+- 42 new facts across 4 new files + 3 completions assertions in the existing
+  `CompletionsCommandTests`. CLI test suite total: **253** (was 211 after P2).
+- New facts: `CsvParserTests` × 12, `CsvMappingTests` × 6,
+  `ImportPlannerTests` × 12, `ImportCommandTests` × 12.
+
+### End-to-end verification (manual — Windows + Revit 2026)
+
+To verify on a live Revit:
+
+1. Open a model with at least 3 doors; set `Mark` = `W01`, `W02`, `W03`.
+2. Write `doors.csv` (UTF-8):
+   ```
+   Mark,锁具型号
+   W01,YALE-500
+   W02,YALE-700
+   W03,YALE-500
+   ```
+3. `revitcli import doors.csv --category doors --match-by Mark --dry-run` →
+   expect `groups=2, elementWrites=3` and per-group preview.
+4. `revitcli import doors.csv --category doors --match-by Mark` →
+   expect `Modified 3 element-parameter pair(s) across 2 group(s)`.
+5. `revitcli query doors` → confirm `锁具型号` populated per CSV.
+6. Re-save the same CSV from Excel as GBK and re-run; expect
+   `encoding=gbk` line in plan summary and identical write outcome.
+
+### Known Carry-forward
+
+- Items already noted in v1.2.0 (Revit 2024 build compat for new `ElementId`
+  ctor unverified, `--verbose` / `--severity` unimplemented, no progress
+  signal during snapshot, README.md still v1.0.0 lineage).
+- `import` writes only existing parameters: if the CSV references a Revit
+  parameter that does not exist on the target element, the addin's `set`
+  returns success with `Affected = 0` for that element. Treat 0 affected as
+  a soft signal; surfacing this distinctly is a future enhancement.
+- No interactive Spectre.Console table rendering for `import` results — TTY
+  and pipe both emit plain text. Acceptable because `import` output is
+  primarily counts.
+- Duplicate CSV column names (e.g. two columns both named `Lock`) produce
+  last-column-wins behavior with a warning. Users should rename their CSV
+  headers if they hit this.
+
+Spec: [docs/superpowers/specs/2026-04-23-model-as-code-design.md](docs/superpowers/specs/2026-04-23-model-as-code-design.md)
+Plan: [docs/superpowers/plans/2026-04-24-import-csv.md](docs/superpowers/plans/2026-04-24-import-csv.md)
+
 ## [1.2.0] - 2026-04-23
 
 Model-as-Code Phase 2 — incremental publish. Pairs `publish --since` with the
