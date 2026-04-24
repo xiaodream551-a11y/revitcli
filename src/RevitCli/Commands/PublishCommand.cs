@@ -109,10 +109,14 @@ public static class PublishCommand
                 effectiveBaselinePath = Path.GetFullPath(Path.Combine(profileDir, effectiveBaselinePath));
         }
         var effectiveSinceMode = SinceModeParser.Parse(sinceMode ?? pipeline.SinceMode);
-        // Auto-update baseline only when the user did NOT supply --since.
-        // Rationale: --since <path> is explicit user intent to compare against a specific
-        // baseline — we shouldn't silently overwrite that file just because the profile
-        // says incremental. The --update-baseline flag is the explicit opt-in for rewrite.
+        // --update-baseline is an explicit user opt-in and always applies, regardless of
+        // where the baseline path came from.  Auto-update ADDITIONALLY applies when the
+        // profile declares incremental: true AND no CLI --since was given — the "default
+        // incremental workflow": the user expects the baseline to track the latest good
+        // publish without passing a flag every time.  The combination means:
+        //   * --update-baseline given            → always rewrite
+        //   * no flag, no --since, incremental   → auto-rewrite .revitcli/last-publish.json
+        //   * --since path only, no flag         → read path, do not rewrite
         var shouldUpdateBaseline = updateBaseline || (pipeline.Incremental && since == null);
 
         HashSet<string>? changedSheetNumbers = null;
