@@ -14,7 +14,7 @@ internal static class FixPlanSafety
             return FixSafetyResult.Fail("--max-changes must be greater than 0.");
         }
 
-        var actions = plan?.Actions ?? [];
+        var actions = plan?.Actions.Where(a => a is not null).ToList() ?? [];
 
         if (actions.Count > maxChanges)
         {
@@ -26,7 +26,7 @@ internal static class FixPlanSafety
             return FixSafetyResult.Fail("Inferred actions require --allow-inferred before apply.");
         }
 
-        if (actions.Any(a => a.Confidence == "low"))
+        if (actions.Any(a => string.Equals(a.Confidence, "low", StringComparison.OrdinalIgnoreCase)))
         {
             return FixSafetyResult.Fail("low-confidence fallback actions are dry-run only in v1.5.");
         }

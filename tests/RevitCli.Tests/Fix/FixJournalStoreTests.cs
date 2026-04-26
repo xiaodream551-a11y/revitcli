@@ -49,4 +49,25 @@ public class FixJournalStoreTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public void LoadForBaseline_InvalidJson_ThrowsInvalidDataException()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"revitcli_fix_journal_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var baseline = Path.Combine(dir, "fix-baseline.json");
+            var path = FixJournalStore.GetJournalPath(baseline);
+            File.WriteAllText(path, "{ this is not valid json");
+
+            var ex = Assert.Throws<InvalidDataException>(() => FixJournalStore.LoadForBaseline(baseline));
+
+            Assert.Contains(path, ex.Message);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

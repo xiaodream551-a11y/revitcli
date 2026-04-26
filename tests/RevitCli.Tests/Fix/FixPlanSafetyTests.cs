@@ -65,4 +65,28 @@ public class FixPlanSafetyTests
         Assert.False(result.Success);
         Assert.Contains("max-changes", result.Error);
     }
+
+    [Fact]
+    public void ValidateApply_AllowsNullActionEntries()
+    {
+        var plan = new FixPlan();
+        plan.Actions.Add(null!);
+        plan.Actions.Add(new FixAction { ElementId = 1, Parameter = "Mark", NewValue = "A" });
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: true, allowInferred: true, maxChanges: 50);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public void ValidateApply_BlocksLowConfidenceCaseInsensitive()
+    {
+        var plan = new FixPlan();
+        plan.Actions.Add(new FixAction { ElementId = 1, Parameter = "Mark", NewValue = "A", Confidence = "Low" });
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: true, allowInferred: true, maxChanges: 50);
+
+        Assert.False(result.Success);
+        Assert.Contains("low-confidence", result.Error);
+    }
 }

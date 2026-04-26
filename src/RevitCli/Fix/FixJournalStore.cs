@@ -53,7 +53,15 @@ internal static class FixJournalStore
             throw new FileNotFoundException($"Fix journal not found: {path}");
         }
 
-        var journal = JsonSerializer.Deserialize<FixJournal>(File.ReadAllText(path), ReadOptions);
+        FixJournal? journal;
+        try
+        {
+            journal = JsonSerializer.Deserialize<FixJournal>(File.ReadAllText(path), ReadOptions);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Invalid fix journal: {path}", ex);
+        }
         if (journal == null || journal.SchemaVersion != 1)
         {
             throw new InvalidDataException($"Invalid fix journal: {path}");

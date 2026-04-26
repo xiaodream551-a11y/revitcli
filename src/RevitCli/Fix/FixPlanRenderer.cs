@@ -9,9 +9,9 @@ internal static class FixPlanRenderer
     {
         plan ??= new FixPlan();
 
-        var actions = plan.Actions;
-        var skipped = plan.Skipped;
-        var warnings = plan.Warnings;
+        var actions = plan.Actions.Where(a => a is not null).ToList();
+        var skipped = plan.Skipped.Where(s => s is not null).ToList();
+        var warnings = plan.Warnings.Where(w => w is not null).ToList();
         var inferred = actions.Count(a => a.Inferred);
 
         var builder = new StringBuilder();
