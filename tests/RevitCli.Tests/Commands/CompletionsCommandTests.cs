@@ -34,10 +34,35 @@ public class CompletionsCommandTests : IDisposable
         var script = stdout.ToString();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("status query export set config audit completions batch doctor check publish init score coverage schedule diff snapshot interactive", script);
+        Assert.Contains("status", script);
+        Assert.Contains("query", script);
+        Assert.Contains("export", script);
+        Assert.Contains("set", script);
+        Assert.Contains("config", script);
+        Assert.Contains("audit", script);
+        Assert.Contains("completions", script);
+        Assert.Contains("batch", script);
+        Assert.Contains("doctor", script);
+        Assert.Contains("check", script);
+        Assert.Contains("fix", script);
+        Assert.Contains("rollback", script);
+        Assert.Contains("publish", script);
+        Assert.Contains("init", script);
+        Assert.Contains("score", script);
+        Assert.Contains("coverage", script);
+        Assert.Contains("schedule", script);
+        Assert.Contains("diff", script);
+        Assert.Contains("snapshot", script);
+        Assert.Contains("interactive", script);
         Assert.Contains("compgen -W \"show set\"", script);
         Assert.Contains("defaultOutput)", script);
         Assert.Contains("compgen -f -- \"$cur\"", script);
+        Assert.Contains("--profile", script);
+        Assert.Contains("--rule", script);
+        Assert.Contains("--severity", script);
+        Assert.Contains("--max-changes", script);
+        Assert.Contains("--baseline-output", script);
+        Assert.Contains("--no-snapshot", script);
     }
 
     [Fact]
