@@ -41,4 +41,28 @@ public class FixPlanSafetyTests
         Assert.False(result.Success);
         Assert.Contains("max", result.Error.ToLowerInvariant());
     }
+
+    [Fact]
+    public void ValidateApply_BlocksMissingYes()
+    {
+        var plan = new FixPlan();
+        plan.Actions.Add(new FixAction { ElementId = 1, Parameter = "Mark", NewValue = "A" });
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: false, allowInferred: true, maxChanges: 50);
+
+        Assert.False(result.Success);
+        Assert.Contains("--yes", result.Error);
+    }
+
+    [Fact]
+    public void ValidateApply_BlocksNonPositiveMaxChanges()
+    {
+        var plan = new FixPlan();
+        plan.Actions.Add(new FixAction { ElementId = 1, Parameter = "Mark", NewValue = "A" });
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: true, allowInferred: true, maxChanges: 0);
+
+        Assert.False(result.Success);
+        Assert.Contains("max-changes", result.Error);
+    }
 }

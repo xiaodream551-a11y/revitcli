@@ -25,7 +25,7 @@ internal static class FixPlanRenderer
 
         foreach (var skippedIssue in skipped)
         {
-            var id = skippedIssue.ElementId?.ToString() ?? "-";
+            var id = skippedIssue.ElementId?.ToString() ?? "--";
             builder.AppendLine($"  [SKIPPED] {skippedIssue.Rule} Element {id}: {skippedIssue.Reason}");
         }
 
