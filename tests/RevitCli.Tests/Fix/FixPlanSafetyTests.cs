@@ -43,6 +43,33 @@ public class FixPlanSafetyTests
     }
 
     [Fact]
+    public void ValidateApply_BlocksRecipeMaxChanges()
+    {
+        var plan = new FixPlan();
+        plan.Actions.Add(new FixAction
+        {
+            ElementId = 1,
+            Parameter = "Mark",
+            NewValue = "A",
+            RecipeKey = "required-parameter|doors|Mark",
+            RecipeMaxChanges = 1
+        });
+        plan.Actions.Add(new FixAction
+        {
+            ElementId = 2,
+            Parameter = "Mark",
+            NewValue = "B",
+            RecipeKey = "required-parameter|doors|Mark",
+            RecipeMaxChanges = 1
+        });
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: true, allowInferred: false, maxChanges: 50);
+
+        Assert.False(result.Success);
+        Assert.Contains("maxChanges", result.Error);
+    }
+
+    [Fact]
     public void ValidateApply_BlocksMissingYes()
     {
         var plan = new FixPlan();

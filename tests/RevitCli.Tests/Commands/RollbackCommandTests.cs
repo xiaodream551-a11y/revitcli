@@ -139,12 +139,12 @@ public class RollbackCommandTests
             WriteBaseline(baselinePath);
             WriteJournalJson(
                 baselinePath,
-                """
+                $$"""
                 {
                   "schemaVersion": 1,
                   "action": "fix",
                   "checkName": "default",
-                  "baselinePath": "baseline.json",
+                  "baselinePath": {{JsonSerializer.Serialize(baselinePath)}},
                   "startedAt": "2026-04-26T00:00:00Z",
                   "user": "tester",
                   "actions": [null]
@@ -160,6 +160,54 @@ public class RollbackCommandTests
 
             Assert.Equal(1, exitCode);
             Assert.Contains("invalid", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.Requests);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_JournalBaselinePathMismatch_ReturnsOne_AndDoesNotCallApi()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            var otherBaselinePath = Path.Combine(tempDir, "other-baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournalJson(
+                baselinePath,
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "action": "fix",
+                  "checkName": "default",
+                  "baselinePath": {{JsonSerializer.Serialize(otherBaselinePath)}},
+                  "startedAt": "2026-04-26T00:00:00Z",
+                  "user": "tester",
+                  "actions": [
+                    {
+                      "elementId": 101,
+                      "category": "doors",
+                      "parameter": "Mark",
+                      "oldValue": "OLD-101",
+                      "newValue": "NEW-101"
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new QueueHttpHandler();
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("baseline", writer.ToString(), StringComparison.OrdinalIgnoreCase);
             Assert.Empty(handler.Requests);
         }
         finally
@@ -239,6 +287,7 @@ public class RollbackCommandTests
             });
 
             var handler = new RecordingQueueHttpHandler();
+            EnqueueMatchingStatus(handler);
             handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
             {
                 Affected = 1,
@@ -264,10 +313,56 @@ public class RollbackCommandTests
 
             Assert.Equal(0, exitCode);
             Assert.Contains("restored 1", writer.ToString(), StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"dryRun\":true", handler.RequestBodies[0]);
-            Assert.Contains("\"value\":\"RESTORE-ME\"", handler.RequestBodies[0]);
-            Assert.Contains("\"dryRun\":false", handler.RequestBodies[1]);
+            Assert.Contains("\"dryRun\":true", handler.RequestBodies[1]);
             Assert.Contains("\"value\":\"RESTORE-ME\"", handler.RequestBodies[1]);
+            Assert.Contains("\"dryRun\":false", handler.RequestBodies[2]);
+            Assert.Contains("\"value\":\"RESTORE-ME\"", handler.RequestBodies[2]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_Apply_RejectsCurrentDocumentPathMismatch_AndDoesNotSetParameters()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath, documentPath: @"C:\models\expected.rvt");
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction
+                {
+                    ElementId = 303,
+                    Category = "doors",
+                    Parameter = "Mark",
+                    OldValue = "RESTORE-ME",
+                    NewValue = "APPLIED-VALUE"
+                }
+            });
+
+            var handler = new RecordingQueueHttpHandler();
+            handler.Enqueue("/api/status", ApiResponse<StatusInfo>.Ok(new StatusInfo
+            {
+                RevitVersion = "2026",
+                RevitYear = 2026,
+                DocumentName = "actual.rvt",
+                DocumentPath = @"C:\models\actual.rvt"
+            }));
+
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("document", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Single(handler.Requests);
+            Assert.Equal("/api/status", handler.Requests[0]);
         }
         finally
         {
@@ -296,6 +391,7 @@ public class RollbackCommandTests
             });
 
             var handler = new RecordingQueueHttpHandler();
+            EnqueueMatchingStatus(handler);
             handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
             {
                 Affected = 1,
@@ -310,9 +406,9 @@ public class RollbackCommandTests
 
             Assert.Equal(1, exitCode);
             Assert.Contains("preview", writer.ToString(), StringComparison.OrdinalIgnoreCase);
-            Assert.Single(handler.RequestBodies);
-            Assert.Contains("\"dryRun\":true", handler.RequestBodies[0]);
-            Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[0]);
+            Assert.Equal(2, handler.RequestBodies.Count);
+            Assert.Contains("\"dryRun\":true", handler.RequestBodies[1]);
+            Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[1]);
         }
         finally
         {
@@ -341,6 +437,7 @@ public class RollbackCommandTests
             });
 
             var handler = new RecordingQueueHttpHandler();
+            EnqueueMatchingStatus(handler);
             handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
             {
                 Affected = 1,
@@ -358,9 +455,69 @@ public class RollbackCommandTests
 
             Assert.Equal(1, exitCode);
             Assert.Contains("matching", writer.ToString(), StringComparison.OrdinalIgnoreCase);
-            Assert.Single(handler.RequestBodies);
-            Assert.Contains("\"dryRun\":true", handler.RequestBodies[0]);
-            Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[0]);
+            Assert.Equal(2, handler.RequestBodies.Count);
+            Assert.Contains("\"dryRun\":true", handler.RequestBodies[1]);
+            Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[1]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_Apply_ContinuesAfterSinglePreviewFailure_AndReturnsOne()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction { ElementId = 1, Category = "doors", Parameter = "Mark", OldValue = "A", NewValue = "B" },
+                new FixAction { ElementId = 2, Category = "doors", Parameter = "Mark", OldValue = "C", NewValue = "D" }
+            });
+
+            var handler = new RecordingQueueHttpHandler();
+            handler.Enqueue("/api/status", ApiResponse<StatusInfo>.Ok(new StatusInfo
+            {
+                RevitVersion = "2026",
+                RevitYear = 2026,
+                DocumentName = "test",
+                DocumentPath = "test.rvt"
+            }));
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Fail("preview failed"));
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
+            {
+                Affected = 1,
+                Preview = new List<SetPreviewItem>
+                {
+                    new() { Id = 2, Name = "Door 2", OldValue = "D", NewValue = "C" }
+                }
+            }));
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
+            {
+                Affected = 1,
+                Preview = new List<SetPreviewItem>
+                {
+                    new() { Id = 2, Name = "Door 2", OldValue = "C", NewValue = "C" }
+                }
+            }));
+
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            var output = writer.ToString();
+            Assert.Equal(1, exitCode);
+            Assert.Contains("restored 1", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("1 error", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(4, handler.RequestBodies.Count);
+            Assert.Contains("\"elementId\":2", handler.RequestBodies[2]);
+            Assert.Contains("\"dryRun\":false", handler.RequestBodies[3]);
         }
         finally
         {
@@ -382,6 +539,7 @@ public class RollbackCommandTests
             });
 
             var handler = new RecordingQueueHttpHandler();
+            EnqueueMatchingStatus(handler);
             handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Fail("preview failed"));
             var client = MakeClient(handler);
             var writer = new StringWriter();
@@ -391,7 +549,7 @@ public class RollbackCommandTests
 
             Assert.Equal(1, exitCode);
             Assert.Contains("preview", writer.ToString(), StringComparison.OrdinalIgnoreCase);
-            Assert.Single(handler.RequestBodies);
+            Assert.Equal(2, handler.RequestBodies.Count);
         }
         finally
         {
@@ -413,6 +571,7 @@ public class RollbackCommandTests
             });
 
             var handler = new RecordingQueueHttpHandler();
+            EnqueueMatchingStatus(handler);
             handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
             {
                 Affected = 1,
@@ -431,8 +590,8 @@ public class RollbackCommandTests
 
             Assert.Equal(1, exitCode);
             Assert.Contains("apply", writer.ToString(), StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(2, handler.RequestBodies.Count);
-            Assert.Contains("\"dryRun\":false", handler.RequestBodies[1]);
+            Assert.Equal(3, handler.RequestBodies.Count);
+            Assert.Contains("\"dryRun\":false", handler.RequestBodies[2]);
         }
         finally
         {
@@ -478,7 +637,7 @@ public class RollbackCommandTests
         return dir;
     }
 
-    private static void WriteBaseline(string baselinePath)
+    private static void WriteBaseline(string baselinePath, string documentPath = "test.rvt")
     {
         var snapshot = new ModelSnapshot
         {
@@ -488,7 +647,7 @@ public class RollbackCommandTests
             {
                 Version = "2026",
                 Document = "test",
-                DocumentPath = "test.rvt"
+                DocumentPath = documentPath
             },
             Categories = new Dictionary<string, List<SnapshotElement>>(),
             Summary = new SnapshotSummary()
@@ -515,6 +674,17 @@ public class RollbackCommandTests
             Path.GetFileNameWithoutExtension(baselinePath) + ".fixjournal.json");
 
         File.WriteAllText(journalPath, json);
+    }
+
+    private static void EnqueueMatchingStatus(RecordingQueueHttpHandler handler)
+    {
+        handler.Enqueue("/api/status", ApiResponse<StatusInfo>.Ok(new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            DocumentName = "test",
+            DocumentPath = "test.rvt"
+        }));
     }
 }
 

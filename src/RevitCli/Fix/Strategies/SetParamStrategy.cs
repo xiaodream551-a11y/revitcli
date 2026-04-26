@@ -70,7 +70,9 @@ internal sealed class SetParamStrategy : IFixStrategy
             NewValue = rendered,
             Inferred = inferred,
             Confidence = confidence,
-            Reason = inferred ? "inferred" : "explicit"
+            Reason = inferred ? "inferred" : "explicit",
+            RecipeKey = FixRecipeIdentity.Create(recipe),
+            RecipeMaxChanges = recipe.MaxChanges
         };
 
         return FixStrategyPlanResult.Ok(action);

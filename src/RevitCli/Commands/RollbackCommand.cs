@@ -94,6 +94,12 @@ public static class RollbackCommand
             return 1;
         }
 
+        if (!JournalMatchesBaseline(journal, baselinePath, out var journalError))
+        {
+            await output.WriteLineAsync($"Error: {journalError}");
+            return 1;
+        }
+
         var actions = journal.Actions?.ToList() ?? new List<FixAction>();
 
         if (!await TryValidateActionsAsync(actions, output))
@@ -113,6 +119,11 @@ public static class RollbackCommand
             return 1;
         }
 
+        if (!dryRun && !await TryValidateCurrentDocumentAsync(client, snapshot, output))
+        {
+            return 1;
+        }
+
         foreach (var action in actions)
         {
             await output.WriteLineAsync(
@@ -127,30 +138,44 @@ public static class RollbackCommand
 
         var restoredCount = 0;
         var conflictCount = 0;
+        var errorCount = 0;
 
         foreach (var action in actions)
         {
-            var previewResult = await client.SetParameterAsync(new SetRequest
+            ApiResponse<SetResult>? previewResult;
+            try
             {
-                ElementId = action.ElementId,
-                Param = action.Parameter,
-                Value = action.OldValue ?? string.Empty,
-                DryRun = true
-            });
-
-            if (!previewResult.Success || previewResult.Data == null)
+                previewResult = await client.SetParameterAsync(new SetRequest
+                {
+                    ElementId = action.ElementId,
+                    Param = action.Parameter,
+                    Value = action.OldValue ?? string.Empty,
+                    DryRun = true
+                });
+            }
+            catch (Exception ex)
             {
+                errorCount++;
                 await output.WriteLineAsync(
-                    $"Error: failed to preview rollback for element {action.ElementId}: {previewResult.Error}");
-                return 1;
+                    $"Error: failed to preview rollback for element {action.ElementId}: {ex.Message}");
+                continue;
+            }
+
+            if (previewResult == null || !previewResult.Success || previewResult.Data == null)
+            {
+                errorCount++;
+                await output.WriteLineAsync(
+                    $"Error: failed to preview rollback for element {action.ElementId}: {previewResult?.Error}");
+                continue;
             }
 
             var previewItem = previewResult.Data.Preview?.FirstOrDefault(item => item != null && item.Id == action.ElementId);
             if (previewItem == null)
             {
+                errorCount++;
                 await output.WriteLineAsync(
                     $"Error: preview response did not include a matching item for element {action.ElementId}.");
-                return 1;
+                continue;
             }
 
             var currentValue = previewItem.OldValue ?? string.Empty;
@@ -164,26 +189,160 @@ public static class RollbackCommand
                 continue;
             }
 
-            var applyResult = await client.SetParameterAsync(new SetRequest
+            ApiResponse<SetResult>? applyResult;
+            try
             {
-                ElementId = action.ElementId,
-                Param = action.Parameter,
-                Value = action.OldValue ?? string.Empty,
-                DryRun = false
-            });
-
-            if (!applyResult.Success || applyResult.Data == null)
+                applyResult = await client.SetParameterAsync(new SetRequest
+                {
+                    ElementId = action.ElementId,
+                    Param = action.Parameter,
+                    Value = action.OldValue ?? string.Empty,
+                    DryRun = false
+                });
+            }
+            catch (Exception ex)
             {
+                errorCount++;
                 await output.WriteLineAsync(
-                    $"Error: failed to apply rollback for element {action.ElementId}: {applyResult.Error}");
-                return 1;
+                    $"Error: failed to apply rollback for element {action.ElementId}: {ex.Message}");
+                continue;
+            }
+
+            if (applyResult == null || !applyResult.Success || applyResult.Data == null)
+            {
+                errorCount++;
+                await output.WriteLineAsync(
+                    $"Error: failed to apply rollback for element {action.ElementId}: {applyResult?.Error}");
+                continue;
             }
 
             restoredCount += applyResult.Data.Affected;
         }
 
-        await output.WriteLineAsync($"Restored {restoredCount} element parameter(s); {conflictCount} conflict(s).");
-        return 0;
+        await output.WriteLineAsync(
+            $"Restored {restoredCount} element parameter(s); {conflictCount} conflict(s); {errorCount} error(s).");
+        return errorCount == 0 ? 0 : 1;
+    }
+
+    private static bool JournalMatchesBaseline(FixJournal journal, string baselinePath, out string error)
+    {
+        error = "";
+        if (journal == null)
+        {
+            error = "invalid fix journal.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(journal.BaselinePath))
+        {
+            error = "fix journal does not identify its baseline path.";
+            return false;
+        }
+
+        try
+        {
+            var expected = Path.GetFullPath(baselinePath);
+            var actual = Path.GetFullPath(journal.BaselinePath);
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"fix journal baseline path '{journal.BaselinePath}' does not match '{baselinePath}'.";
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            error = $"invalid fix journal baseline path: {ex.Message}";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static async Task<bool> TryValidateCurrentDocumentAsync(
+        RevitClient client,
+        ModelSnapshot snapshot,
+        TextWriter output)
+    {
+        ApiResponse<StatusInfo>? status;
+        try
+        {
+            status = await client.GetStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            await output.WriteLineAsync($"Error: failed to validate current document: {ex.Message}");
+            return false;
+        }
+
+        if (status == null || !status.Success || status.Data == null)
+        {
+            await output.WriteLineAsync($"Error: failed to validate current document: {status?.Error}");
+            return false;
+        }
+
+        var baselineDocumentPath = snapshot.Revit?.DocumentPath;
+        var currentDocumentPath = status.Data.DocumentPath;
+        if (!string.IsNullOrWhiteSpace(baselineDocumentPath))
+        {
+            if (string.IsNullOrWhiteSpace(currentDocumentPath))
+            {
+                await output.WriteLineAsync(
+                    $"Error: current document path is empty; expected baseline document '{baselineDocumentPath}'.");
+                return false;
+            }
+
+            if (!DocumentPathsEqual(baselineDocumentPath, currentDocumentPath))
+            {
+                await output.WriteLineAsync(
+                    $"Error: current document '{currentDocumentPath}' does not match baseline document '{baselineDocumentPath}'.");
+                return false;
+            }
+
+            return true;
+        }
+
+        var baselineDocument = snapshot.Revit?.Document;
+        var currentDocument = status.Data.DocumentName;
+        if (!string.IsNullOrWhiteSpace(baselineDocument))
+        {
+            if (!string.Equals(baselineDocument.Trim(), currentDocument?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                await output.WriteLineAsync(
+                    $"Error: current document '{currentDocument}' does not match baseline document '{baselineDocument}'.");
+                return false;
+            }
+
+            return true;
+        }
+
+        await output.WriteLineAsync("Error: baseline snapshot does not include a document identity.");
+        return false;
+    }
+
+    private static bool DocumentPathsEqual(string expected, string actual)
+    {
+        return string.Equals(
+            NormalizeDocumentPath(expected),
+            NormalizeDocumentPath(actual),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeDocumentPath(string path)
+    {
+        var trimmed = path.Trim();
+        try
+        {
+            if (Path.IsPathRooted(trimmed))
+            {
+                trimmed = Path.GetFullPath(trimmed);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Fall back to the raw value; invalid paths will still compare unequal.
+        }
+
+        return trimmed.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     private static async Task<bool> TryValidateActionsAsync(IReadOnlyList<FixAction> actions, TextWriter output)

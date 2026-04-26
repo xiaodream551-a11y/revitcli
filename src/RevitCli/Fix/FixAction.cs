@@ -12,4 +12,6 @@ internal sealed class FixAction
     public bool Inferred { get; init; }
     public string Confidence { get; init; } = "high";
     public string Reason { get; init; } = "";
+    public string RecipeKey { get; init; } = "";
+    public int? RecipeMaxChanges { get; init; }
 }

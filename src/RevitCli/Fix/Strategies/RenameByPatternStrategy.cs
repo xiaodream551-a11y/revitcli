@@ -76,7 +76,9 @@ internal sealed class RenameByPatternStrategy : IFixStrategy
             NewValue = newValue,
             Inferred = inferred,
             Confidence = confidence,
-            Reason = inferred ? "inferred" : "explicit"
+            Reason = inferred ? "inferred" : "explicit",
+            RecipeKey = FixRecipeIdentity.Create(recipe),
+            RecipeMaxChanges = recipe.MaxChanges
         };
 
         return FixStrategyPlanResult.Ok(action);

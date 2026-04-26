@@ -21,6 +21,23 @@ internal static class FixPlanSafety
             return FixSafetyResult.Fail($"Planned action count {actions.Count} exceeds --max-changes {maxChanges}.");
         }
 
+        foreach (var recipeGroup in actions
+            .Where(a => a.RecipeMaxChanges.HasValue)
+            .GroupBy(GetRecipeGroupKey))
+        {
+            var recipeMaxChanges = recipeGroup.Min(a => a.RecipeMaxChanges!.Value);
+            if (recipeMaxChanges <= 0)
+            {
+                return FixSafetyResult.Fail("Recipe maxChanges must be greater than 0.");
+            }
+
+            if (recipeGroup.Count() > recipeMaxChanges)
+            {
+                return FixSafetyResult.Fail(
+                    $"Planned action count {recipeGroup.Count()} exceeds recipe maxChanges {recipeMaxChanges}.");
+            }
+        }
+
         if (actions.Any(a => a.Inferred) && !allowInferred)
         {
             return FixSafetyResult.Fail("Inferred actions require --allow-inferred before apply.");
@@ -32,6 +49,21 @@ internal static class FixPlanSafety
         }
 
         return FixSafetyResult.Ok();
+    }
+
+    private static string GetRecipeGroupKey(FixAction action)
+    {
+        if (!string.IsNullOrWhiteSpace(action.RecipeKey))
+        {
+            return action.RecipeKey;
+        }
+
+        return string.Join(
+            "\u001f",
+            action.Rule ?? "",
+            action.Strategy ?? "",
+            action.Category ?? "",
+            action.Parameter ?? "");
     }
 }
 

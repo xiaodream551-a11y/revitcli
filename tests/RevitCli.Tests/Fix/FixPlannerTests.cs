@@ -120,4 +120,38 @@ public class FixPlannerTests
         Assert.Equal("Unsupported strategy 'unsupported'.", warning);
         Assert.Contains("Unsupported strategy", skipped.Reason);
     }
+
+    [Fact]
+    public void Plan_RecipeMaxChanges_SkipsIssuesBeyondRecipeLimit()
+    {
+        var issues = new List<AuditIssue>
+        {
+            new() { Rule = "required-parameter", Severity = "warning", ElementId = 1, Category = "doors", Parameter = "Mark", CurrentValue = "" },
+            new() { Rule = "required-parameter", Severity = "warning", ElementId = 2, Category = "doors", Parameter = "Mark", CurrentValue = "" }
+        };
+        var profile = new ProjectProfile
+        {
+            Fixes = new List<FixRecipe>
+            {
+                new()
+                {
+                    Rule = "required-parameter",
+                    Category = "doors",
+                    Parameter = "Mark",
+                    Strategy = "setParam",
+                    Value = "D-{element.id}",
+                    MaxChanges = 1
+                }
+            }
+        };
+
+        var plan = FixPlanner.Plan("default", issues, profile, new FixPlanOptions());
+
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal(1, action.ElementId);
+        Assert.Equal(1, action.RecipeMaxChanges);
+        var skipped = Assert.Single(plan.Skipped);
+        Assert.Equal(2, skipped.ElementId);
+        Assert.Contains("maxChanges", skipped.Reason);
+    }
 }

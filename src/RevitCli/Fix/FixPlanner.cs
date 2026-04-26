@@ -29,6 +29,7 @@ internal static class FixPlanner
             options = new FixPlanOptions();
         }
 
+        var recipeActionCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var issue in issues)
         {
             if (issue is null)
@@ -87,6 +88,20 @@ internal static class FixPlanner
                 continue;
             }
 
+            var recipeKey = FixRecipeIdentity.Create(recipe);
+            if (recipe.MaxChanges.HasValue
+                && recipeActionCounts.TryGetValue(recipeKey, out var existingRecipeCount)
+                && existingRecipeCount >= recipe.MaxChanges.Value)
+            {
+                AddSkipped(
+                    plan,
+                    issue.Rule,
+                    issue.Severity,
+                    issue.ElementId,
+                    $"Recipe maxChanges {recipe.MaxChanges.Value} reached.");
+                continue;
+            }
+
             var confidence = inferred &&
                 string.Equals(issue.Source, "structured", StringComparison.OrdinalIgnoreCase)
                     ? "medium"
@@ -103,7 +118,39 @@ internal static class FixPlanner
                 continue;
             }
 
-            plan.Actions.AddRange(strategyResult.Actions);
+            var actions = (strategyResult.Actions ?? new List<FixAction>()).Where(a => a is not null).ToList();
+            if (recipe.MaxChanges.HasValue)
+            {
+                recipeActionCounts.TryGetValue(recipeKey, out var currentRecipeCount);
+                var remaining = recipe.MaxChanges.Value - currentRecipeCount;
+                if (remaining <= 0)
+                {
+                    AddSkipped(
+                        plan,
+                        issue.Rule,
+                        issue.Severity,
+                        issue.ElementId,
+                        $"Recipe maxChanges {recipe.MaxChanges.Value} reached.");
+                    continue;
+                }
+
+                if (actions.Count > remaining)
+                {
+                    plan.Actions.AddRange(actions.Take(remaining));
+                    recipeActionCounts[recipeKey] = currentRecipeCount + remaining;
+                    AddSkipped(
+                        plan,
+                        issue.Rule,
+                        issue.Severity,
+                        issue.ElementId,
+                        $"Recipe maxChanges {recipe.MaxChanges.Value} reached.");
+                    continue;
+                }
+
+                recipeActionCounts[recipeKey] = currentRecipeCount + actions.Count;
+            }
+
+            plan.Actions.AddRange(actions);
         }
 
         return plan;
