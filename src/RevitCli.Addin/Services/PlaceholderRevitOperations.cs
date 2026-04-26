@@ -13,6 +13,7 @@ public class PlaceholderRevitOperations : IRevitOperations
         {
             RevitVersion = "2025",
             RevitYear = 2025,
+            // Placeholder protocol tests must not masquerade as the production Add-in.
             AddinVersion = "0.0.0",
             DocumentName = "Placeholder.rvt",
             Capabilities = new List<string>

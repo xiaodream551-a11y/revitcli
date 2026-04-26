@@ -8,12 +8,21 @@
     and adds the CLI to PATH.
 .PARAMETER RevitYears
     Comma-separated Revit years to install for (e.g. "2024,2025,2026").
-    Default: auto-detect installed Revit versions.
+    Default: 2026.
+.PARAMETER Configuration
+    Build configuration to publish from source-tree mode.
+.PARAMETER RevitInstallDir
+    Optional Revit install directory override for Revit 2026 source-tree builds.
+.PARAMETER SkipBuild
+    In source-tree mode, use existing .artifacts/install outputs instead of publishing.
 .PARAMETER Force
     Overwrite existing installation without prompting.
 #>
 param(
-    [string]$RevitYears = "",
+    [string]$RevitYears = "2026",
+    [string]$Configuration = "Release",
+    [string]$RevitInstallDir = "",
+    [switch]$SkipBuild,
     [switch]$Force
 )
 
@@ -26,45 +35,222 @@ $BinDir       = Join-Path $InstallRoot "bin"
 $MetadataPath = Join-Path $InstallRoot "install.json"
 
 $ScriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SrcBin       = Join-Path $ScriptDir "bin"
+$RepoRoot     = Split-Path -Parent $ScriptDir
+$ArtifactsRoot = Join-Path $RepoRoot ".artifacts\install"
+$ScriptDirLeaf = Split-Path -Leaf $ScriptDir
+$SourceTreeMode = ($ScriptDirLeaf -ieq "scripts") -and (Test-Path -LiteralPath (Join-Path $RepoRoot "revitcli.sln"))
+$SrcBin       = if ($SourceTreeMode) { Join-Path $ArtifactsRoot "bin" } else { Join-Path $ScriptDir "bin" }
+$SemVerPattern = '^(?:v)?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
+
+function Invoke-DotNet {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    & dotnet @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Get-AddinTargetFramework {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Year
+    )
+
+    if ($Year -eq "2024") {
+        return "net48"
+    }
+
+    return "net8.0-windows"
+}
+
+function Get-SourceAddinDir {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Year
+    )
+
+    if ($SourceTreeMode) {
+        return (Join-Path $ArtifactsRoot "addin\$Year")
+    }
+
+    return (Join-Path $ScriptDir "addin\$Year")
+}
+
+function Test-RevitCliVersion {
+    param([string]$Version)
+    return ($Version -match $SemVerPattern)
+}
+
+function Get-RevitCliVersion {
+    param([string]$ExePath)
+
+    if (-not (Test-Path -LiteralPath $ExePath)) {
+        throw "RevitCli executable not found: $ExePath"
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $versionOutput = & $ExePath --version 2>&1
+        $versionExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $text = ($versionOutput | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    if ($versionExitCode -ne 0) {
+        throw "'$ExePath --version' exited $versionExitCode`: $text"
+    }
+
+    foreach ($line in ($text -split "`r?`n")) {
+        if ($line -match '^revitcli\s+(.+)$') {
+            $version = $Matches[1].Trim()
+            if (Test-RevitCliVersion -Version $version) {
+                return $version
+            }
+            throw "RevitCli version is not valid SemVer: $version"
+        }
+    }
+
+    throw "'$ExePath --version' did not return a 'revitcli <version>' line: $text"
+}
+
+function Publish-SourceTreePackage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Years
+    )
+
+    if (-not $SourceTreeMode) {
+        return
+    }
+
+    if ($SkipBuild) {
+        Write-Host "Source-tree mode: skipping build; using $ArtifactsRoot" -ForegroundColor DarkGray
+        return
+    }
+
+    $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+    $resolvedArtifactsRoot = [System.IO.Path]::GetFullPath($ArtifactsRoot)
+    if (-not $resolvedArtifactsRoot.StartsWith($resolvedRepoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to clear artifacts outside repository root: $ArtifactsRoot"
+    }
+
+    if (Test-Path -LiteralPath $ArtifactsRoot) {
+        Remove-Item -LiteralPath $ArtifactsRoot -Recurse -Force
+    }
+    [System.IO.Directory]::CreateDirectory($ArtifactsRoot) | Out-Null
+
+    Write-Host "Publishing CLI from source tree to $SrcBin ..." -ForegroundColor Green
+    Invoke-DotNet -Arguments @(
+        "publish",
+        (Join-Path $RepoRoot "src\RevitCli\RevitCli.csproj"),
+        "-c", $Configuration,
+        "-o", $SrcBin
+    )
+
+    foreach ($year in $Years) {
+        $srcAddinYear = Get-SourceAddinDir -Year $year
+        $framework = Get-AddinTargetFramework -Year $year
+        $publishArgs = @(
+            "publish",
+            (Join-Path $RepoRoot "src\RevitCli.Addin\RevitCli.Addin.csproj"),
+            "-c", $Configuration,
+            "-f", $framework,
+            "-o", $srcAddinYear,
+            "-p:RevitYear=$year"
+        )
+
+        if (($year -eq "2026") -and ($RevitInstallDir -ne "")) {
+            $publishArgs += "-p:RevitInstallDir=$RevitInstallDir"
+        }
+
+        Write-Host "Publishing Add-in for Revit $year from source tree to $srcAddinYear ..." -ForegroundColor Green
+        Invoke-DotNet -Arguments $publishArgs
+    }
+}
 
 # ── Pre-checks ──────────────────────────────────────────────────
 Write-Host "RevitCli Installer" -ForegroundColor Cyan
 Write-Host ""
 
-# Check source directories
-if (-not (Test-Path $SrcBin)) {
-    Write-Host "ERROR: bin/ directory not found next to install.ps1" -ForegroundColor Red
-    Write-Host "Make sure you extracted the full ZIP archive."
-    exit 1
-}
-
 # Determine which Revit years to install
-if ($RevitYears -ne "") {
-    $targetYears = $RevitYears -split "," | ForEach-Object { $_.Trim() }
+if ($PSBoundParameters.ContainsKey("RevitYears")) {
+    if ([string]::IsNullOrWhiteSpace($RevitYears)) {
+        Write-Host "ERROR: No Revit years specified." -ForegroundColor Red
+        Write-Host "Supported years: $($SupportedYears -join ', ')"
+        exit 1
+    }
+
+    $targetYears = @($RevitYears -split "," | ForEach-Object { $_.Trim() })
+    $emptyYearTokens = @($targetYears | Where-Object { $_ -eq "" })
+    if ($emptyYearTokens.Count -gt 0) {
+        Write-Host "ERROR: Empty Revit year token in -RevitYears '$RevitYears'." -ForegroundColor Red
+        Write-Host "Use a comma-separated list like: 2026 or 2024,2025,2026"
+        exit 1
+    }
+} elseif ($SourceTreeMode) {
+    $targetYears = @("2026")
 } else {
-    # Auto-detect: check which years have add-in packages AND Revit installed
     $targetYears = @()
     foreach ($year in $SupportedYears) {
-        $srcAddinYear = Join-Path $ScriptDir "addin\$year"
-        if (Test-Path $srcAddinYear) {
+        $srcAddinYear = Get-SourceAddinDir -Year $year
+        $srcAddinDll = Join-Path $srcAddinYear "RevitCli.Addin.dll"
+        if (Test-Path -LiteralPath $srcAddinDll) {
             $targetYears += $year
         }
     }
     if ($targetYears.Count -eq 0) {
-        Write-Host "ERROR: No addin/<year> directories found in the package." -ForegroundColor Red
+        Write-Host "ERROR: No packaged add-in DLLs found under addin/<year>/RevitCli.Addin.dll." -ForegroundColor Red
         exit 1
     }
     Write-Host "Detected add-in packages for: $($targetYears -join ', ')" -ForegroundColor DarkGray
 }
 
+$unsupportedYears = @($targetYears | Where-Object { $SupportedYears -notcontains $_ })
+if ($unsupportedYears.Count -gt 0) {
+    Write-Host "ERROR: Unsupported Revit year(s): $($unsupportedYears -join ', ')" -ForegroundColor Red
+    Write-Host "Supported years: $($SupportedYears -join ', ')"
+    exit 1
+}
+
+Publish-SourceTreePackage -Years $targetYears
+
+# Check source directories
+if (-not (Test-Path -LiteralPath $SrcBin)) {
+    Write-Host "ERROR: bin/ directory not found in install package." -ForegroundColor Red
+    if ($SourceTreeMode) {
+        Write-Host "Run without -SkipBuild, or build source-tree artifacts under $ArtifactsRoot."
+    } else {
+        Write-Host "Make sure you extracted the full ZIP archive."
+    }
+    exit 1
+}
+
 # Validate source add-in directories exist
 foreach ($year in $targetYears) {
-    $srcAddinYear = Join-Path $ScriptDir "addin\$year"
-    if (-not (Test-Path $srcAddinYear)) {
-        Write-Host "ERROR: addin/$year/ directory not found in package." -ForegroundColor Red
+    $srcAddinYear = Get-SourceAddinDir -Year $year
+    $srcAddinDll = Join-Path $srcAddinYear "RevitCli.Addin.dll"
+    if (-not (Test-Path -LiteralPath $srcAddinDll)) {
+        Write-Host "ERROR: RevitCli.Addin.dll not found for Revit $year in install package." -ForegroundColor Red
+        if ($SourceTreeMode) {
+            Write-Host "Run without -SkipBuild, or build source-tree artifacts under $ArtifactsRoot."
+        }
         exit 1
     }
+}
+
+$sourceCliExe = Join-Path $SrcBin "RevitCli.exe"
+try {
+    $installedVersion = Get-RevitCliVersion -ExePath $sourceCliExe
+} catch {
+    Write-Host "ERROR: Failed to validate source CLI before modifying installation." -ForegroundColor Red
+    Write-Host $_.Exception.Message
+    exit 1
 }
 
 # Warn if Revit is running
@@ -95,11 +281,17 @@ Write-Host "Installing CLI to $BinDir ..." -ForegroundColor Green
 New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
 Copy-Item -Path "$SrcBin\*" -Destination $BinDir -Recurse -Force
 
+$installedCliExe = Join-Path $BinDir "RevitCli.exe"
+if (-not (Test-Path -LiteralPath $installedCliExe)) {
+    Write-Host "ERROR: Installed CLI executable not found at $installedCliExe" -ForegroundColor Red
+    exit 1
+}
+
 # ── Install Add-in per year ─────────────────────────────────────
 $installedYears = @()
 
 foreach ($year in $targetYears) {
-    $srcAddinYear = Join-Path $ScriptDir "addin\$year"
+    $srcAddinYear = Get-SourceAddinDir -Year $year
     $addinDir     = Join-Path $InstallRoot "addin\$year"
     $revitAddins  = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$year"
     $manifestPath = Join-Path $revitAddins "RevitCli.addin"
@@ -142,7 +334,7 @@ if ($userPath -notlike "*$BinDir*") {
 
 # ── Write install metadata ──────────────────────────────────────
 $metadata = @{
-    version      = "0.1.0"
+    version      = $installedVersion
     revitYears   = $installedYears
     binDir       = $BinDir
     installRoot  = $InstallRoot

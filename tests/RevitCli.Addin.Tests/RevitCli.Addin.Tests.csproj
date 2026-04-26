@@ -5,6 +5,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <RevitYear Condition="'$(RevitYear)' == ''">2026</RevitYear>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2026InstallDir)' != '' AND '$(RevitYear)' == '2026'">$(Revit2026InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2025InstallDir)' != '' AND '$(RevitYear)' == '2025'">$(Revit2025InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2024InstallDir)' != '' AND '$(RevitYear)' == '2024'">$(Revit2024InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2024'">C:\Program Files\Autodesk\Revit 2024</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2025'">C:\Program Files\Autodesk\Revit 2025</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2026'">C:\Program Files\Autodesk\Revit 2026</RevitInstallDir>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
@@ -16,5 +23,15 @@
     <ProjectReference Include="..\..\src\RevitCli.Addin\RevitCli.Addin.csproj" />
     <ProjectReference Include="..\..\src\RevitCli\RevitCli.csproj" />
     <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitInstallDir)\RevitAPI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallDir)\RevitAPIUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 </Project>
