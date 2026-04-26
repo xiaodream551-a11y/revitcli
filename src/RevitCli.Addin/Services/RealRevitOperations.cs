@@ -870,13 +870,24 @@ public sealed class RealRevitOperations : IRevitOperations
                 }
             }
             var missing = param == null;
-            var value = param == null ? null : FormatParameterValue(doc, param);
+            var value = "";
 
-            if (!missing && spec.RequireNonEmpty)
+            if (param != null)
             {
-                missing = param!.StorageType == StorageType.String
-                    ? string.IsNullOrWhiteSpace(value)
-                    : !param.HasValue;
+                if (param.StorageType == StorageType.String)
+                {
+                    value = param.AsString() ?? "";
+                    if (spec.RequireNonEmpty)
+                        missing = string.IsNullOrWhiteSpace(value);
+                }
+                else
+                {
+                    if (param.HasValue)
+                        value = FormatParameterValue(doc, param) ?? "";
+
+                    if (spec.RequireNonEmpty)
+                        missing = !param.HasValue;
+                }
             }
 
             if (missing)
@@ -893,7 +904,7 @@ public sealed class RealRevitOperations : IRevitOperations
                         Category = spec.Category,
                         Parameter = spec.Parameter,
                         Target = spec.Category,
-                        CurrentValue = value ?? "",
+                        CurrentValue = value,
                         ExpectedValue = spec.RequireNonEmpty ? null : value,
                         Source = "structured"
                     });
