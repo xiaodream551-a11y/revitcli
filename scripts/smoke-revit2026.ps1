@@ -293,13 +293,13 @@ if (-not $Apply) {
     $restoreFailure = $null
 
     try {
-        $restoreNeeded = $true
         Invoke-RevitCliSmoke @(
             "set", $Category,
             "--filter", $Filter,
             "--param", $Param,
             "--value", $Value
         ) | Out-Null
+        $restoreNeeded = $true
 
         $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
         $confirmed = Convert-JsonArray $confirmJson "query confirm"
