@@ -4,10 +4,9 @@ using System.CommandLine;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using RevitCli.Checks;
 using RevitCli.Client;
 using RevitCli.Output;
-using RevitCli.Profile;
-using RevitCli.Shared;
 using Spectre.Console;
 
 namespace RevitCli.Commands;
@@ -42,97 +41,22 @@ public static class CheckCommand
     internal static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
         string outputFormat, string? reportPath, bool noSave, bool sendNotify, TextWriter output)
     {
-        // Load profile
-        ProjectProfile? profile;
-        try
+        var run = await CheckRunner.RunAsync(client, name, profilePath);
+        if (!run.Success)
         {
-            if (profilePath != null)
-                profile = ProfileLoader.Load(profilePath);
-            else
-                profile = ProfileLoader.DiscoverAndLoad();
-        }
-        catch (Exception ex)
-        {
-            await output.WriteLineAsync($"Error loading profile: {ex.Message}");
-            return 1;
-        }
-
-        if (profile == null)
-        {
-            await output.WriteLineAsync($"Error: no {ProfileLoader.FileName} found.");
-            await output.WriteLineAsync($"  Create one in your project root, or copy from .revitcli.example.yml");
-            await output.WriteLineAsync($"  Docs: revitcli doctor  (shows profile detection status)");
-            return 1;
-        }
-
-        var checkName = name ?? "default";
-        if (!profile.Checks.TryGetValue(checkName, out var checkDef))
-        {
-            await output.WriteLineAsync($"Error: check set '{checkName}' not found in profile.");
-            if (profile.Checks.Count > 0)
-                await output.WriteLineAsync($"  Available check sets: {string.Join(", ", profile.Checks.Keys)}");
-            else
-                await output.WriteLineAsync($"  Your profile has no check sets defined. Add a 'checks:' section.");
-            return 1;
-        }
-
-        var allIssues = new List<AuditIssue>();
-        var totalPassed = 0;
-        var totalFailed = 0;
-
-        // Build single audit request with all checks
-        var request = new AuditRequest
-        {
-            Rules = checkDef.AuditRules.Select(r => r.Rule).ToList(),
-            RequiredParameters = checkDef.RequiredParameters.Select(r => new RequiredParameterSpec
-            {
-                Category = r.Category,
-                Parameter = r.Parameter,
-                RequireNonEmpty = r.RequireNonEmpty,
-                Severity = r.Severity
-            }).ToList(),
-            NamingPatterns = checkDef.Naming.Select(n => new NamingPatternSpec
-            {
-                Target = n.Target,
-                Pattern = n.Pattern,
-                Severity = n.Severity
-            }).ToList()
-        };
-
-        var result = await client.AuditAsync(request);
-        if (!result.Success)
-        {
-            await output.WriteLineAsync($"Error: {result.Error}");
-            if (result.Error?.Contains("not running") == true)
+            await output.WriteLineAsync(run.Error);
+            if (run.Error.Contains("not running", StringComparison.OrdinalIgnoreCase))
                 await output.WriteLineAsync("  Run 'revitcli doctor' to diagnose connection issues.");
             return 1;
         }
 
-        totalPassed = result.Data!.Passed;
-        totalFailed = result.Data!.Failed;
-        allIssues.AddRange(result.Data!.Issues);
-
-        // Apply suppressions
-        var suppressedCount = 0;
-        if (checkDef.Suppressions.Count > 0)
-        {
-            var activeSuppressions = checkDef.Suppressions
-                .Where(s => !IsExpired(s.Expires))
-                .ToList();
-
-            var filtered = new List<AuditIssue>();
-            foreach (var issue in allIssues)
-            {
-                if (IsSuppressed(issue, activeSuppressions))
-                    suppressedCount++;
-                else
-                    filtered.Add(issue);
-            }
-            allIssues = filtered;
-
-            // If all error/warning issues were suppressed, exit code should be 0
-            // (handled below in the failOn logic which checks allIssues after filtering)
-        }
+        var checkName = run.Data!.CheckName;
+        var profile = run.Data.Profile;
+        var checkDef = run.Data.CheckDefinition;
+        var allIssues = run.Data.Issues;
+        var suppressedCount = run.Data.SuppressedCount;
+        var displayPassed = run.Data.DisplayPassed;
+        var displayFailed = run.Data.DisplayFailed;
 
         // Render output
         var format = outputFormat.ToLowerInvariant();
@@ -146,11 +70,6 @@ public static class CheckCommand
             else if (ext == ".json")
                 format = "json";
         }
-
-        var displayFailed = allIssues.Count(i => i.Severity is "error" or "warning");
-        // totalPassed/totalFailed come from audit rules only; displayFailed also counts
-        // requiredParameter and namingPattern issues, so the subtraction can go negative.
-        var displayPassed = Math.Max(0, totalPassed + totalFailed - displayFailed);
 
         var rendered = format switch
         {
@@ -179,11 +98,9 @@ public static class CheckCommand
         }
 
         // Diff + save (only for table output — don't pollute JSON/HTML)
-        var profileDir = profilePath != null
-            ? Path.GetDirectoryName(Path.GetFullPath(profilePath))
-            : (ProfileLoader.Discover() is { } discovered
-                ? Path.GetDirectoryName(Path.GetFullPath(discovered))
-                : null);
+        var profileDir = run.Data.ProfilePath != null
+            ? Path.GetDirectoryName(run.Data.ProfilePath)
+            : null;
 
         if (!noSave)
         {
@@ -246,59 +163,5 @@ public static class CheckCommand
         }
 
         return exitCode;
-    }
-
-    private static bool IsSuppressed(AuditIssue issue, List<Profile.Suppression> suppressions)
-    {
-        foreach (var s in suppressions)
-        {
-            if (!string.Equals(s.Rule, issue.Rule, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Fine-grained matching: category and parameter narrow the scope (word-boundary match)
-            if (!string.IsNullOrEmpty(s.Category) &&
-                !ContainsWord(issue.Message, s.Category))
-                continue;
-
-            if (!string.IsNullOrEmpty(s.Parameter) &&
-                !ContainsWord(issue.Message, s.Parameter))
-                continue;
-
-            // If elementIds specified, only suppress those specific elements
-            if (s.ElementIds != null && s.ElementIds.Count > 0)
-            {
-                if (issue.ElementId.HasValue && s.ElementIds.Contains(issue.ElementId.Value))
-                    return true;
-            }
-            else
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static bool IsExpired(string? expires)
-    {
-        if (string.IsNullOrWhiteSpace(expires))
-            return false;
-
-        if (DateTime.TryParse(expires, out var expiryDate))
-            return DateTime.Now > expiryDate;
-
-        return false;
-    }
-
-    private static bool ContainsWord(string text, string word)
-    {
-        int idx = 0;
-        while ((idx = text.IndexOf(word, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            bool startOk = idx == 0 || !char.IsLetterOrDigit(text[idx - 1]);
-            bool endOk = idx + word.Length >= text.Length || !char.IsLetterOrDigit(text[idx + word.Length]);
-            if (startOk && endOk) return true;
-            idx += word.Length;
-        }
-        return false;
     }
 }
