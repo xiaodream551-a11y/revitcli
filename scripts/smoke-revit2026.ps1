@@ -326,8 +326,6 @@ try {
 
     if (-not $Apply -and -not $FixApply) {
         Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
-    } elseif ($FixApply -and -not $Apply) {
-        Write-Host "Fix apply smoke completed. Review the report for the baseline, journal, and rollback results."
     }
 
     if ($Apply) {
@@ -405,6 +403,10 @@ try {
                 "--profile", $FixProfile,
                 "--baseline-output", $fixBaselinePath
             ) | Out-Null
+
+            if (-not (Test-Path -LiteralPath $fixBaselinePath)) {
+                throw "fix apply succeeded but did not create the expected baseline file: $fixBaselinePath"
+            }
         } catch {
             $fixApplyFailure = $_
         } finally {
@@ -421,6 +423,10 @@ try {
             $scriptFailure = $fixRollbackFailure
         } elseif ($null -ne $fixApplyFailure) {
             $scriptFailure = $fixApplyFailure
+        }
+
+        if ($null -eq $fixApplyFailure -and $null -eq $fixRollbackFailure) {
+            Write-Host "Fix apply smoke completed. Review the report for the baseline, journal, and rollback results."
         }
     }
 } catch {
