@@ -42,6 +42,7 @@ internal static class CliCommandCatalog
         ("audit", "Run model checking rules (--rules, --list)"),
         ("check [name]", "Run project checks from .revitcli.yml profile"),
         ("publish [name]", "Run export pipeline from .revitcli.yml profile"),
+        ("rollback <baseline>", "Restore parameters changed by a fix baseline"),
         ("score", "Calculate model health score (0-100)"),
         ("coverage", "Show parameter fill rates by category"),
         ("schedule list", "List existing schedules in the model"),
@@ -80,6 +81,7 @@ internal static class CliCommandCatalog
         root.AddCommand(DoctorCommand.Create(client, config));
         root.AddCommand(CheckCommand.Create(client));
         root.AddCommand(FixCommand.Create(client));
+        root.AddCommand(RollbackCommand.Create(client));
         root.AddCommand(PublishCommand.Create(client));
         root.AddCommand(InitCommand.Create());
         root.AddCommand(ScoreCommand.Create(client));

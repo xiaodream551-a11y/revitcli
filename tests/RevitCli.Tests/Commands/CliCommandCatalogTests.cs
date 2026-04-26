@@ -33,6 +33,7 @@ public class CliCommandCatalogTests
         Assert.Contains("completions", names);
         Assert.Contains("doctor", names);
         Assert.Contains("fix", names);
+        Assert.Contains("rollback", names);
     }
 
     [Fact]
@@ -66,6 +67,7 @@ public class CliCommandCatalogTests
         Assert.DoesNotContain("batch", names);
         Assert.Contains("completions", names);
         Assert.Contains("fix", names);
+        Assert.Contains("rollback", names);
     }
 
     [Fact]
@@ -76,5 +78,14 @@ public class CliCommandCatalogTests
         Assert.Contains("rollback", names);
         Assert.Contains("snapshot", names);
         Assert.Contains("diff", names);
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeRollback()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "rollback <baseline>" &&
+                     entry.Description == "Restore parameters changed by a fix baseline");
     }
 }

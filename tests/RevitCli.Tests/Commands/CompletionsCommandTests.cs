@@ -60,9 +60,12 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("--profile", script);
         Assert.Contains("--rule", script);
         Assert.Contains("--severity", script);
+        Assert.Contains("--dry-run", script);
+        Assert.Contains("--yes", script);
         Assert.Contains("--max-changes", script);
         Assert.Contains("--baseline-output", script);
         Assert.Contains("--no-snapshot", script);
+        Assert.Contains("rollback)", script);
     }
 
     [Fact]
@@ -77,7 +80,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains("'doctor:Check RevitCli setup and diagnose issues'", script);
         Assert.Contains("'interactive:Enter interactive REPL mode'", script);
+        Assert.Contains("'rollback:Restore parameters changed by a fix baseline'", script);
         Assert.Contains("_arguments '1:file:_files'", script);
+        Assert.Contains("'1:baseline file:_files'", script);
         Assert.Contains("_values 'setting' serverUrl defaultOutput exportDir", script);
     }
 
@@ -93,7 +98,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains("'doctor' = 'Check RevitCli setup and diagnose issues'", script);
         Assert.Contains("'interactive' = 'Enter interactive REPL mode'", script);
+        Assert.Contains("'rollback' = 'Restore parameters changed by a fix baseline'", script);
         Assert.Contains("$configKeys = @('serverUrl', 'defaultOutput', 'exportDir')", script);
+        Assert.Contains("New-RevitCliFileCompletionResults", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $shells -ToolTip 'Shell'", script);
     }
 
