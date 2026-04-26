@@ -49,9 +49,13 @@ public static class DoctorCommand
         else
             await output.WriteLineAsync($"INFO: No configuration file ({configPath}) - using defaults");
 
+        var cliVersion = environment.CliVersion;
+        await WriteOk(output, $"CLI version: {cliVersion}");
+        var expectedVersion = await ParseExpectedVersion(output, cliVersion);
+
         // 2. Revit 2026 local prerequisites
         hasFailure |= !await WriteRevit2026ApiCheck(output, environment);
-        hasFailure |= !await WriteAddinManifestCheck(output, environment);
+        hasFailure |= !await WriteAddinManifestCheck(output, environment, expectedVersion);
 
         // 3. Server URL
         await output.WriteLineAsync($"OK: Server URL: {config.ServerUrl}");
@@ -116,12 +120,15 @@ public static class DoctorCommand
         return false;
     }
 
-    private static async Task<bool> WriteAddinManifestCheck(TextWriter output, DoctorEnvironment environment)
+    private static async Task<bool> WriteAddinManifestCheck(
+        TextWriter output,
+        DoctorEnvironment environment,
+        ComponentVersion? expectedVersion)
     {
         var manifestPath = environment.ManifestPath;
         if (!File.Exists(manifestPath))
         {
-            await output.WriteLineAsync($"FAIL: Add-in manifest missing ({manifestPath})");
+            await WriteFail(output, $"Add-in manifest missing ({manifestPath})");
             await output.WriteLineAsync("HINT: Build/publish the add-in and install RevitCli.addin under Autodesk\\Revit\\Addins\\2026.");
             return false;
         }
@@ -132,7 +139,7 @@ public static class DoctorCommand
             var assembly = doc.Descendants("Assembly").FirstOrDefault()?.Value.Trim();
             if (string.IsNullOrWhiteSpace(assembly))
             {
-                await output.WriteLineAsync($"FAIL: Add-in manifest has no Assembly path ({manifestPath})");
+                await WriteFail(output, $"Add-in manifest has no Assembly path ({manifestPath})");
                 return false;
             }
 
@@ -141,19 +148,90 @@ public static class DoctorCommand
                 : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(manifestPath)!, assembly));
             if (!File.Exists(assemblyPath))
             {
-                await output.WriteLineAsync($"FAIL: Add-in assembly from manifest does not exist ({assemblyPath})");
+                await WriteFail(output, $"Add-in assembly from manifest does not exist ({assemblyPath})");
                 return false;
             }
 
-            await output.WriteLineAsync($"OK: Add-in manifest: {manifestPath}");
-            await output.WriteLineAsync($"OK: Add-in assembly: {assemblyPath}");
-            return true;
+            if (!AssemblyVersionReader.TryRead(assemblyPath, out var installedVersion, out var versionError))
+            {
+                await WriteFail(output, $"Installed Add-in version cannot be read ({assemblyPath}): {versionError}");
+                return false;
+            }
+
+            await WriteOk(output, $"Add-in manifest: {manifestPath}");
+            await WriteOk(output, $"Add-in assembly: {assemblyPath}");
+            return await WriteVersionCompatibility(output, expectedVersion, installedVersion);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
-            await output.WriteLineAsync($"FAIL: Add-in manifest cannot be read ({manifestPath}): {ex.Message}");
+            await WriteFail(output, $"Add-in manifest cannot be read ({manifestPath}): {ex.Message}");
             return false;
         }
+    }
+
+    private static async Task<ComponentVersion?> ParseExpectedVersion(TextWriter output, string cliVersion)
+    {
+        if (ComponentVersion.TryParse(cliVersion, out var expectedVersion))
+            return expectedVersion;
+
+        await WriteWarn(output, $"CLI version cannot be parsed for installed Add-in compatibility check: {cliVersion}");
+        return null;
+    }
+
+    private static async Task<bool> WriteVersionCompatibility(
+        TextWriter output,
+        ComponentVersion? expectedVersion,
+        string installedVersion)
+    {
+        await WriteOk(output, $"Installed Add-in version: {installedVersion}");
+
+        if (expectedVersion == null)
+            return true;
+
+        if (!ComponentVersion.TryParse(installedVersion, out var actualVersion))
+        {
+            await WriteFail(output, $"Installed Add-in version cannot be parsed: {installedVersion}");
+            return false;
+        }
+
+        var compatibility = ComponentVersion.Compare(expectedVersion.Value, actualVersion);
+        switch (compatibility)
+        {
+            case VersionCompatibility.Compatible:
+                return true;
+            case VersionCompatibility.MetadataMismatch:
+                await WriteWarn(
+                    output,
+                    $"Installed Add-in version metadata does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                return true;
+            case VersionCompatibility.PatchMismatch:
+                await WriteWarn(
+                    output,
+                    $"Installed Add-in patch version does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                return true;
+            case VersionCompatibility.MajorMinorMismatch:
+                await WriteFail(
+                    output,
+                    $"Installed Add-in version does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                return false;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(compatibility), compatibility, null);
+        }
+    }
+
+    private static Task WriteOk(TextWriter output, string message)
+    {
+        return output.WriteLineAsync($"OK: {message}");
+    }
+
+    private static Task WriteWarn(TextWriter output, string message)
+    {
+        return output.WriteLineAsync($"WARN: {message}");
+    }
+
+    private static Task WriteFail(TextWriter output, string message)
+    {
+        return output.WriteLineAsync($"FAIL: {message}");
     }
 
     private static async Task<bool> WriteServerInfoCheck(TextWriter output, DoctorEnvironment environment)

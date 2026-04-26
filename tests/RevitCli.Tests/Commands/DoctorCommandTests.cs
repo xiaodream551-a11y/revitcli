@@ -25,24 +25,41 @@ public class DoctorCommandTests
         File.WriteAllText(Path.Combine(revitDir, "RevitAPI.dll"), "");
         File.WriteAllText(Path.Combine(revitDir, "RevitAPIUI.dll"), "");
 
-        var addins = Path.Combine(appData, "Autodesk", "Revit", "Addins", "2026");
-        Directory.CreateDirectory(addins);
-        var addinDll = Path.Combine(root, "addin", "RevitCli.Addin.dll");
-        Directory.CreateDirectory(Path.GetDirectoryName(addinDll)!);
-        File.WriteAllText(addinDll, "");
-        File.WriteAllText(Path.Combine(addins, "RevitCli.addin"),
-            $@"<?xml version=""1.0"" encoding=""utf-8""?>
-<RevitAddIns>
-  <AddIn Type=""Application"">
-    <Assembly>{addinDll}</Assembly>
-  </AddIn>
-</RevitAddIns>");
-
-        return new DoctorEnvironment
+        var environment = new DoctorEnvironment
         {
             UserProfile = userProfile,
             AppData = appData,
             Revit2026InstallDir = revitDir
+        };
+
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        return environment;
+    }
+
+    private static string CurrentCliAssemblyPath() =>
+        typeof(DoctorCommand).Assembly.Location;
+
+    private static void WriteAddinManifest(DoctorEnvironment environment, string assemblyPath)
+    {
+        var addins = Path.Combine(environment.AppData, "Autodesk", "Revit", "Addins", "2026");
+        Directory.CreateDirectory(addins);
+        File.WriteAllText(Path.Combine(addins, "RevitCli.addin"),
+            $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<RevitAddIns>
+  <AddIn Type=""Application"">
+    <Assembly>{assemblyPath}</Assembly>
+  </AddIn>
+</RevitAddIns>");
+    }
+
+    private static DoctorEnvironment WithCliVersion(DoctorEnvironment environment, string cliVersion)
+    {
+        return new DoctorEnvironment
+        {
+            UserProfile = environment.UserProfile,
+            AppData = environment.AppData,
+            Revit2026InstallDir = environment.Revit2026InstallDir,
+            CliVersion = cliVersion
         };
     }
 
@@ -78,6 +95,40 @@ public class DoctorCommandTests
         Assert.Contains("Connected to Revit 2026", output);
         Assert.Contains("Test.rvt", output);
         Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public async Task Execute_InstalledAddinMajorMinorMismatch_ReturnsFailure()
+    {
+        var environment = WithCliVersion(CreateDoctorEnvironment(), "9.9.0");
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo { RevitVersion = "2026", RevitYear = 2026, AddinVersion = "9.9.0" };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Installed Add-in version", writer.ToString());
+        Assert.Contains("does not match CLI", writer.ToString());
+    }
+
+    [Fact]
+    public async Task Execute_PrintsCliAndInstalledAddinVersions_WhenManifestAssemblyExists()
+    {
+        var environment = CreateDoctorEnvironment();
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo { RevitVersion = "2026", RevitYear = 2026, AddinVersion = environment.CliVersion };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        var output = writer.ToString();
+        Assert.Contains("CLI version", output);
+        Assert.Contains("Installed Add-in version", output);
     }
 
     [Fact]
