@@ -11,7 +11,11 @@ namespace RevitCli.Checks;
 
 internal static class CheckRunner
 {
-    public static async Task<CheckRunnerResponse> RunAsync(RevitClient client, string? name, string? profilePath)
+    public static async Task<CheckRunnerResponse> RunAsync(
+        RevitClient client,
+        string? name,
+        string? profilePath,
+        string? startDir = null)
     {
         ProjectProfile? profile;
         string? resolvedProfilePath = null;
@@ -25,7 +29,7 @@ internal static class CheckRunner
             }
             else
             {
-                var discoveredPath = ProfileLoader.Discover();
+                var discoveredPath = ProfileLoader.Discover(startDir);
                 if (discoveredPath != null)
                 {
                     resolvedProfilePath = Path.GetFullPath(discoveredPath);
