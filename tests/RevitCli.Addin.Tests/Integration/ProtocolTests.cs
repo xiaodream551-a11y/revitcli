@@ -23,31 +23,34 @@ public class ProtocolTests : IDisposable
 {
     private readonly ApiServer _server;
     private readonly RevitClient _client;
-    private readonly int _port;
+    private readonly int _actualPort;
+    private readonly string _tempDir;
+    private readonly string _serverInfoPath;
+    private readonly string _realUserServerInfoPath;
 
     public ProtocolTests()
     {
-        _port = GetAvailablePort();
-        var operations = new PlaceholderRevitOperations();
-        _server = new ApiServer(_port, operations);
-        _server.Start();
-
-        var serverInfoPath = Path.Combine(
+        _tempDir = Path.Combine(Path.GetTempPath(), $"revitcli_protocol_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+        _serverInfoPath = Path.Combine(_tempDir, "server.json");
+        _realUserServerInfoPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".revitcli", "server.json");
-        var token = "";
-        if (File.Exists(serverInfoPath))
-        {
-            var info = JsonSerializer.Deserialize<ServerInfo>(File.ReadAllText(serverInfoPath));
-            token = info?.Token ?? "";
-        }
-        _client = new RevitClient($"http://localhost:{_port}", token);
+        var requestedPort = GetAvailablePort();
+        var operations = new PlaceholderRevitOperations();
+        _server = new ApiServer(requestedPort, operations, serverInfoPath: _serverInfoPath);
+        _server.Start();
+
+        var info = ReadServerInfo();
+        _actualPort = info.Port;
+        _client = new RevitClient($"http://localhost:{_actualPort}", info.Token);
     }
 
     public void Dispose()
     {
         _client.Dispose();
         _server.Dispose();
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     private static int GetAvailablePort()
@@ -57,6 +60,70 @@ public class ProtocolTests : IDisposable
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
         return port;
+    }
+
+    [Fact]
+    public void ProtocolServer_UsesTemporaryServerInfoPath()
+    {
+        Assert.NotEqual(_realUserServerInfoPath, _serverInfoPath);
+        Assert.StartsWith(_tempDir, _serverInfoPath);
+        Assert.True(File.Exists(_serverInfoPath));
+    }
+
+    [Fact]
+    public void Start_WritesServerInfoToConfiguredPath()
+    {
+        Assert.True(File.Exists(_serverInfoPath));
+        var info = ReadServerInfo();
+        Assert.Equal(_actualPort, info.Port);
+        Assert.False(string.IsNullOrWhiteSpace(info.Token));
+    }
+
+    [Fact]
+    public async Task Start_WhenRequestedPortIsBusy_PublishesListeningFallbackPort()
+    {
+        var busyPort = GetAvailablePort();
+        using var busyListener = new HttpListener();
+        busyListener.Prefixes.Add($"http://localhost:{busyPort}/");
+        busyListener.Start();
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"revitcli_protocol_busy_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var serverInfoPath = Path.Combine(tempDir, "server.json");
+
+        using var server = new ApiServer(busyPort, new PlaceholderRevitOperations(), serverInfoPath: serverInfoPath);
+        server.Start();
+
+        try
+        {
+            var info = JsonSerializer.Deserialize<ServerInfo>(File.ReadAllText(serverInfoPath));
+            Assert.NotNull(info);
+            Assert.NotEqual(busyPort, info!.Port);
+
+            using var client = new RevitClient($"http://localhost:{info.Port}", info.Token);
+            var result = await client.GetStatusAsync();
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.Data);
+            Assert.Equal("2025", result.Data.RevitVersion);
+        }
+        finally
+        {
+            server.Dispose();
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Dispose_DoesNotDeleteServerInfoOwnedByDifferentToken()
+    {
+        var info = ReadServerInfo();
+        info.Token = "different-token";
+        File.WriteAllText(_serverInfoPath, JsonSerializer.Serialize(info));
+
+        _server.Dispose();
+
+        Assert.True(File.Exists(_serverInfoPath));
     }
 
     [Fact]
@@ -96,7 +163,9 @@ public class ProtocolTests : IDisposable
         {
             Format = "dwg",
             Sheets = new() { "A1" },
-            OutputDir = "/tmp"
+            OutputDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".revitcli", "test-exports")
         };
 
         var result = await _client.ExportAsync(request);
@@ -166,5 +235,12 @@ public class ProtocolTests : IDisposable
         // Placeholder currently ignores filter; assert response is still well-formed.
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
+    }
+
+    private ServerInfo ReadServerInfo()
+    {
+        var info = JsonSerializer.Deserialize<ServerInfo>(File.ReadAllText(_serverInfoPath));
+        Assert.NotNull(info);
+        return info!;
     }
 }

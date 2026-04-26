@@ -475,7 +475,7 @@ public sealed class RealRevitOperations : IRevitOperations
     // ═══════════════════════════════════════════════════════════════
 
     private static readonly string AddinVersionString =
-        typeof(RealRevitOperations).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        AddinVersionProvider.Current();
 
     public Task<StatusInfo> GetStatusAsync()
     {
