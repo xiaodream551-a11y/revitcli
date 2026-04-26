@@ -12,6 +12,7 @@
 .EXAMPLE
     .\scripts\smoke-revit2026.ps1 `
       -ElementId 12345 `
+      -RevitInstallDir 'D:\revit2026\Revit 2026' `
       -Category walls `
       -Filter 'Mark = W-01' `
       -Param Comments `
@@ -33,6 +34,8 @@ param(
 
     [string]$RevitCli = "revitcli",
 
+    [string]$RevitInstallDir = "",
+
     [switch]$Apply,
 
     [string]$OutputPath = ""
@@ -42,6 +45,8 @@ $ErrorActionPreference = "Stop"
 $SemVerPattern = '^(?:v)?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 
 function Resolve-Revit2026InstallDir {
+    param([string]$OverridePath)
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath)) { return $OverridePath }
     if ($env:REVITCLI_REVIT2026_INSTALL_DIR) { return $env:REVITCLI_REVIT2026_INSTALL_DIR }
     if ($env:Revit2026InstallDir) { return $env:Revit2026InstallDir }
     return (Join-Path $env:ProgramFiles "Autodesk\Revit 2026")
@@ -175,8 +180,39 @@ function Convert-JsonArray {
     return @($value)
 }
 
+function Get-ElementParameterProperty {
+    param([object]$Element, [string]$ParameterName, [string]$Context)
+
+    if ($null -eq $Element.parameters) {
+        throw "$Context returned no parameters object for element $($Element.id)."
+    }
+
+    $property = $Element.parameters.PSObject.Properties |
+        Where-Object { $_.Name -eq $ParameterName } |
+        Select-Object -First 1
+
+    if ($null -eq $property) {
+        throw "$Context did not expose parameter '$ParameterName' for element $($Element.id)."
+    }
+
+    return $property
+}
+
+function Assert-DryRunPreview {
+    param([string]$Text, [long]$ElementId, [string]$OldValue, [string]$NewValue)
+
+    $idNeedle = "[$ElementId]"
+    $transitionNeedle = '"' + $OldValue + '" -> "' + $NewValue + '"'
+    if (-not $Text.Contains($idNeedle)) {
+        throw "set --dry-run preview did not include target element id $ElementId.`n$Text"
+    }
+    if (-not $Text.Contains($transitionNeedle)) {
+        throw "set --dry-run preview did not include expected value transition $transitionNeedle.`n$Text"
+    }
+}
+
 $Steps = [System.Collections.Generic.List[object]]::new()
-$installDir = Resolve-Revit2026InstallDir
+$installDir = Resolve-Revit2026InstallDir -OverridePath $RevitInstallDir
 $manifestPath = Join-Path $env:APPDATA "Autodesk\Revit\Addins\2026\RevitCli.addin"
 $serverInfoPath = Join-Path $env:USERPROFILE ".revitcli\server.json"
 
@@ -222,16 +258,14 @@ if ($idElements.Count -ne 1) {
 }
 
 $oldValue = $null
-$paramProperty = $idElements[0].parameters.PSObject.Properties |
-    Where-Object { $_.Name -eq $Param } |
-    Select-Object -First 1
-if ($null -eq $paramProperty) {
-    throw "Element $ElementId does not expose parameter '$Param'. Pick a writable text parameter for the smoke test."
-}
+$paramProperty = Get-ElementParameterProperty -Element $idElements[0] -ParameterName $Param -Context "query --id"
 if ($Apply -and $null -eq $paramProperty.Value) {
     throw "Element $ElementId parameter '$Param' is null. Pick a writable text parameter with an existing value so the smoke test can restore it exactly."
 }
 $oldValue = if ($null -eq $paramProperty.Value) { $null } else { [string]$paramProperty.Value }
+if ($Apply -and [string]::IsNullOrEmpty($Value)) {
+    throw "-Apply requires a non-empty -Value so query confirmation cannot hide a missing parameter."
+}
 
 $filterJson = Invoke-RevitCliSmoke @("query", $Category, "--filter", $Filter, "--output", "json")
 $filtered = Convert-JsonArray $filterJson "query filter"
@@ -242,13 +276,14 @@ if ([long]$filtered[0].id -ne $ElementId) {
     throw "Filter matched element $($filtered[0].id), expected $ElementId."
 }
 
-Invoke-RevitCliSmoke @(
+$dryRunText = Invoke-RevitCliSmoke @(
     "set", $Category,
     "--filter", $Filter,
     "--param", $Param,
     "--value", $Value,
     "--dry-run"
-) | Out-Null
+)
+Assert-DryRunPreview -Text $dryRunText -ElementId $ElementId -OldValue $oldValue -NewValue $Value
 
 if (-not $Apply) {
     Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
@@ -268,9 +303,7 @@ if (-not $Apply) {
 
         $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
         $confirmed = Convert-JsonArray $confirmJson "query confirm"
-        $newParam = $confirmed[0].parameters.PSObject.Properties |
-            Where-Object { $_.Name -eq $Param } |
-            Select-Object -First 1
+        $newParam = Get-ElementParameterProperty -Element $confirmed[0] -ParameterName $Param -Context "query confirm"
         if ([string]$newParam.Value -ne $Value) {
             throw "Write verification failed for '$Param': expected '$Value', got '$($newParam.Value)'."
         }
@@ -287,9 +320,7 @@ if (-not $Apply) {
 
                 $restoreJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
                 $restored = Convert-JsonArray $restoreJson "query restore"
-                $restoredParam = $restored[0].parameters.PSObject.Properties |
-                    Where-Object { $_.Name -eq $Param } |
-                    Select-Object -First 1
+                $restoredParam = Get-ElementParameterProperty -Element $restored[0] -ParameterName $Param -Context "query restore"
                 if ([string]$restoredParam.Value -ne $oldValue) {
                     throw "Restore verification failed for '$Param': expected '$oldValue', got '$($restoredParam.Value)'."
                 }

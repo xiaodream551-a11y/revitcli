@@ -37,7 +37,8 @@ $MetadataPath = Join-Path $InstallRoot "install.json"
 $ScriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot     = Split-Path -Parent $ScriptDir
 $ArtifactsRoot = Join-Path $RepoRoot ".artifacts\install"
-$SourceTreeMode = Test-Path (Join-Path $RepoRoot "revitcli.sln")
+$ScriptDirLeaf = Split-Path -Leaf $ScriptDir
+$SourceTreeMode = ($ScriptDirLeaf -ieq "scripts") -and (Test-Path -LiteralPath (Join-Path $RepoRoot "revitcli.sln"))
 $SrcBin       = if ($SourceTreeMode) { Join-Path $ArtifactsRoot "bin" } else { Join-Path $ScriptDir "bin" }
 $SemVerPattern = '^(?:v)?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 
