@@ -48,4 +48,18 @@ public class RenameByPatternStrategyTests
         Assert.False(result.Success);
         Assert.Contains("does not match", result.Error);
     }
+
+    [Fact]
+    public void Plan_NullRecipe_Skips()
+    {
+        var strategy = new RenameByPatternStrategy();
+        var result = strategy.Plan(
+            new AuditIssue { Rule = "naming", ElementId = 20, Parameter = "Name", CurrentValue = "Room Lobby" },
+            null!,
+            inferred: false,
+            confidence: "high");
+
+        Assert.False(result.Success);
+        Assert.Contains("recipe is null", result.Error.ToLowerInvariant());
+    }
 }

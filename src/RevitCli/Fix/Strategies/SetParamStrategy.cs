@@ -14,6 +14,11 @@ internal sealed class SetParamStrategy : IFixStrategy
             return FixStrategyPlanResult.Skip("Issue is null.");
         }
 
+        if (recipe is null)
+        {
+            return FixStrategyPlanResult.Skip("Recipe is null.");
+        }
+
         if (issue.ElementId is null)
         {
             return FixStrategyPlanResult.Skip("Issue has no element id.");
@@ -47,6 +52,11 @@ internal sealed class SetParamStrategy : IFixStrategy
         if (string.IsNullOrWhiteSpace(rendered))
         {
             return FixStrategyPlanResult.Skip("Rendered value is empty.");
+        }
+
+        if (string.Equals(rendered, issue.CurrentValue, StringComparison.Ordinal))
+        {
+            return FixStrategyPlanResult.Skip("Rendered value equals current value.");
         }
 
         var action = new FixAction

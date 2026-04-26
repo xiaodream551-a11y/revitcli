@@ -56,4 +56,68 @@ public class FixPlannerTests
         Assert.Empty(plan.Actions);
         Assert.Single(plan.Skipped);
     }
+
+    [Fact]
+    public void Plan_InferExpectedValue_MediumConfidenceForStructuredIssue()
+    {
+        var issues = new List<AuditIssue>
+        {
+            new()
+            {
+                Rule = "required-parameter",
+                Severity = "warning",
+                ElementId = 7,
+                Category = "doors",
+                Parameter = "Mark",
+                ExpectedValue = "D-7",
+                Source = "structured",
+                CurrentValue = "X"
+            }
+        };
+
+        var plan = FixPlanner.Plan("default", issues, new ProjectProfile(), new FixPlanOptions());
+
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal("D-7", action.NewValue);
+        Assert.Equal("medium", action.Confidence);
+    }
+
+    [Fact]
+    public void Plan_UnsupportedStrategy_IsSkippedWithWarning()
+    {
+        var issues = new List<AuditIssue>
+        {
+            new()
+            {
+                Rule = "required-parameter",
+                Severity = "warning",
+                ElementId = 1,
+                Category = "doors",
+                Parameter = "Mark",
+                CurrentValue = ""
+            }
+        };
+        var profile = new ProjectProfile
+        {
+            Fixes = new List<FixRecipe>
+            {
+                new()
+                {
+                    Rule = "required-parameter",
+                    Category = "doors",
+                    Parameter = "Mark",
+                    Strategy = "unsupported",
+                    Value = "X"
+                }
+            }
+        };
+
+        var plan = FixPlanner.Plan("default", issues, profile, new FixPlanOptions());
+
+        Assert.Empty(plan.Actions);
+        var skipped = Assert.Single(plan.Skipped);
+        var warning = Assert.Single(plan.Warnings);
+        Assert.Equal("Unsupported strategy 'unsupported'.", warning);
+        Assert.Contains("Unsupported strategy", skipped.Reason);
+    }
 }

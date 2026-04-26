@@ -45,4 +45,38 @@ public class SetParamStrategyTests
         Assert.False(result.Success);
         Assert.Contains("element id", result.Error.ToLowerInvariant());
     }
+
+    [Fact]
+    public void Plan_NullRecipe_Skips()
+    {
+        var strategy = new SetParamStrategy();
+        var result = strategy.Plan(
+            new AuditIssue { Rule = "required-parameter", ElementId = 1, Parameter = "Mark" },
+            null!,
+            inferred: false,
+            confidence: "high");
+
+        Assert.False(result.Success);
+        Assert.Contains("recipe is null", result.Error.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void Plan_NoChange_Skips()
+    {
+        var strategy = new SetParamStrategy();
+        var issue = new AuditIssue
+        {
+            Rule = "required-parameter",
+            ElementId = 123,
+            Category = "doors",
+            Parameter = "Mark",
+            CurrentValue = "D-123"
+        };
+        var recipe = new FixRecipe { Strategy = "setParam", Parameter = "Mark", Value = "D-123" };
+
+        var result = strategy.Plan(issue, recipe, inferred: false, confidence: "high");
+
+        Assert.False(result.Success);
+        Assert.Contains("equals current value", result.Error);
+    }
 }

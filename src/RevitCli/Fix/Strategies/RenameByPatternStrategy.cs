@@ -15,6 +15,11 @@ internal sealed class RenameByPatternStrategy : IFixStrategy
             return FixStrategyPlanResult.Skip("Issue is null.");
         }
 
+        if (recipe is null)
+        {
+            return FixStrategyPlanResult.Skip("Recipe is null.");
+        }
+
         if (issue.ElementId is null)
         {
             return FixStrategyPlanResult.Skip("Issue has no element id.");
