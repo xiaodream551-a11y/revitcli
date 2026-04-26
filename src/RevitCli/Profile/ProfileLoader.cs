@@ -107,10 +107,16 @@ public static class ProfileLoader
 
     private static void ValidateFixes(ProjectProfile profile, string path)
     {
+        if (profile.Fixes == null)
+            throw new InvalidOperationException($"Profile {path}: fixes must be a list");
+
         for (var i = 0; i < profile.Fixes.Count; i++)
         {
             var fix = profile.Fixes[i];
             var prefix = $"Profile {path}: fixes[{i}]";
+
+            if (fix == null)
+                throw new InvalidOperationException($"{prefix} must be an object");
 
             if (string.IsNullOrWhiteSpace(fix.Strategy))
                 throw new InvalidOperationException($"{prefix}.strategy is required");

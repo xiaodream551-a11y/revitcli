@@ -85,6 +85,29 @@ fixes:
     }
 
     [Fact]
+    public void Profile_NullFixes_Fails()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LoadYaml("""
+version: 1
+fixes: null
+"""));
+
+        Assert.Contains("fixes", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Profile_NullFixItem_Fails()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LoadYaml("""
+version: 1
+fixes:
+  -
+"""));
+
+        Assert.Contains("fixes[0]", ex.Message);
+    }
+
+    [Fact]
     public void Profile_UnsupportedStrategy_Fails()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => LoadYaml("""
