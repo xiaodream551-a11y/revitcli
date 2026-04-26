@@ -425,9 +425,6 @@ try {
             $scriptFailure = $fixApplyFailure
         }
 
-        if ($null -eq $fixApplyFailure -and $null -eq $fixRollbackFailure) {
-            Write-Host "Fix apply smoke completed. Review the report for the baseline, journal, and rollback results."
-        }
     }
 } catch {
     if ($null -eq $scriptFailure) {
@@ -471,6 +468,9 @@ try {
     try {
         $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
         Write-Host "Smoke report written to $OutputPath"
+        if ($FixApply -and $null -eq $scriptFailure -and $null -eq $fixApplyFailure -and $null -eq $fixRollbackFailure) {
+            Write-Host "Fix apply smoke completed. Review the report for the baseline, journal, and rollback results."
+        }
     } catch {
         if ($null -eq $scriptFailure) {
             $scriptFailure = $_
