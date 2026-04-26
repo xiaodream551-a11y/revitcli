@@ -46,7 +46,8 @@ internal static class CheckRunner
         {
             return CheckRunnerResponse.Fail(
                 $"Error: no {ProfileLoader.FileName} found.{Environment.NewLine}" +
-                "  Create one in your project root, or copy from .revitcli.example.yml");
+                $"  Create one in your project root, or copy from .revitcli.example.yml{Environment.NewLine}" +
+                "  Docs: revitcli doctor  (shows profile detection status)");
         }
 
         var checkName = name ?? "default";

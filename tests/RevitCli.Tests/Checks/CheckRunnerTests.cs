@@ -90,4 +90,27 @@ checks:
             File.Delete(profilePath);
         }
     }
+
+    [Fact]
+    public async Task RunAsync_NoProfileDiscovered_ReturnsDoctorGuidance()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"revitcli_check_runner_{Guid.NewGuid():N}");
+        var previousCurrentDirectory = Directory.GetCurrentDirectory();
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            Directory.SetCurrentDirectory(dir);
+
+            var result = await CheckRunner.RunAsync(ClientFor(new AuditResult()), "default", null);
+
+            Assert.False(result.Success);
+            Assert.Contains("Docs: revitcli doctor  (shows profile detection status)", result.Error);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousCurrentDirectory);
+            Directory.Delete(dir, true);
+        }
+    }
 }
