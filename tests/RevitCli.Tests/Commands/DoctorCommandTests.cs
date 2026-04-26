@@ -82,19 +82,111 @@ public class DoctorCommandTests
     [Fact]
     public async Task Execute_ServerUp_PrintsOk()
     {
-        var status = new StatusInfo { RevitVersion = "2026", RevitYear = 2026, DocumentName = "Test.rvt" };
+        var environment = CreateDoctorEnvironment();
+        var status = new StatusInfo { RevitVersion = "2026", RevitYear = 2026, AddinVersion = environment.CliVersion, DocumentName = "Test.rvt" };
         var response = ApiResponse<StatusInfo>.Ok(status);
         var handler = new FakeHttpHandler(JsonSerializer.Serialize(response));
         var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
         var config = new CliConfig();
         var writer = new StringWriter();
 
-        var exitCode = await DoctorCommand.ExecuteAsync(client, config, writer, CreateDoctorEnvironment());
+        var exitCode = await DoctorCommand.ExecuteAsync(client, config, writer, environment);
 
         var output = writer.ToString();
         Assert.Contains("Connected to Revit 2026", output);
         Assert.Contains("Test.rvt", output);
         Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public async Task Execute_LiveAddinMajorMinorMismatch_ReturnsFailure()
+    {
+        var environment = CreateDoctorEnvironment();
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            AddinVersion = "1.0.0",
+            DocumentName = "Test.rvt"
+        };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Live Add-in version", writer.ToString());
+        Assert.Contains("does not match CLI", writer.ToString());
+    }
+
+    [Fact]
+    public async Task Execute_LiveAddinPatchMismatch_WarnsButDoesNotFail()
+    {
+        var environment = WithCliVersion(CreateDoctorEnvironment(), "1.3.0");
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            AddinVersion = "1.3.1",
+            DocumentName = "Test.rvt"
+        };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("WARN: Live Add-in version differs by patch only", writer.ToString());
+    }
+
+    [Fact]
+    public async Task Execute_LiveAddinMissingVersion_ReturnsFailure()
+    {
+        var environment = CreateDoctorEnvironment();
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            AddinVersion = "",
+            DocumentName = "Test.rvt"
+        };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Live Add-in version", writer.ToString());
+        Assert.Contains("reinstall the Revit 2026 add-in", writer.ToString());
+    }
+
+    [Fact]
+    public async Task Execute_LiveAddinUnparseableVersionWithUnparseableCliVersion_ReturnsFailure()
+    {
+        var environment = WithCliVersion(CreateDoctorEnvironment(), "dev");
+        WriteAddinManifest(environment, CurrentCliAssemblyPath());
+        var status = new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            AddinVersion = "garbage",
+            DocumentName = "Test.rvt"
+        };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Live Add-in version cannot be parsed", writer.ToString());
+        Assert.Contains("reinstall the Revit 2026 add-in", writer.ToString());
     }
 
     [Fact]

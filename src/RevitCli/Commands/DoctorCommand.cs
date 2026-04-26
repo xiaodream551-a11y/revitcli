@@ -17,6 +17,9 @@ namespace RevitCli.Commands;
 
 public static class DoctorCommand
 {
+    private const string LiveAddinVersionHint =
+        "HINT: Close Revit, reinstall the Revit 2026 add-in, restart Revit, and rerun doctor.";
+
     public static Command Create(RevitClient client, CliConfig config)
     {
         var command = new Command("doctor", "Check RevitCli setup and diagnose issues");
@@ -74,6 +77,40 @@ public static class DoctorCommand
                     $"FAIL: Connected Revit version is {status.Data.RevitVersion}; this internal smoke baseline targets Revit 2026 only.");
                 hasFailure = true;
             }
+
+            if (!string.IsNullOrWhiteSpace(status.Data.AddinVersion))
+            {
+                if (!ComponentVersion.TryParse(status.Data.AddinVersion, out _))
+                {
+                    await WriteFail(output, $"Live Add-in version cannot be parsed: {status.Data.AddinVersion}");
+                    await output.WriteLineAsync(LiveAddinVersionHint);
+                    hasFailure = true;
+                }
+                else if (expectedVersion.HasValue)
+                {
+                    var liveCompatible = await WriteVersionCompatibility(
+                        output,
+                        "Live Add-in",
+                        expectedVersion.Value,
+                        status.Data.AddinVersion);
+                    if (!liveCompatible)
+                    {
+                        await output.WriteLineAsync(LiveAddinVersionHint);
+                        hasFailure = true;
+                    }
+                }
+                else
+                {
+                    await WriteOk(output, $"Live Add-in version: {status.Data.AddinVersion}");
+                }
+            }
+            else
+            {
+                await WriteFail(output, "Live Add-in version is missing from status.");
+                await output.WriteLineAsync(LiveAddinVersionHint);
+                hasFailure = true;
+            }
+
             if (status.Data.DocumentName != null)
                 await output.WriteLineAsync($"OK: Document: {status.Data.DocumentName}");
             else
@@ -160,7 +197,13 @@ public static class DoctorCommand
 
             await WriteOk(output, $"Add-in manifest: {manifestPath}");
             await WriteOk(output, $"Add-in assembly: {assemblyPath}");
-            return await WriteVersionCompatibility(output, expectedVersion, installedVersion);
+            if (expectedVersion == null)
+            {
+                await WriteOk(output, $"Installed Add-in version: {installedVersion}");
+                return true;
+            }
+
+            return await WriteVersionCompatibility(output, "Installed Add-in", expectedVersion.Value, installedVersion);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
@@ -180,21 +223,19 @@ public static class DoctorCommand
 
     private static async Task<bool> WriteVersionCompatibility(
         TextWriter output,
-        ComponentVersion? expectedVersion,
-        string installedVersion)
+        string componentName,
+        ComponentVersion expectedVersion,
+        string actualVersionText)
     {
-        await WriteOk(output, $"Installed Add-in version: {installedVersion}");
+        await WriteOk(output, $"{componentName} version: {actualVersionText}");
 
-        if (expectedVersion == null)
-            return true;
-
-        if (!ComponentVersion.TryParse(installedVersion, out var actualVersion))
+        if (!ComponentVersion.TryParse(actualVersionText, out var actualVersion))
         {
-            await WriteFail(output, $"Installed Add-in version cannot be parsed: {installedVersion}");
+            await WriteFail(output, $"{componentName} version cannot be parsed: {actualVersionText}");
             return false;
         }
 
-        var compatibility = ComponentVersion.Compare(expectedVersion.Value, actualVersion);
+        var compatibility = ComponentVersion.Compare(expectedVersion, actualVersion);
         switch (compatibility)
         {
             case VersionCompatibility.Compatible:
@@ -202,17 +243,17 @@ public static class DoctorCommand
             case VersionCompatibility.MetadataMismatch:
                 await WriteWarn(
                     output,
-                    $"Installed Add-in version metadata does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                    $"{componentName} version metadata does not match CLI: actual={actualVersionText}, CLI={expectedVersion}");
                 return true;
             case VersionCompatibility.PatchMismatch:
                 await WriteWarn(
                     output,
-                    $"Installed Add-in patch version does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                    $"{componentName} version differs by patch only: actual={actualVersionText}, CLI={expectedVersion}");
                 return true;
             case VersionCompatibility.MajorMinorMismatch:
                 await WriteFail(
                     output,
-                    $"Installed Add-in version does not match CLI: installed={installedVersion}, CLI={expectedVersion.Value}");
+                    $"{componentName} version does not match CLI: actual={actualVersionText}, CLI={expectedVersion}");
                 return false;
             default:
                 throw new ArgumentOutOfRangeException(nameof(compatibility), compatibility, null);
