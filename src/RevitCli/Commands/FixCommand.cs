@@ -98,10 +98,14 @@ public static class FixCommand
         }
 
         var profile = run.Data!.Profile;
+        var normalizedRules = (rules ?? Array.Empty<string>())
+            .SelectMany(rule => rule?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>())
+            .Select(rule => rule.Trim())
+            .Where(rule => !string.IsNullOrWhiteSpace(rule));
         var options = new FixPlanOptions
         {
             Severity = severity,
-            Rules = new HashSet<string>((rules ?? Array.Empty<string>()), StringComparer.OrdinalIgnoreCase)
+            Rules = new HashSet<string>(normalizedRules, StringComparer.OrdinalIgnoreCase)
         };
         var plan = FixPlanner.Plan(run.Data.CheckName, run.Data.Issues, profile, options);
 
@@ -136,14 +140,24 @@ public static class FixCommand
                 return 1;
             }
 
-            var snapshotDir = Path.GetDirectoryName(Path.GetFullPath(baselinePath));
-            if (!string.IsNullOrEmpty(snapshotDir))
-                Directory.CreateDirectory(snapshotDir);
+            try
+            {
+                var snapshotDir = Path.GetDirectoryName(Path.GetFullPath(baselinePath));
+                if (!string.IsNullOrEmpty(snapshotDir))
+                {
+                    Directory.CreateDirectory(snapshotDir);
+                }
 
-            await File.WriteAllTextAsync(
-                baselinePath,
-                JsonSerializer.Serialize(snapshotResult.Data, new JsonSerializerOptions { WriteIndented = true }),
-                default);
+                await File.WriteAllTextAsync(
+                    baselinePath,
+                    JsonSerializer.Serialize(snapshotResult.Data, new JsonSerializerOptions { WriteIndented = true }),
+                    default);
+            }
+            catch (Exception ex)
+            {
+                await output.WriteLineAsync($"Error: failed to save baseline snapshot: {ex.Message}");
+                return 1;
+            }
 
             await output.WriteLineAsync($"Baseline saved: {baselinePath}");
         }
@@ -205,7 +219,18 @@ public static class FixCommand
         if (journal != null)
         {
             journal.CompletedAt = DateTime.UtcNow.ToString("o");
-            File.WriteAllText(journalPath!, JsonSerializer.Serialize(journal, new JsonSerializerOptions { WriteIndented = true }));
+            try
+            {
+                await File.WriteAllTextAsync(
+                    journalPath!,
+                    JsonSerializer.Serialize(journal, new JsonSerializerOptions { WriteIndented = true }),
+                    default);
+            }
+            catch (Exception ex)
+            {
+                await output.WriteLineAsync($"Error: failed to write fix journal: {ex.Message}");
+                return 1;
+            }
         }
 
         await output.WriteLineAsync($"Modified {modified} element parameter(s).");

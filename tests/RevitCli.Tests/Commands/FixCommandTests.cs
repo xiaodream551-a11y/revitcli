@@ -121,6 +121,125 @@ checks:
         }
     }
 
+    [Fact]
+    public async Task Fix_DryRun_RulesCanBeCommaSeparatedAndRepeated()
+    {
+        var profilePath = WriteProfile("""
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: required-parameter
+      - rule: naming
+fixes:
+  - rule: required-parameter
+    category: doors
+    parameter: Mark
+    strategy: setParam
+    value: "D-{element.id}"
+""");
+        try
+        {
+            var handler = new QueueHttpHandler();
+            handler.Enqueue("/api/audit", ApiResponse<AuditResult>.Ok(new AuditResult
+            {
+                Passed = 0,
+                Failed = 1,
+                Issues = new List<AuditIssue>
+                {
+                    new()
+                    {
+                        Rule = "required-parameter",
+                        Severity = "warning",
+                        Message = "Missing Mark",
+                        ElementId = 10,
+                        Category = "doors",
+                        Parameter = "Mark",
+                        CurrentValue = "",
+                        Source = "structured"
+                    },
+                }
+            }));
+            var client = new RevitClient(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:17839") });
+            var writer = new StringWriter();
+
+            var exitCode = await FixCommand.ExecuteAsync(
+                client, "default", profilePath, new[] { " required-parameter ", " naming,required-parameter" }, null,
+                dryRun: false, apply: false, yes: false, allowInferred: false,
+                maxChanges: 50, baselineOutput: null, noSnapshot: false, writer);
+
+            Assert.Equal(0, exitCode);
+            var output = writer.ToString();
+            Assert.Contains("Fix plan", output);
+            Assert.Contains("1 action", output);
+            Assert.Contains("required-parameter", output);
+        }
+        finally
+        {
+            File.Delete(profilePath);
+        }
+    }
+
+    [Fact]
+    public async Task Fix_Apply_FailsWhenBaselineCannotBeSavedAndSkipsSet()
+    {
+        var profilePath = WriteProfile("""
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: required-parameter
+fixes:
+  - rule: required-parameter
+    category: doors
+    parameter: Mark
+    strategy: setParam
+    value: "D-{element.id}"
+""");
+        var invalidBaseline = Path.Combine(Path.GetTempPath(), $"revitcli_fix_bad_<>{Guid.NewGuid():N}.json");
+        try
+        {
+            var handler = new QueueHttpHandler();
+            handler.Enqueue("/api/audit", ApiResponse<AuditResult>.Ok(new AuditResult
+            {
+                Passed = 0,
+                Failed = 1,
+                Issues = new List<AuditIssue>
+                {
+                    new()
+                    {
+                        Rule = "required-parameter",
+                        Severity = "warning",
+                        Message = "Missing Mark",
+                        ElementId = 10,
+                        Category = "doors",
+                        Parameter = "Mark",
+                        CurrentValue = "",
+                        Source = "structured"
+                    }
+                }
+            }));
+            handler.Enqueue("/api/snapshot", ApiResponse<ModelSnapshot>.Ok(new ModelSnapshot()));
+            var client = new RevitClient(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:17839") });
+            var writer = new StringWriter();
+
+            var exitCode = await FixCommand.ExecuteAsync(
+                client, "default", profilePath, Array.Empty<string>(), null,
+                dryRun: false, apply: true, yes: true, allowInferred: true,
+                maxChanges: 50, baselineOutput: invalidBaseline, noSnapshot: false, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Error: failed to save baseline snapshot", writer.ToString());
+            Assert.DoesNotContain(handler.Requests, r => r.EndsWith("/api/elements/set", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(profilePath);
+        }
+    }
+
     private static string WriteProfile(string yaml)
     {
         var path = Path.Combine(Path.GetTempPath(), $"revitcli_fix_command_{Guid.NewGuid():N}.yml");
