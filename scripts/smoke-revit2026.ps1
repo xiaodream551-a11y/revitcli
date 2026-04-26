@@ -91,6 +91,42 @@ function Resolve-ManifestAssemblyPath {
     return [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $ManifestPath) $assembly))
 }
 
+function Get-CliVersionMetadata {
+    param([string]$Command)
+
+    try {
+        $output = & $Command --version 2>&1
+        $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    } catch {
+        return [pscustomobject]@{
+            Version = ""
+            Error = "Failed to run '$Command --version': $($_.Exception.Message)"
+        }
+    }
+
+    $text = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    if ($exitCode -ne 0) {
+        return [pscustomobject]@{
+            Version = ""
+            Error = "'$Command --version' exited $exitCode`: $text"
+        }
+    }
+
+    foreach ($line in ($text -split "`r?`n")) {
+        if ($line -match '^revitcli\s+(.+)$') {
+            return [pscustomobject]@{
+                Version = $Matches[1].Trim()
+                Error = ""
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Version = ""
+        Error = "'$Command --version' did not return a 'revitcli <version>' line: $text"
+    }
+}
+
 function Invoke-RevitCliSmoke {
     param(
         [string[]]$CommandArgs,
@@ -143,8 +179,9 @@ Assert-FileExists $serverInfoPath "RevitCli server.json"
 $manifestAssemblyPath = Resolve-ManifestAssemblyPath $manifestPath
 Assert-FileExists $manifestAssemblyPath "RevitCli manifest assembly"
 $installedAddinVersion = Get-AssemblyVersion $manifestAssemblyPath
-$cliVersionOutput = & $RevitCli --version 2>&1
-$cliVersion = (($cliVersionOutput | Out-String).Trim() -replace '^revitcli\s+', '')
+$cliVersionMetadata = Get-CliVersionMetadata -Command $RevitCli
+$cliVersion = $cliVersionMetadata.Version
+$cliVersionError = $cliVersionMetadata.Error
 
 $serverInfo = Get-Content -Raw -LiteralPath $serverInfoPath | ConvertFrom-Json
 try {
@@ -201,35 +238,60 @@ Invoke-RevitCliSmoke @(
 if (-not $Apply) {
     Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
 } else {
-    Invoke-RevitCliSmoke @(
-        "set", $Category,
-        "--filter", $Filter,
-        "--param", $Param,
-        "--value", $Value
-    ) | Out-Null
+    $writeApplied = $false
+    $applyFailure = $null
+    $restoreFailure = $null
 
-    $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
-    $confirmed = Convert-JsonArray $confirmJson "query confirm"
-    $newParam = $confirmed[0].parameters.PSObject.Properties |
-        Where-Object { $_.Name -eq $Param } |
-        Select-Object -First 1
-    if ([string]$newParam.Value -ne $Value) {
-        throw "Write verification failed for '$Param': expected '$Value', got '$($newParam.Value)'."
+    try {
+        Invoke-RevitCliSmoke @(
+            "set", $Category,
+            "--filter", $Filter,
+            "--param", $Param,
+            "--value", $Value
+        ) | Out-Null
+        $writeApplied = $true
+
+        $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
+        $confirmed = Convert-JsonArray $confirmJson "query confirm"
+        $newParam = $confirmed[0].parameters.PSObject.Properties |
+            Where-Object { $_.Name -eq $Param } |
+            Select-Object -First 1
+        if ([string]$newParam.Value -ne $Value) {
+            throw "Write verification failed for '$Param': expected '$Value', got '$($newParam.Value)'."
+        }
+    } catch {
+        $applyFailure = $_
+    } finally {
+        if ($writeApplied) {
+            try {
+                Invoke-RevitCliSmoke @(
+                    "set", "--id", $ElementId.ToString(),
+                    "--param", $Param,
+                    "--value", $oldValue
+                ) | Out-Null
+
+                $restoreJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
+                $restored = Convert-JsonArray $restoreJson "query restore"
+                $restoredParam = $restored[0].parameters.PSObject.Properties |
+                    Where-Object { $_.Name -eq $Param } |
+                    Select-Object -First 1
+                if ([string]$restoredParam.Value -ne $oldValue) {
+                    throw "Restore verification failed for '$Param': expected '$oldValue', got '$($restoredParam.Value)'."
+                }
+            } catch {
+                $restoreFailure = $_
+            }
+        }
     }
 
-    Invoke-RevitCliSmoke @(
-        "set", "--id", $ElementId.ToString(),
-        "--param", $Param,
-        "--value", $oldValue
-    ) | Out-Null
-
-    $restoreJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
-    $restored = Convert-JsonArray $restoreJson "query restore"
-    $restoredParam = $restored[0].parameters.PSObject.Properties |
-        Where-Object { $_.Name -eq $Param } |
-        Select-Object -First 1
-    if ([string]$restoredParam.Value -ne $oldValue) {
-        throw "Restore verification failed for '$Param': expected '$oldValue', got '$($restoredParam.Value)'."
+    if ($applyFailure -and $restoreFailure) {
+        throw "Apply/confirm failed after write, and restore also failed. Apply error: $($applyFailure.Exception.Message). Restore error: $($restoreFailure.Exception.Message)"
+    }
+    if ($restoreFailure) {
+        throw "Restore failed after smoke write: $($restoreFailure.Exception.Message)"
+    }
+    if ($applyFailure) {
+        throw $applyFailure
     }
 }
 
@@ -245,6 +307,7 @@ $report = [ordered]@{
     manifestAssemblyPath = $manifestAssemblyPath
     serverInfoPath = $serverInfoPath
     cliVersion = $cliVersion
+    cliVersionError = $cliVersionError
     installedAddinVersion = $installedAddinVersion
     liveAddinVersion = $liveAddinVersion
     elementId = $ElementId
