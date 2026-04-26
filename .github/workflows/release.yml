@@ -31,16 +31,16 @@ jobs:
       # Build add-in per Revit year
       # 2024: net48, 2025: net8.0-windows, 2026: net8.0-windows
       - name: Build Add-in (Revit 2026)
-        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2026 -o ./stage/addin/2026
+        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2026 -p:Version=${{ steps.version.outputs.VERSION }} -o ./stage/addin/2026
 
       - name: Build Add-in (Revit 2025)
         id: build2025
-        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2025 -o ./stage/addin/2025
+        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2025 -p:Version=${{ steps.version.outputs.VERSION }} -o ./stage/addin/2025
         continue-on-error: true
 
       - name: Build Add-in (Revit 2024)
         id: build2024
-        run: dotnet publish src/RevitCli.Addin -c Release -f net48 -p:RevitYear=2024 -o ./stage/addin/2024
+        run: dotnet publish src/RevitCli.Addin -c Release -f net48 -p:RevitYear=2024 -p:Version=${{ steps.version.outputs.VERSION }} -o ./stage/addin/2024
         continue-on-error: true
 
       - name: Detect packaged Revit years

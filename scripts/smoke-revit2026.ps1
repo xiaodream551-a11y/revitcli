@@ -39,6 +39,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$SemVerPattern = '^(?:v)?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 
 function Resolve-Revit2026InstallDir {
     if ($env:REVITCLI_REVIT2026_INSTALL_DIR) { return $env:REVITCLI_REVIT2026_INSTALL_DIR }
@@ -114,8 +115,16 @@ function Get-CliVersionMetadata {
 
     foreach ($line in ($text -split "`r?`n")) {
         if ($line -match '^revitcli\s+(.+)$') {
+            $version = $Matches[1].Trim()
+            if ($version -notmatch $SemVerPattern) {
+                return [pscustomobject]@{
+                    Version = ""
+                    Error = "'$Command --version' returned non-SemVer version: $version"
+                }
+            }
+
             return [pscustomobject]@{
-                Version = $Matches[1].Trim()
+                Version = $version
                 Error = ""
             }
         }
@@ -216,7 +225,10 @@ $paramProperty = $idElements[0].parameters.PSObject.Properties |
 if ($null -eq $paramProperty) {
     throw "Element $ElementId does not expose parameter '$Param'. Pick a writable text parameter for the smoke test."
 }
-$oldValue = [string]$paramProperty.Value
+if ($Apply -and $null -eq $paramProperty.Value) {
+    throw "Element $ElementId parameter '$Param' is null. Pick a writable text parameter with an existing value so the smoke test can restore it exactly."
+}
+$oldValue = if ($null -eq $paramProperty.Value) { $null } else { [string]$paramProperty.Value }
 
 $filterJson = Invoke-RevitCliSmoke @("query", $Category, "--filter", $Filter, "--output", "json")
 $filtered = Convert-JsonArray $filterJson "query filter"
@@ -238,18 +250,18 @@ Invoke-RevitCliSmoke @(
 if (-not $Apply) {
     Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
 } else {
-    $writeApplied = $false
+    $restoreNeeded = $false
     $applyFailure = $null
     $restoreFailure = $null
 
     try {
+        $restoreNeeded = $true
         Invoke-RevitCliSmoke @(
             "set", $Category,
             "--filter", $Filter,
             "--param", $Param,
             "--value", $Value
         ) | Out-Null
-        $writeApplied = $true
 
         $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
         $confirmed = Convert-JsonArray $confirmJson "query confirm"
@@ -262,7 +274,7 @@ if (-not $Apply) {
     } catch {
         $applyFailure = $_
     } finally {
-        if ($writeApplied) {
+        if ($restoreNeeded) {
             try {
                 Invoke-RevitCliSmoke @(
                     "set", "--id", $ElementId.ToString(),

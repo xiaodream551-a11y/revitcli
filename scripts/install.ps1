@@ -39,6 +39,7 @@ $RepoRoot     = Split-Path -Parent $ScriptDir
 $ArtifactsRoot = Join-Path $RepoRoot ".artifacts\install"
 $SourceTreeMode = Test-Path (Join-Path $RepoRoot "revitcli.sln")
 $SrcBin       = if ($SourceTreeMode) { Join-Path $ArtifactsRoot "bin" } else { Join-Path $ScriptDir "bin" }
+$SemVerPattern = '^(?:v)?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
 
 function Invoke-DotNet {
     param(
@@ -76,6 +77,45 @@ function Get-SourceAddinDir {
     }
 
     return (Join-Path $ScriptDir "addin\$Year")
+}
+
+function Test-RevitCliVersion {
+    param([string]$Version)
+    return ($Version -match $SemVerPattern)
+}
+
+function Get-RevitCliVersion {
+    param([string]$ExePath)
+
+    if (-not (Test-Path -LiteralPath $ExePath)) {
+        throw "RevitCli executable not found: $ExePath"
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $versionOutput = & $ExePath --version 2>&1
+        $versionExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $text = ($versionOutput | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    if ($versionExitCode -ne 0) {
+        throw "'$ExePath --version' exited $versionExitCode`: $text"
+    }
+
+    foreach ($line in ($text -split "`r?`n")) {
+        if ($line -match '^revitcli\s+(.+)$') {
+            $version = $Matches[1].Trim()
+            if (Test-RevitCliVersion -Version $version) {
+                return $version
+            }
+            throw "RevitCli version is not valid SemVer: $version"
+        }
+    }
+
+    throw "'$ExePath --version' did not return a 'revitcli <version>' line: $text"
 }
 
 function Publish-SourceTreePackage {
@@ -179,7 +219,7 @@ if ($unsupportedYears.Count -gt 0) {
 Publish-SourceTreePackage -Years $targetYears
 
 # Check source directories
-if (-not (Test-Path $SrcBin)) {
+if (-not (Test-Path -LiteralPath $SrcBin)) {
     Write-Host "ERROR: bin/ directory not found in install package." -ForegroundColor Red
     if ($SourceTreeMode) {
         Write-Host "Run without -SkipBuild, or build source-tree artifacts under $ArtifactsRoot."
@@ -192,13 +232,22 @@ if (-not (Test-Path $SrcBin)) {
 # Validate source add-in directories exist
 foreach ($year in $targetYears) {
     $srcAddinYear = Get-SourceAddinDir -Year $year
-    if (-not (Test-Path $srcAddinYear)) {
+    if (-not (Test-Path -LiteralPath $srcAddinYear)) {
         Write-Host "ERROR: addin/$year/ directory not found in install package." -ForegroundColor Red
         if ($SourceTreeMode) {
             Write-Host "Run without -SkipBuild, or build source-tree artifacts under $ArtifactsRoot."
         }
         exit 1
     }
+}
+
+$sourceCliExe = Join-Path $SrcBin "RevitCli.exe"
+try {
+    $installedVersion = Get-RevitCliVersion -ExePath $sourceCliExe
+} catch {
+    Write-Host "ERROR: Failed to validate source CLI before modifying installation." -ForegroundColor Red
+    Write-Host $_.Exception.Message
+    exit 1
 }
 
 # Warn if Revit is running
@@ -234,29 +283,6 @@ if (-not (Test-Path -LiteralPath $installedCliExe)) {
     Write-Host "ERROR: Installed CLI executable not found at $installedCliExe" -ForegroundColor Red
     exit 1
 }
-
-$previousErrorActionPreference = $ErrorActionPreference
-try {
-    $ErrorActionPreference = "Continue"
-    $installedVersionOutput = & $installedCliExe --version 2>$null
-    $installedVersionExitCode = $LASTEXITCODE
-} finally {
-    $ErrorActionPreference = $previousErrorActionPreference
-}
-if ($installedVersionExitCode -ne 0) {
-    Write-Host "ERROR: Failed to read installed CLI version from $installedCliExe (exit code $installedVersionExitCode)." -ForegroundColor Red
-    exit 1
-}
-
-$installedVersionLine = @($installedVersionOutput | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" } | Select-Object -First 1)
-$installedVersionMatch = if ($installedVersionLine.Count -gt 0) { [regex]::Match($installedVersionLine[0], '^revitcli\s+(.+)$') } else { $null }
-if (($null -eq $installedVersionMatch) -or (-not $installedVersionMatch.Success)) {
-    Write-Host "ERROR: Failed to parse installed CLI version from '$($installedVersionOutput -join ' ')'." -ForegroundColor Red
-    Write-Host "Expected output like: revitcli 1.2.3"
-    exit 1
-}
-
-$installedVersion = $installedVersionMatch.Groups[1].Value.Trim()
 
 # ── Install Add-in per year ─────────────────────────────────────
 $installedYears = @()
