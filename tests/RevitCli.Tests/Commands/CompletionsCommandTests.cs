@@ -34,10 +34,43 @@ public class CompletionsCommandTests : IDisposable
         var script = stdout.ToString();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("status query export set config audit completions batch doctor check publish init score coverage schedule diff snapshot interactive", script);
+        Assert.Contains("status", script);
+        Assert.Contains("query", script);
+        Assert.Contains("export", script);
+        Assert.Contains("set", script);
+        Assert.Contains("config", script);
+        Assert.Contains("audit", script);
+        Assert.Contains("completions", script);
+        Assert.Contains("batch", script);
+        Assert.Contains("doctor", script);
+        Assert.Contains("check", script);
+        Assert.Contains("fix", script);
+        Assert.Contains("rollback", script);
+        Assert.Contains("publish", script);
+        Assert.Contains("init", script);
+        Assert.Contains("score", script);
+        Assert.Contains("coverage", script);
+        Assert.Contains("schedule", script);
+        Assert.Contains("diff", script);
+        Assert.Contains("snapshot", script);
+        Assert.Contains("interactive", script);
         Assert.Contains("compgen -W \"show set\"", script);
         Assert.Contains("defaultOutput)", script);
         Assert.Contains("compgen -f -- \"$cur\"", script);
+        Assert.Contains("--profile", script);
+        Assert.Contains("--rule", script);
+        Assert.Contains("--severity", script);
+        Assert.Contains("--dry-run", script);
+        Assert.Contains("--yes", script);
+        Assert.Contains("--max-changes", script);
+        Assert.Contains("--baseline-output", script);
+        Assert.Contains("--no-snapshot", script);
+        var rollbackBlock = ExtractBlock(
+            script,
+            "        rollback)",
+            "        status|doctor|interactive)");
+        Assert.Contains("compgen -f -- \"$cur\"", rollbackBlock);
+        Assert.Contains("--dry-run --yes --max-changes", rollbackBlock);
     }
 
     [Fact]
@@ -53,7 +86,14 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'doctor:Check RevitCli setup and diagnose issues'", script);
         Assert.Contains("'interactive:Enter interactive REPL mode'", script);
         Assert.Contains("_arguments '1:file:_files'", script);
-        Assert.Contains("_values 'setting' serverUrl defaultOutput exportDir", script);
+        var rollbackBlock = ExtractBlock(
+            script,
+            "                rollback)",
+            "                import)");
+        Assert.Contains("'1:baseline file:_files'", rollbackBlock);
+        Assert.Contains("--dry-run[Preview rollback without applying]", rollbackBlock);
+        Assert.Contains("--yes[Confirm rollback apply in non-interactive mode]", rollbackBlock);
+        Assert.Contains("--max-changes[Maximum number of rollback writes]", rollbackBlock);
     }
 
     [Fact]
@@ -68,8 +108,21 @@ public class CompletionsCommandTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Contains("'doctor' = 'Check RevitCli setup and diagnose issues'", script);
         Assert.Contains("'interactive' = 'Enter interactive REPL mode'", script);
+        Assert.Contains("'rollback' = 'Restore parameters changed by a fix baseline'", script);
+        Assert.Contains("Test-Path -LiteralPath $parent", script);
+        Assert.Contains("-ErrorAction SilentlyContinue", script);
         Assert.Contains("$configKeys = @('serverUrl', 'defaultOutput', 'exportDir')", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $shells -ToolTip 'Shell'", script);
+        var rollbackOptionsBlock = ExtractBlock(
+            script,
+            "        'rollback' = @(",
+            "        'publish' = @(");
+        Assert.Contains("'--dry-run', '--yes', '--max-changes'", rollbackOptionsBlock);
+        var rollbackSwitchBlock = ExtractBlock(
+            script,
+            "        'rollback' {",
+            "        'import' {");
+        Assert.Contains("New-RevitCliFileCompletionResults -Path $wordToComplete", rollbackSwitchBlock);
     }
 
     [Fact]
@@ -179,5 +232,14 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'--match-by'", script);
         Assert.Contains("'--encoding'", script);
         Assert.Contains("'auto', 'utf-8', 'gbk'", script);
+    }
+
+    private static string ExtractBlock(string text, string startMarker, string endMarker)
+    {
+        var start = text.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Missing start marker: {startMarker}");
+        var end = text.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+        Assert.True(end > start, $"Missing end marker: {endMarker}");
+        return text.Substring(start, end - start);
     }
 }

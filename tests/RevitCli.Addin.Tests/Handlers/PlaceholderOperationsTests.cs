@@ -1,3 +1,4 @@
+using System.Text.Json;
 using RevitCli.Addin.Services;
 using RevitCli.Shared;
 
@@ -82,6 +83,67 @@ public class PlaceholderOperationsTests
 
     [Fact]
     public async Task RunAuditAsync_ReturnsPlaceholderResult()
+    {
+        var request = new AuditRequest
+        {
+            RequiredParameters = new()
+            {
+                new RequiredParameterSpec
+                {
+                    Category = "doors",
+                    Parameter = "Mark",
+                    RequireNonEmpty = true,
+                    Severity = "warning"
+                }
+            }
+        };
+
+        var result = await _operations.RunAuditAsync(request);
+
+        Assert.Equal(4, result.Passed);
+        Assert.Equal(1, result.Failed);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("doors", issue.Category);
+        Assert.Equal("Mark", issue.Parameter);
+        Assert.Equal("doors", issue.Target);
+        Assert.Equal("", issue.CurrentValue);
+        Assert.Equal("D-100", issue.ExpectedValue);
+        Assert.Equal("structured", issue.Source);
+    }
+
+    [Fact]
+    public async Task RunAuditAsync_RetainsStructuredMetadataAfterJsonRoundTrip()
+    {
+        var request = new AuditRequest
+        {
+            RequiredParameters = new()
+            {
+                new RequiredParameterSpec
+                {
+                    Category = "doors",
+                    Parameter = "Mark",
+                    RequireNonEmpty = true,
+                    Severity = "warning"
+                }
+            }
+        };
+
+        var result = await _operations.RunAuditAsync(request);
+        var json = JsonSerializer.Serialize(result);
+        var roundTripped = JsonSerializer.Deserialize<AuditResult>(json);
+
+        Assert.NotNull(roundTripped);
+        var issue = Assert.Single(roundTripped!.Issues);
+        Assert.Equal("doors", issue.Category);
+        Assert.Equal("Mark", issue.Parameter);
+        Assert.Equal("doors", issue.Target);
+        Assert.Equal("", issue.CurrentValue);
+        Assert.Equal("D-100", issue.ExpectedValue);
+        Assert.Equal("structured", issue.Source);
+    }
+
+    [Fact]
+    public async Task RunAuditAsync_NamingRequestRemainsPassingAndEmpty()
     {
         var request = new AuditRequest { Rules = new() { "naming" } };
 

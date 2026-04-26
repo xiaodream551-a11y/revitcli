@@ -24,19 +24,19 @@ internal sealed class FakeExternalEvent : IExternalEventSource
 
 public class RevitBridgeTests
 {
-    private static RevitBridge CreateBridge(out FakeExternalEvent fake)
+    private static RevitRequestQueue<object?> CreateQueue(out FakeExternalEvent fake)
     {
         fake = new FakeExternalEvent();
-        return new RevitBridge(fake);
+        return new RevitRequestQueue<object?>(fake, "TestQueue");
     }
 
     [Fact]
     public async Task InvokeAsync_EnqueuesRequest_AndCallsRaise()
     {
-        var bridge = CreateBridge(out var fake);
+        var queue = CreateQueue(out var fake);
 
-        var task = bridge.InvokeAsync(app => 42);
-        bridge.ProcessQueueForTesting();
+        var task = queue.InvokeAsync(app => 42);
+        queue.Process(null);
 
         Assert.Equal(42, await task);
         Assert.Equal(1, fake.RaiseCount);
@@ -45,12 +45,12 @@ public class RevitBridgeTests
     [Fact]
     public async Task Execute_CompletesQueuedRequest_WithResult()
     {
-        var bridge = CreateBridge(out _);
+        var queue = CreateQueue(out _);
 
-        var task = bridge.InvokeAsync(app => "hello");
+        var task = queue.InvokeAsync(app => "hello");
         Assert.False(task.IsCompleted);
 
-        bridge.ProcessQueueForTesting();
+        queue.Process(null);
 
         Assert.Equal("hello", await task);
     }
@@ -58,11 +58,11 @@ public class RevitBridgeTests
     [Fact]
     public async Task Execute_PropagatesWorkException_ToReturnedTask()
     {
-        var bridge = CreateBridge(out _);
+        var queue = CreateQueue(out _);
 
-        var task = bridge.InvokeAsync<string>(app =>
+        var task = queue.InvokeAsync<string>(app =>
             throw new InvalidOperationException("test error"));
-        bridge.ProcessQueueForTesting();
+        queue.Process(null);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
         Assert.Equal("test error", ex.Message);
@@ -71,10 +71,10 @@ public class RevitBridgeTests
     [Fact]
     public async Task Dispose_FailsPendingRequests_WithObjectDisposedException()
     {
-        var bridge = CreateBridge(out _);
+        var queue = CreateQueue(out _);
 
-        var task = bridge.InvokeAsync(app => "never");
-        bridge.Dispose();
+        var task = queue.InvokeAsync(app => "never");
+        queue.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => task);
     }
@@ -82,12 +82,12 @@ public class RevitBridgeTests
     [Fact]
     public async Task MultipleRequests_AreProcessedInQueueOrder()
     {
-        var bridge = CreateBridge(out _);
+        var queue = CreateQueue(out _);
 
-        var t1 = bridge.InvokeAsync(app => 1);
-        var t2 = bridge.InvokeAsync(app => 2);
-        var t3 = bridge.InvokeAsync(app => 3);
-        bridge.ProcessQueueForTesting();
+        var t1 = queue.InvokeAsync(app => 1);
+        var t2 = queue.InvokeAsync(app => 2);
+        var t3 = queue.InvokeAsync(app => 3);
+        queue.Process(null);
 
         Assert.Equal(1, await t1);
         Assert.Equal(2, await t2);
@@ -98,9 +98,9 @@ public class RevitBridgeTests
     public async Task RaiseRejected_FaultsReturnedTask_AndRemovesFromQueue()
     {
         var fake = new FakeExternalEvent { RaiseResult = false };
-        var bridge = new RevitBridge(fake);
+        var queue = new RevitRequestQueue<object?>(fake, "TestQueue");
 
-        var task = bridge.InvokeAsync(app => "rejected");
+        var task = queue.InvokeAsync(app => "rejected");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => task);
     }
@@ -109,9 +109,9 @@ public class RevitBridgeTests
     public async Task RaiseThrows_ReturnsFaultedTask_AndRemovesFromQueue()
     {
         var fake = new FakeExternalEvent { RaiseThrows = true };
-        var bridge = new RevitBridge(fake);
+        var queue = new RevitRequestQueue<object?>(fake, "TestQueue");
 
-        var task = bridge.InvokeAsync(app => "boom");
+        var task = queue.InvokeAsync(app => "boom");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
         Assert.Equal("Raise failed", ex.Message);
@@ -120,10 +120,10 @@ public class RevitBridgeTests
     [Fact]
     public async Task InvokeAfterDispose_ReturnsFaultedTask()
     {
-        var bridge = CreateBridge(out _);
-        bridge.Dispose();
+        var queue = CreateQueue(out _);
+        queue.Dispose();
 
-        var task = bridge.InvokeAsync(app => 0);
+        var task = queue.InvokeAsync(app => 0);
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => task);
     }
@@ -131,12 +131,12 @@ public class RevitBridgeTests
     [Fact]
     public async Task Execute_WithNullApp_FailsAllRequests()
     {
-        var bridge = CreateBridge(out _);
+        var queue = CreateQueue(out _);
 
-        var t1 = bridge.InvokeAsync(app => "first");
-        var t2 = bridge.InvokeAsync(app => "second");
+        var t1 = queue.InvokeAsync(app => "first");
+        var t2 = queue.InvokeAsync(app => "second");
 
-        bridge.Execute(null!);
+        queue.FailAll(new InvalidOperationException("UIApplication is null."));
 
         var ex1 = await Assert.ThrowsAsync<InvalidOperationException>(() => t1);
         Assert.Contains("UIApplication is null", ex1.Message);
@@ -148,9 +148,9 @@ public class RevitBridgeTests
     [Fact]
     public async Task InvokeAsync_NullWork_ReturnsFaultedTask()
     {
-        var bridge = CreateBridge(out var fake);
+        var queue = CreateQueue(out var fake);
 
-        var task = bridge.InvokeAsync<string>(null!);
+        var task = queue.InvokeAsync<string>(null!);
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => task);
         Assert.Equal(0, fake.RaiseCount);

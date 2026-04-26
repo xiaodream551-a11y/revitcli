@@ -77,3 +77,19 @@ publish:
     presets:
       - issue-dwg
       - issue-pdf
+
+# fixes:
+#   - rule: required-parameter
+#     category: doors
+#     parameter: Mark
+#     strategy: setParam
+#     value: "D-{element.id}"
+#     maxChanges: 20
+#
+#   - rule: naming
+#     category: rooms
+#     parameter: Name
+#     strategy: renameByPattern
+#     match: "^Room (.+)$"
+#     replace: "$1"
+#     maxChanges: 50

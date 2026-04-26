@@ -10,6 +10,12 @@ public static class CompletionsCommand
     private static readonly string[] ExportOptions = { "--format", "--sheets", "--output-dir" };
     private static readonly string[] SetOptions = { "--filter", "--id", "--param", "--value", "--dry-run" };
     private static readonly string[] AuditOptions = { "--rules", "--list" };
+    private static readonly string[] FixOptions =
+    {
+        "--profile", "--rule", "--severity", "--dry-run", "--apply", "--yes",
+        "--allow-inferred", "--max-changes", "--baseline-output", "--no-snapshot"
+    };
+    private static readonly string[] RollbackOptions = { "--dry-run", "--yes", "--max-changes" };
     private static readonly string[] PublishOptions =
         { "--profile", "--dry-run", "--since", "--since-mode", "--update-baseline" };
     private static readonly string[] SinceModes = { "content", "meta" };
@@ -57,6 +63,8 @@ public static class CompletionsCommand
         var exportOptions = JoinWords(ExportOptions);
         var setOptions = JoinWords(SetOptions);
         var auditOptions = JoinWords(AuditOptions);
+        var fixOptions = JoinWords(FixOptions);
+        var rollbackOptions = JoinWords(RollbackOptions);
         var publishOptions = JoinWords(PublishOptions);
         var sinceModes = JoinWords(SinceModes);
         var importOptions = JoinWords(ImportOptions);
@@ -187,6 +195,24 @@ public static class CompletionsCommand
             "            esac",
             $"            COMPREPLY=($(compgen -W \"{importOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        fix)",
+            $"            COMPREPLY=($(compgen -W \"{fixOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        rollback)",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            "                case \"$cur\" in",
+            "                    -*)",
+            $"                        COMPREPLY=($(compgen -W \"{rollbackOptions}\" -- \"$cur\"))",
+            "                        return",
+            "                        ;;",
+            "                    *)",
+            "                        COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                        return",
+            "                        ;;",
+            "                esac",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{rollbackOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        status|doctor|interactive)",
             "            COMPREPLY=()",
             "            ;;",
@@ -205,6 +231,7 @@ public static class CompletionsCommand
         var configKeys = JoinWords(ConfigCommand.ValidKeys);
         var shells = JoinWords(CliCommandCatalog.Shells);
         var auditRules = JoinWords(AuditCommand.AvailableRules);
+        var fixOptions = JoinWords(FixOptions);
 
         return JoinLines(
             "#compdef revitcli",
@@ -282,6 +309,26 @@ public static class CompletionsCommand
             "                        '--since-mode[content or meta]:mode:(content meta)' \\",
             "                        '--update-baseline[Update baseline after successful publish]'",
             "                    ;;",
+            "                fix)",
+            "                    _arguments \\",
+            $"                        '--profile[Path to .revitcli.yml profile]:file:_files' \\",
+            "                        '--rule[Filter by rule names]:rules:' \\",
+            "                        '--severity[Filter by issue severity]:severity:' \\",
+            "                        '--dry-run[Preview only]' \\",
+            "                        '--apply[Apply generated fixes]' \\",
+            "                        '--yes[Auto-confirm in non-interactive mode]' \\",
+            "                        '--allow-inferred[Allow inferred fixes]' \\",
+            "                        '--max-changes[Maximum number of actions]' \\",
+            "                        '--baseline-output[Save baseline snapshot path]:file:_files' \\",
+            "                        '--no-snapshot[Skip baseline and journal support]'",
+            "                    ;;",
+            "                rollback)",
+            "                    _arguments \\",
+            "                        '1:baseline file:_files' \\",
+            "                        '--dry-run[Preview rollback without applying]' \\",
+            "                        '--yes[Confirm rollback apply in non-interactive mode]' \\",
+            "                        '--max-changes[Maximum number of rollback writes]'",
+            "                    ;;",
             "                import)",
             "                    _arguments \\",
             "                        '1:file:_files' \\",
@@ -310,6 +357,8 @@ public static class CompletionsCommand
         var exportOptions = FormatPowerShellArray(ExportOptions);
         var setOptions = FormatPowerShellArray(SetOptions);
         var auditOptions = FormatPowerShellArray(AuditOptions);
+        var fixOptions = FormatPowerShellArray(FixOptions);
+        var rollbackOptions = FormatPowerShellArray(RollbackOptions);
         var publishOptions = FormatPowerShellArray(PublishOptions);
         var sinceModes = FormatPowerShellArray(SinceModes);
         var importOptions = FormatPowerShellArray(ImportOptions);
@@ -336,6 +385,8 @@ public static class CompletionsCommand
             $"        'export' = @({exportOptions})",
             $"        'set' = @({setOptions})",
             $"        'audit' = @({auditOptions})",
+            $"        'fix' = @({fixOptions})",
+            $"        'rollback' = @({rollbackOptions})",
             $"        'publish' = @({publishOptions})",
             $"        'import' = @({importOptions})",
             "    }",
@@ -364,6 +415,30 @@ public static class CompletionsCommand
             "            ForEach-Object {",
             "                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $ToolTip)",
             "            }",
+            "    }",
+            "",
+            "    function New-RevitCliFileCompletionResults {",
+            "        param(",
+            "            [string]$Path",
+            "        )",
+            "",
+            "        $target = if ([string]::IsNullOrWhiteSpace($Path)) { '.' } else { $Path }",
+            "        $parent = Split-Path -Path $target -Parent",
+            "        if ([string]::IsNullOrWhiteSpace($parent)) {",
+            "            $parent = '.'",
+            "        }",
+            "",
+            "        $leaf = Split-Path -Path $target -Leaf",
+            "        if (Test-Path -LiteralPath $parent -ErrorAction SilentlyContinue) {",
+            "            try {",
+            "                Get-ChildItem -LiteralPath $parent -Force -ErrorAction SilentlyContinue |",
+            "                    Where-Object { $_.Name -like \"$leaf*\" } |",
+            "                    ForEach-Object {",
+            "                        [System.Management.Automation.CompletionResult]::new($_.FullName, $_.Name, 'ParameterValue', $_.FullName)",
+            "                    }",
+            "            } catch {",
+            "            }",
+            "        }",
             "    }",
             "",
             "    $text = $commandAst.ToString()",
@@ -453,6 +528,19 @@ public static class CompletionsCommand
             "                return",
             "            }",
             "            New-RevitCliCompletionResults -Values $commandOptions['publish'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'fix' {",
+            "            New-RevitCliCompletionResults -Values $commandOptions['fix'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'rollback' {",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['rollback'] -ToolTip 'Option'",
             "            return",
             "        }",
             "        'import' {",

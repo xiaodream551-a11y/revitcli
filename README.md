@@ -38,6 +38,8 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli doctor` | Diagnose setup and connection issues |
 | `revitcli query <category>` | Query elements with filters; output table/JSON/CSV |
 | `revitcli set <category>` | Modify parameters with `--dry-run` preview |
+| `revitcli fix [checkName]` | Preview or apply profile-driven parameter fixes |
+| `revitcli rollback <baseline>` | Restore parameters changed by a fix baseline |
 | `revitcli export --format <fmt>` | Export DWG / PDF / IFC |
 | `revitcli schedule list` / `export` / `create` | Manage Revit schedules |
 | `revitcli audit` | Run model quality checks |
@@ -144,6 +146,13 @@ Starter templates in `profiles/`:
 | `general-publish.yml` | Any project — basic health checks + DWG/PDF/IFC export pipelines |
 
 `revitcli init <template>` copies one to your project root.
+
+### Auto-fix Playbooks
+
+- `fix --dry-run` turns `check` issues into a reviewable parameter write plan.
+- `fix --apply --yes` writes a snapshot baseline and fix journal before modifying the model.
+- `rollback <baseline> --yes` restores only the parameters touched by that fix journal.
+- v1.5 supports parameter-only strategies: `setParam` and `renameByPattern`.
 
 ## Requirements
 

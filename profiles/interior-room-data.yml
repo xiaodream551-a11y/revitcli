@@ -59,3 +59,19 @@ checks:
         parameter: Occupancy
         requireNonEmpty: true
         severity: warning
+
+# fixes:
+#   - rule: required-parameter
+#     category: rooms
+#     parameter: Department
+#     strategy: setParam
+#     value: "Interior"
+#     maxChanges: 25
+#
+#   - rule: naming
+#     category: rooms
+#     parameter: Name
+#     strategy: renameByPattern
+#     match: "^Room (.+)$"
+#     replace: "$1"
+#     maxChanges: 50
