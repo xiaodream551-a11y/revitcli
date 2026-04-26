@@ -224,6 +224,16 @@ revitcli publish
 revitcli snapshot --output .revitcli/baseline.json
 ```
 
+## Revit 2026 Real Smoke
+
+Before review or release, validate the real Revit 2026 vertical slice with the internal smoke gate:
+
+```text
+doctor -> status -> query --id -> query <category> --filter -> set --dry-run -> set -> restore
+```
+
+Use [docs/revit2026-real-smoke.md](docs/revit2026-real-smoke.md) for the model contract, commands, report paths, and stop conditions.
+
 ## Project Structure
 
 ```
