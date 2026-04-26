@@ -267,17 +267,19 @@ public static class RollbackCommand
             return candidates;
         }
 
-        candidates.Add(Path.GetFullPath(recordedBaselinePath));
-
         var expectedDirectory = Path.GetDirectoryName(expectedBaselinePath);
         if (!string.IsNullOrWhiteSpace(expectedDirectory))
         {
-            candidates.Add(Path.GetFullPath(Path.Combine(expectedDirectory, recordedBaselinePath)));
-
-            var expectedParent = Directory.GetParent(expectedDirectory);
-            if (expectedParent != null)
+            var expectedDirectoryName = Path.GetFileName(expectedDirectory.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
+            if (string.Equals(expectedDirectoryName, ".revitcli", StringComparison.OrdinalIgnoreCase))
             {
-                candidates.Add(Path.GetFullPath(Path.Combine(expectedParent.FullName, recordedBaselinePath)));
+                var expectedParent = Directory.GetParent(expectedDirectory);
+                if (expectedParent != null)
+                {
+                    candidates.Add(Path.GetFullPath(Path.Combine(expectedParent.FullName, recordedBaselinePath)));
+                }
             }
         }
 

@@ -391,6 +391,54 @@ public class RollbackCommandTests
     }
 
     [Fact]
+    public async Task Execute_Apply_RejectsBareRelativeJournalBaselinePath_ForNestedBaseline()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, ".revitcli", "baseline.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
+            WriteBaseline(baselinePath);
+            WriteJournalJson(
+                baselinePath,
+                """
+                {
+                  "schemaVersion": 1,
+                  "action": "fix",
+                  "checkName": "default",
+                  "baselinePath": "baseline.json",
+                  "startedAt": "2026-04-26T00:00:00Z",
+                  "user": "tester",
+                  "actions": [
+                    {
+                      "elementId": 303,
+                      "category": "doors",
+                      "parameter": "Mark",
+                      "oldValue": "RESTORE-ME",
+                      "newValue": "APPLIED-VALUE"
+                    }
+                  ]
+                }
+                """);
+
+            var handler = new RecordingQueueHttpHandler();
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("baseline", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.Requests);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Execute_Apply_RejectsCurrentDocumentPathMismatch_AndDoesNotSetParameters()
     {
         var tempDir = CreateTempDirectory();
