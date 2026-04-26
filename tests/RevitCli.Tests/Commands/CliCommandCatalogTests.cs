@@ -32,6 +32,7 @@ public class CliCommandCatalogTests
         Assert.Contains("batch", names);
         Assert.Contains("completions", names);
         Assert.Contains("doctor", names);
+        Assert.Contains("fix", names);
     }
 
     [Fact]
@@ -64,12 +65,14 @@ public class CliCommandCatalogTests
         Assert.DoesNotContain("interactive", names);
         Assert.DoesNotContain("batch", names);
         Assert.Contains("completions", names);
+        Assert.Contains("fix", names);
     }
 
     [Fact]
     public void TopLevelCommands_Contains_SnapshotAndDiff()
     {
         var names = CliCommandCatalog.TopLevelCommandNames;
+        Assert.Contains("fix", names);
         Assert.Contains("snapshot", names);
         Assert.Contains("diff", names);
     }

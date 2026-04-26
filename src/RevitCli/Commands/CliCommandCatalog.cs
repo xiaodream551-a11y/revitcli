@@ -19,6 +19,7 @@ internal static class CliCommandCatalog
         ("batch", "Execute commands from a JSON batch file"),
         ("doctor", "Check RevitCli setup and diagnose issues"),
         ("check", "Run project checks from .revitcli.yml profile"),
+        ("fix", "Plan or apply profile-driven parameter fixes"),
         ("publish", "Run export pipeline from .revitcli.yml profile"),
         ("init", "Create a .revitcli.yml profile from a template"),
         ("score", "Calculate model health score (0-100)"),
@@ -77,6 +78,7 @@ internal static class CliCommandCatalog
         root.AddCommand(CompletionsCommand.Create());
         root.AddCommand(DoctorCommand.Create(client, config));
         root.AddCommand(CheckCommand.Create(client));
+        root.AddCommand(FixCommand.Create(client));
         root.AddCommand(PublishCommand.Create(client));
         root.AddCommand(InitCommand.Create());
         root.AddCommand(ScoreCommand.Create(client));
