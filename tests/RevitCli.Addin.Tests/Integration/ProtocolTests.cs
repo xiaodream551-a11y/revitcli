@@ -203,7 +203,15 @@ public class ProtocolTests : IDisposable
 
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
-        Assert.Equal(5, result.Data.Passed);
+        Assert.Equal(4, result.Data.Passed);
+        Assert.Equal(1, result.Data.Failed);
+        var issue = Assert.Single(result.Data.Issues);
+        Assert.Equal("doors", issue.Category);
+        Assert.Equal("Mark", issue.Parameter);
+        Assert.Equal("doors", issue.Target);
+        Assert.Equal("", issue.CurrentValue);
+        Assert.Equal("D-100", issue.ExpectedValue);
+        Assert.Equal("structured", issue.Source);
     }
 
     [Fact]

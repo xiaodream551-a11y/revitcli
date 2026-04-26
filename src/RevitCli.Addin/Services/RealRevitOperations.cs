@@ -870,11 +870,12 @@ public sealed class RealRevitOperations : IRevitOperations
                 }
             }
             var missing = param == null;
+            var value = param?.AsString();
 
             if (!missing && spec.RequireNonEmpty)
             {
                 missing = param!.StorageType == StorageType.String
-                    ? string.IsNullOrWhiteSpace(param.AsString())
+                    ? string.IsNullOrWhiteSpace(value)
                     : !param.HasValue;
             }
 
@@ -888,7 +889,13 @@ public sealed class RealRevitOperations : IRevitOperations
                         Rule = "required-parameter",
                         Severity = spec.Severity,
                         Message = $"{spec.Category} '{element.Name}' is missing required parameter '{spec.Parameter}'.",
-                        ElementId = ToCliElementId(element.Id)
+                        ElementId = ToCliElementId(element.Id),
+                        Category = spec.Category,
+                        Parameter = spec.Parameter,
+                        Target = spec.Category,
+                        CurrentValue = value ?? "",
+                        ExpectedValue = spec.RequireNonEmpty ? null : value,
+                        Source = "structured"
                     });
                 }
             }
@@ -954,10 +961,11 @@ public sealed class RealRevitOperations : IRevitOperations
         var count = 0;
         foreach (var element in elements)
         {
+            var currentName = element.Name;
             bool matched;
             try
             {
-                matched = regex.IsMatch(element.Name);
+                matched = regex.IsMatch(currentName);
             }
             catch (RegexMatchTimeoutException)
             {
@@ -965,7 +973,7 @@ public sealed class RealRevitOperations : IRevitOperations
                 {
                     Rule = "naming-pattern",
                     Severity = "warning",
-                    Message = $"Regex pattern '{spec.Pattern}' timed out on '{element.Name}'. Skipping remaining checks.",
+                    Message = $"Regex pattern '{spec.Pattern}' timed out on '{currentName}'. Skipping remaining checks.",
                     ElementId = ToCliElementId(element.Id)
                 });
                 break;
@@ -980,8 +988,14 @@ public sealed class RealRevitOperations : IRevitOperations
                     {
                         Rule = "naming-pattern",
                         Severity = spec.Severity,
-                        Message = $"{spec.Target} '{element.Name}' does not match pattern '{spec.Pattern}'.",
-                        ElementId = ToCliElementId(element.Id)
+                        Message = $"{spec.Target} '{currentName}' does not match pattern '{spec.Pattern}'.",
+                        ElementId = ToCliElementId(element.Id),
+                        Category = spec.Target,
+                        Parameter = "Name",
+                        Target = spec.Target,
+                        CurrentValue = currentName,
+                        ExpectedValue = null,
+                        Source = "structured"
                     });
                 }
             }

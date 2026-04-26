@@ -64,9 +64,23 @@ public class PlaceholderRevitOperations : IRevitOperations
     {
         return Task.FromResult(new AuditResult
         {
-            Passed = 5,
-            Failed = 0,
-            Issues = new List<AuditIssue>()
+            Passed = 4,
+            Failed = 1,
+            Issues = new List<AuditIssue>
+            {
+                new AuditIssue
+                {
+                    Rule = "naming",
+                    Severity = "warning",
+                    Message = "Placeholder structured audit issue.",
+                    Category = "doors",
+                    Parameter = "Mark",
+                    Target = "doors",
+                    CurrentValue = "",
+                    ExpectedValue = "D-100",
+                    Source = "structured"
+                }
+            }
         });
     }
 
