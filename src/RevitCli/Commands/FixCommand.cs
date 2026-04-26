@@ -166,7 +166,16 @@ public static class FixCommand
                 User = Environment.UserName,
                 Actions = applyActions
             };
-            journalPath = FixJournalStore.SaveForBaseline(baselinePath, journal);
+            try
+            {
+                journalPath = FixJournalStore.SaveForBaseline(baselinePath, journal);
+            }
+            catch (Exception ex)
+            {
+                await output.WriteLineAsync($"Error: failed to save fix journal: {ex.Message}");
+                return 1;
+            }
+
             await output.WriteLineAsync($"Journal saved: {journalPath}");
         }
 
@@ -186,7 +195,7 @@ public static class FixCommand
             {
                 await output.WriteLineAsync($"Error: failed to apply fix for element {action.ElementId}: {result.Error}");
                 if (baselineExists)
-                    await output.WriteLineAsync($"Hint: restore from journal to rollback: {journalPath}");
+                    await output.WriteLineAsync($"Rollback: revitcli rollback {baselinePath} --yes");
                 return 1;
             }
 
@@ -201,7 +210,11 @@ public static class FixCommand
 
         await output.WriteLineAsync($"Modified {modified} element parameter(s).");
         if (baselineExists)
-            await output.WriteLineAsync($"Hint: restore from journal to rollback: {journalPath}");
+        {
+            await output.WriteLineAsync($"Rollback: revitcli rollback {baselinePath} --yes");
+            if (journalPath != null)
+                await output.WriteLineAsync($"Journal saved: {journalPath}");
+        }
 
         return 0;
     }

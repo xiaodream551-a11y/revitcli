@@ -73,6 +73,7 @@ public class CliCommandCatalogTests
     {
         var names = CliCommandCatalog.TopLevelCommandNames;
         Assert.Contains("fix", names);
+        Assert.Contains("rollback", names);
         Assert.Contains("snapshot", names);
         Assert.Contains("diff", names);
     }

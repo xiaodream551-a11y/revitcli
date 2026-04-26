@@ -20,6 +20,7 @@ internal static class CliCommandCatalog
         ("doctor", "Check RevitCli setup and diagnose issues"),
         ("check", "Run project checks from .revitcli.yml profile"),
         ("fix", "Plan or apply profile-driven parameter fixes"),
+        ("rollback", "Restore parameters changed by a fix baseline"),
         ("publish", "Run export pipeline from .revitcli.yml profile"),
         ("init", "Create a .revitcli.yml profile from a template"),
         ("score", "Calculate model health score (0-100)"),
