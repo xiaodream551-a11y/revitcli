@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
 using System.Linq;
@@ -93,16 +94,11 @@ public static class RollbackCommand
             return 1;
         }
 
-        var actions = new System.Collections.Generic.List<FixAction>();
-        if (journal.Actions != null)
+        var actions = journal.Actions?.ToList() ?? new List<FixAction>();
+
+        if (!await TryValidateActionsAsync(actions, output))
         {
-            foreach (var action in journal.Actions)
-            {
-                if (action != null)
-                {
-                    actions.Add(action);
-                }
-            }
+            return 1;
         }
 
         if (actions.Count > maxChanges)
@@ -149,8 +145,15 @@ public static class RollbackCommand
                 return 1;
             }
 
-            var previewItem = previewResult.Data.Preview?.FirstOrDefault();
-            var currentValue = previewItem?.OldValue ?? string.Empty;
+            var previewItem = previewResult.Data.Preview?.FirstOrDefault(item => item != null && item.Id == action.ElementId);
+            if (previewItem == null)
+            {
+                await output.WriteLineAsync(
+                    $"Error: preview response did not include a matching item for element {action.ElementId}.");
+                return 1;
+            }
+
+            var currentValue = previewItem.OldValue ?? string.Empty;
             var expectedValue = action.NewValue ?? string.Empty;
 
             if (!string.Equals(currentValue, expectedValue, StringComparison.Ordinal))
@@ -179,7 +182,45 @@ public static class RollbackCommand
             restoredCount += applyResult.Data.Affected;
         }
 
-        await output.WriteLineAsync($"Restored {restoredCount} rollback action(s); {conflictCount} conflict(s).");
+        await output.WriteLineAsync($"Restored {restoredCount} element parameter(s); {conflictCount} conflict(s).");
         return 0;
+    }
+
+    private static async Task<bool> TryValidateActionsAsync(IReadOnlyList<FixAction> actions, TextWriter output)
+    {
+        for (var i = 0; i < actions.Count; i++)
+        {
+            var action = actions[i];
+            if (action == null)
+            {
+                await output.WriteLineAsync($"Error: invalid rollback journal action at index {i}: entry is null.");
+                return false;
+            }
+
+            if (action.ElementId <= 0 || string.IsNullOrWhiteSpace(action.Parameter) || action.NewValue == null)
+            {
+                var issues = new List<string>();
+                if (action.ElementId <= 0)
+                {
+                    issues.Add("ElementId must be > 0");
+                }
+
+                if (string.IsNullOrWhiteSpace(action.Parameter))
+                {
+                    issues.Add("Parameter is required");
+                }
+
+                if (action.NewValue == null)
+                {
+                    issues.Add("NewValue is required");
+                }
+
+                await output.WriteLineAsync(
+                    $"Error: invalid rollback journal action at index {i}: {string.Join(", ", issues)}.");
+                return false;
+            }
+        }
+
+        return true;
     }
 }

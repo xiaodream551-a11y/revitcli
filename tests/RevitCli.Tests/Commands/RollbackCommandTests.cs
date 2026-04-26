@@ -58,6 +58,117 @@ public class RollbackCommandTests
     }
 
     [Fact]
+    public async Task Execute_MaxChangesZero_ReturnsOne()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction
+                {
+                    ElementId = 101,
+                    Category = "doors",
+                    Parameter = "Mark",
+                    OldValue = "OLD-101",
+                    NewValue = "NEW-101"
+                }
+            });
+
+            var client = MakeClient(new QueueHttpHandler());
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: true, yes: false, maxChanges: 0, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("max-changes", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_MalformedJournalAction_ReturnsOne_AndDoesNotCallApi()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction
+                {
+                    ElementId = 0,
+                    Category = "doors",
+                    Parameter = "   ",
+                    OldValue = "OLD-101",
+                    NewValue = "NEW-101"
+                }
+            });
+
+            var handler = new QueueHttpHandler();
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: true, yes: false, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("invalid", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.Requests);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_NullJournalAction_ReturnsOne_AndDoesNotCallApi()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournalJson(
+                baselinePath,
+                """
+                {
+                  "schemaVersion": 1,
+                  "action": "fix",
+                  "checkName": "default",
+                  "baselinePath": "baseline.json",
+                  "startedAt": "2026-04-26T00:00:00Z",
+                  "user": "tester",
+                  "actions": [null]
+                }
+                """);
+
+            var handler = new QueueHttpHandler();
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: true, yes: false, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("invalid", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.Requests);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Execute_DryRun_PrintsReverseActions_AndDoesNotCallApi()
     {
         var tempDir = CreateTempDirectory();
@@ -165,7 +276,52 @@ public class RollbackCommandTests
     }
 
     [Fact]
-    public async Task Execute_Apply_ConflictSkipsOverwrite()
+    public async Task Execute_EmptyPreview_ReturnsOne_AndDoesNotApply()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction
+                {
+                    ElementId = 404,
+                    Category = "doors",
+                    Parameter = "Mark",
+                    OldValue = "RESTORE-ME",
+                    NewValue = "APPLIED-VALUE"
+                }
+            });
+
+            var handler = new RecordingQueueHttpHandler();
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
+            {
+                Affected = 1,
+                Preview = new List<SetPreviewItem>()
+            }));
+
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("preview", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Single(handler.RequestBodies);
+            Assert.Contains("\"dryRun\":true", handler.RequestBodies[0]);
+            Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[0]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_PreviewMissingMatchingElement_ReturnsOne_AndDoesNotApply()
     {
         var tempDir = CreateTempDirectory();
         try
@@ -190,7 +346,7 @@ public class RollbackCommandTests
                 Affected = 1,
                 Preview = new List<SetPreviewItem>
                 {
-                    new() { Id = 404, Name = "Door 404", OldValue = "SOMEONE-ELSE-EDITED", NewValue = "RESTORE-ME" }
+                    new() { Id = 999, Name = "Door 404", OldValue = "SOMEONE-ELSE-EDITED", NewValue = "RESTORE-ME" }
                 }
             }));
 
@@ -200,8 +356,8 @@ public class RollbackCommandTests
             var exitCode = await RollbackCommand.ExecuteAsync(
                 client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
 
-            Assert.Equal(0, exitCode);
-            Assert.Contains("conflict", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, exitCode);
+            Assert.Contains("matching", writer.ToString(), StringComparison.OrdinalIgnoreCase);
             Assert.Single(handler.RequestBodies);
             Assert.Contains("\"dryRun\":true", handler.RequestBodies[0]);
             Assert.DoesNotContain("\"dryRun\":false", handler.RequestBodies[0]);
@@ -213,7 +369,7 @@ public class RollbackCommandTests
     }
 
     [Fact]
-    public async Task Execute_MaxChangesExceeded_ReturnsOne()
+    public async Task Execute_PreviewApiFailure_ReturnsOne()
     {
         var tempDir = CreateTempDirectory();
         try
@@ -222,18 +378,61 @@ public class RollbackCommandTests
             WriteBaseline(baselinePath);
             WriteJournal(baselinePath, new[]
             {
-                new FixAction { ElementId = 1, Category = "doors", Parameter = "Mark", OldValue = "A", NewValue = "B" },
-                new FixAction { ElementId = 2, Category = "doors", Parameter = "Mark", OldValue = "C", NewValue = "D" }
+                new FixAction { ElementId = 1, Category = "doors", Parameter = "Mark", OldValue = "A", NewValue = "B" }
             });
 
-            var client = MakeClient(new QueueHttpHandler());
+            var handler = new RecordingQueueHttpHandler();
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Fail("preview failed"));
+            var client = MakeClient(handler);
             var writer = new StringWriter();
 
             var exitCode = await RollbackCommand.ExecuteAsync(
-                client, baselinePath, dryRun: true, yes: false, maxChanges: 1, writer);
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
 
             Assert.Equal(1, exitCode);
-            Assert.Contains("max", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("preview", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Single(handler.RequestBodies);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_ApplyApiFailure_ReturnsOne()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            var baselinePath = Path.Combine(tempDir, "baseline.json");
+            WriteBaseline(baselinePath);
+            WriteJournal(baselinePath, new[]
+            {
+                new FixAction { ElementId = 1, Category = "doors", Parameter = "Mark", OldValue = "A", NewValue = "B" }
+            });
+
+            var handler = new RecordingQueueHttpHandler();
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Ok(new SetResult
+            {
+                Affected = 1,
+                Preview = new List<SetPreviewItem>
+                {
+                    new() { Id = 1, Name = "Door 1", OldValue = "B", NewValue = "A" }
+                }
+            }));
+            handler.Enqueue("/api/elements/set", ApiResponse<SetResult>.Fail("apply failed"));
+
+            var client = MakeClient(handler);
+            var writer = new StringWriter();
+
+            var exitCode = await RollbackCommand.ExecuteAsync(
+                client, baselinePath, dryRun: false, yes: true, maxChanges: 50, writer);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("apply", writer.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, handler.RequestBodies.Count);
+            Assert.Contains("\"dryRun\":false", handler.RequestBodies[1]);
         }
         finally
         {
@@ -307,6 +506,15 @@ public class RollbackCommandTests
         };
 
         FixJournalStore.SaveForBaseline(baselinePath, journal);
+    }
+
+    private static void WriteJournalJson(string baselinePath, string json)
+    {
+        var journalPath = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(baselinePath))!,
+            Path.GetFileNameWithoutExtension(baselinePath) + ".fixjournal.json");
+
+        File.WriteAllText(journalPath, json);
     }
 }
 
