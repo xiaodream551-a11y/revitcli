@@ -28,4 +28,22 @@ public class AuditIssue
 
     [JsonPropertyName("elementId")]
     public long? ElementId { get; set; }
+
+    [JsonPropertyName("category")]
+    public string? Category { get; set; }
+
+    [JsonPropertyName("parameter")]
+    public string? Parameter { get; set; }
+
+    [JsonPropertyName("target")]
+    public string? Target { get; set; }
+
+    [JsonPropertyName("currentValue")]
+    public string? CurrentValue { get; set; }
+
+    [JsonPropertyName("expectedValue")]
+    public string? ExpectedValue { get; set; }
+
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
 }
