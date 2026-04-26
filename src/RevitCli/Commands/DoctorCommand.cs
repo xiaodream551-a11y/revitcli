@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using RevitCli.Client;
 using RevitCli.Config;
 using RevitCli.Output;
@@ -21,60 +22,53 @@ public static class DoctorCommand
 
         command.SetHandler(async () =>
         {
-            if (!ConsoleHelper.IsInteractive)
-            {
-                Environment.ExitCode = await ExecuteAsync(client, config, Console.Out);
-                return;
-            }
-
-            await RunChecksSpectre(client, config);
+            Environment.ExitCode = await ExecuteAsync(client, config, Console.Out);
         });
 
         return command;
     }
 
-    public static async Task<int> ExecuteAsync(RevitClient client, CliConfig config, TextWriter output)
+    public static Task<int> ExecuteAsync(RevitClient client, CliConfig config, TextWriter output)
     {
+        return ExecuteAsync(client, config, output, DoctorEnvironment.Current());
+    }
+
+    internal static async Task<int> ExecuteAsync(
+        RevitClient client,
+        CliConfig config,
+        TextWriter output,
+        DoctorEnvironment environment)
+    {
+        var hasFailure = false;
+
         // 1. Config file
-        var configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".revitcli", "config.json");
+        var configPath = environment.ConfigPath;
         if (File.Exists(configPath))
             await output.WriteLineAsync($"OK: Configuration file exists ({configPath})");
         else
             await output.WriteLineAsync($"INFO: No configuration file ({configPath}) - using defaults");
 
-        // 2. Server URL
+        // 2. Revit 2026 local prerequisites
+        hasFailure |= !await WriteRevit2026ApiCheck(output, environment);
+        hasFailure |= !await WriteAddinManifestCheck(output, environment);
+
+        // 3. Server URL
         await output.WriteLineAsync($"OK: Server URL: {config.ServerUrl}");
 
-        // 3. Server info file
-        var serverInfoPath = CliConfig.ServerInfoPath;
-        if (File.Exists(serverInfoPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(serverInfoPath);
-                var info = JsonSerializer.Deserialize<ServerInfo>(json);
-                if (info != null)
-                    await output.WriteLineAsync($"OK: Server info: port={info.Port}, pid={info.Pid}, started={info.StartedAt}");
-                else
-                    await output.WriteLineAsync("WARN: Server info file exists but is empty/invalid");
-            }
-            catch
-            {
-                await output.WriteLineAsync("WARN: Server info file exists but cannot be parsed");
-            }
-        }
-        else
-        {
-            await output.WriteLineAsync("INFO: No server info file (OK if Revit is not running)");
-        }
+        // 4. Server info file
+        hasFailure |= !await WriteServerInfoCheck(output, environment);
 
-        // 4. Connection test
+        // 5. Connection test
         var status = await client.GetStatusAsync();
         if (status.Success)
         {
             await output.WriteLineAsync($"OK: Connected to Revit {status.Data!.RevitVersion}");
+            if (!IsRevit2026(status.Data))
+            {
+                await output.WriteLineAsync(
+                    $"FAIL: Connected Revit version is {status.Data.RevitVersion}; this internal smoke baseline targets Revit 2026 only.");
+                hasFailure = true;
+            }
             if (status.Data.DocumentName != null)
                 await output.WriteLineAsync($"OK: Document: {status.Data.DocumentName}");
             else
@@ -83,13 +77,156 @@ public static class DoctorCommand
         else
         {
             await output.WriteLineAsync($"FAIL: {status.Error}");
-            return 1;
+            await output.WriteLineAsync("HINT: Start Revit 2026, confirm the RevitCli add-in is loaded, open the test model, then rerun 'revitcli doctor'.");
+            hasFailure = true;
         }
 
-        // 5. Project profile
+        // 6. Project profile
         WriteProfileInfo(null, s => output.WriteLine(s));
 
-        return 0;
+        return hasFailure ? 1 : 0;
+    }
+
+    private static bool IsRevit2026(StatusInfo status)
+    {
+        if (status.RevitYear != 0)
+            return status.RevitYear == 2026;
+
+        return status.RevitVersion.Contains("2026", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<bool> WriteRevit2026ApiCheck(TextWriter output, DoctorEnvironment environment)
+    {
+        var installDir = environment.ResolvedRevit2026InstallDir;
+        var missing = new[] { "RevitAPI.dll", "RevitAPIUI.dll" }
+            .Where(dll => !File.Exists(Path.Combine(installDir, dll)))
+            .ToArray();
+
+        if (missing.Length == 0)
+        {
+            await output.WriteLineAsync($"OK: Revit 2026 API DLLs found ({installDir})");
+            return true;
+        }
+
+        await output.WriteLineAsync(
+            $"FAIL: Revit 2026 API DLLs missing at {installDir}: {string.Join(", ", missing)}");
+        await output.WriteLineAsync(
+            "HINT: Install Revit 2026 or set REVITCLI_REVIT2026_INSTALL_DIR / Revit2026InstallDir to the Revit 2026 install directory.");
+        return false;
+    }
+
+    private static async Task<bool> WriteAddinManifestCheck(TextWriter output, DoctorEnvironment environment)
+    {
+        var manifestPath = environment.ManifestPath;
+        if (!File.Exists(manifestPath))
+        {
+            await output.WriteLineAsync($"FAIL: Add-in manifest missing ({manifestPath})");
+            await output.WriteLineAsync("HINT: Build/publish the add-in and install RevitCli.addin under Autodesk\\Revit\\Addins\\2026.");
+            return false;
+        }
+
+        try
+        {
+            var doc = XDocument.Load(manifestPath);
+            var assembly = doc.Descendants("Assembly").FirstOrDefault()?.Value.Trim();
+            if (string.IsNullOrWhiteSpace(assembly))
+            {
+                await output.WriteLineAsync($"FAIL: Add-in manifest has no Assembly path ({manifestPath})");
+                return false;
+            }
+
+            var assemblyPath = Path.IsPathRooted(assembly)
+                ? assembly
+                : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(manifestPath)!, assembly));
+            if (!File.Exists(assemblyPath))
+            {
+                await output.WriteLineAsync($"FAIL: Add-in assembly from manifest does not exist ({assemblyPath})");
+                return false;
+            }
+
+            await output.WriteLineAsync($"OK: Add-in manifest: {manifestPath}");
+            await output.WriteLineAsync($"OK: Add-in assembly: {assemblyPath}");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            await output.WriteLineAsync($"FAIL: Add-in manifest cannot be read ({manifestPath}): {ex.Message}");
+            return false;
+        }
+    }
+
+    private static async Task<bool> WriteServerInfoCheck(TextWriter output, DoctorEnvironment environment)
+    {
+        var serverInfoPath = environment.ServerInfoPath;
+        if (!File.Exists(serverInfoPath))
+        {
+            await output.WriteLineAsync("INFO: No server info file (OK if Revit is not running)");
+            return true;
+        }
+
+        ServerInfo? info;
+        try
+        {
+            var json = File.ReadAllText(serverInfoPath);
+            info = JsonSerializer.Deserialize<ServerInfo>(json);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            await output.WriteLineAsync($"FAIL: Server info file exists but cannot be parsed ({serverInfoPath}): {ex.Message}");
+            return false;
+        }
+
+        if (info == null)
+        {
+            await output.WriteLineAsync($"FAIL: Server info file is empty or invalid ({serverInfoPath})");
+            return false;
+        }
+
+        var failures = new List<string>();
+        if (info.Port < 1024 || info.Port > 65535)
+            failures.Add($"invalid port={info.Port}");
+        if (info.Pid <= 0)
+            failures.Add($"invalid pid={info.Pid}");
+        if (string.IsNullOrWhiteSpace(info.Token))
+            failures.Add("missing token");
+
+        string? processName = null;
+        if (info.Pid > 0)
+        {
+            try
+            {
+                using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
+                if (proc.HasExited)
+                    failures.Add($"stale pid={info.Pid}");
+                else
+                {
+                    processName = proc.ProcessName;
+                    if (!processName.Contains("Revit", StringComparison.OrdinalIgnoreCase))
+                        failures.Add($"pid={info.Pid} belongs to process '{processName}', not Revit");
+                }
+            }
+            catch (ArgumentException)
+            {
+                failures.Add($"stale pid={info.Pid}");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                failures.Add($"cannot inspect pid={info.Pid}: {ex.Message}");
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            await output.WriteLineAsync(
+                $"FAIL: Server info is stale or invalid ({serverInfoPath}): {string.Join(", ", failures)}");
+            await output.WriteLineAsync("HINT: Close Revit, delete the stale server.json if it remains, restart Revit 2026, and rerun doctor.");
+            return false;
+        }
+
+        var processSuffix = processName == null ? "" : $", process={processName}";
+        await output.WriteLineAsync(
+            $"OK: Server info: port={info.Port}, pid={info.Pid}{processSuffix}, started={info.StartedAt}");
+        return true;
     }
 
     private static void WriteProfileInfo(Action<string>? spectreWrite, Action<string>? plainWrite)
@@ -160,78 +297,39 @@ public static class DoctorCommand
         }
     }
 
-    private static async Task RunChecksSpectre(RevitClient client, CliConfig config)
+}
+
+internal sealed class DoctorEnvironment
+{
+    public string UserProfile { get; init; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    public string AppData { get; init; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+    public string? Revit2026InstallDir { get; init; }
+
+    public string ConfigPath => Path.Combine(UserProfile, ".revitcli", "config.json");
+
+    public string ServerInfoPath => Path.Combine(UserProfile, ".revitcli", "server.json");
+
+    public string ManifestPath => Path.Combine(
+        AppData, "Autodesk", "Revit", "Addins", "2026", "RevitCli.addin");
+
+    public string ResolvedRevit2026InstallDir =>
+        !string.IsNullOrWhiteSpace(Revit2026InstallDir)
+            ? Revit2026InstallDir!
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "Autodesk", "Revit 2026");
+
+    public static DoctorEnvironment Current()
     {
-        AnsiConsole.MarkupLine("[bold]RevitCli Doctor[/]");
-        AnsiConsole.WriteLine();
-
-        // 1. Config file
-        var configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".revitcli", "config.json");
-        if (File.Exists(configPath))
-            AnsiConsole.MarkupLine($"  [green]\u2713[/] Configuration file: [dim]{Markup.Escape(configPath)}[/]");
-        else
-            AnsiConsole.MarkupLine($"  [blue]\u25cb[/] No configuration file [dim](using defaults)[/]");
-
-        // 2. Server URL
-        AnsiConsole.MarkupLine($"  [green]\u2713[/] Server URL: [cyan]{Markup.Escape(config.ServerUrl)}[/]");
-
-        // 3. Server info
-        var serverInfoPath = CliConfig.ServerInfoPath;
-        if (File.Exists(serverInfoPath))
+        return new DoctorEnvironment
         {
-            try
-            {
-                var json = File.ReadAllText(serverInfoPath);
-                var info = JsonSerializer.Deserialize<ServerInfo>(json);
-                if (info != null)
-                {
-                    // Check if PID is alive
-                    var alive = false;
-                    try
-                    {
-                        using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
-                        alive = !proc.HasExited;
-                    }
-                    catch { }
-
-                    if (alive)
-                        AnsiConsole.MarkupLine($"  [green]\u2713[/] Server info: port=[cyan]{info.Port}[/], pid=[cyan]{info.Pid}[/] [green](running)[/]");
-                    else
-                        AnsiConsole.MarkupLine($"  [yellow]![/] Server info: port=[cyan]{info.Port}[/], pid=[cyan]{info.Pid}[/] [yellow](process not found)[/]");
-                }
-            }
-            catch
-            {
-                AnsiConsole.MarkupLine("  [yellow]![/] Server info file exists but cannot be parsed");
-            }
-        }
-        else
-        {
-            AnsiConsole.MarkupLine("  [blue]\u25cb[/] No server info file [dim](OK if Revit not running)[/]");
-        }
-
-        // 4. Connection test
-        var status = await client.GetStatusAsync();
-        if (status.Success)
-        {
-            AnsiConsole.MarkupLine($"  [green]\u2713[/] Connected to Revit [green]{Markup.Escape(status.Data!.RevitVersion)}[/]");
-            if (status.Data.DocumentName != null)
-                AnsiConsole.MarkupLine($"  [green]\u2713[/] Document: [cyan]{Markup.Escape(status.Data.DocumentName)}[/]");
-            else
-                AnsiConsole.MarkupLine("  [blue]\u25cb[/] No document open");
-        }
-        else
-        {
-            AnsiConsole.MarkupLine($"  [red]\u2717[/] Connection failed: [red]{Markup.Escape(status.Error ?? "Unknown")}[/]");
-            Environment.ExitCode = 1;
-        }
-
-        // 5. Project profile
-        AnsiConsole.WriteLine();
-        WriteProfileInfo(s => AnsiConsole.MarkupLine(s), null);
-
-        AnsiConsole.WriteLine();
+            Revit2026InstallDir =
+                Environment.GetEnvironmentVariable("REVITCLI_REVIT2026_INSTALL_DIR") ??
+                Environment.GetEnvironmentVariable("Revit2026InstallDir")
+        };
     }
 }
