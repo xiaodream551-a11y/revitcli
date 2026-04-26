@@ -242,8 +242,8 @@ public static class RollbackCommand
         try
         {
             var expected = Path.GetFullPath(baselinePath);
-            var actual = Path.GetFullPath(journal.BaselinePath);
-            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            if (!GetBaselinePathCandidates(journal.BaselinePath, expected)
+                .Any(actual => string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase)))
             {
                 error = $"fix journal baseline path '{journal.BaselinePath}' does not match '{baselinePath}'.";
                 return false;
@@ -256,6 +256,32 @@ public static class RollbackCommand
         }
 
         return true;
+    }
+
+    private static IEnumerable<string> GetBaselinePathCandidates(string recordedBaselinePath, string expectedBaselinePath)
+    {
+        var candidates = new List<string>();
+        if (Path.IsPathRooted(recordedBaselinePath))
+        {
+            candidates.Add(Path.GetFullPath(recordedBaselinePath));
+            return candidates;
+        }
+
+        candidates.Add(Path.GetFullPath(recordedBaselinePath));
+
+        var expectedDirectory = Path.GetDirectoryName(expectedBaselinePath);
+        if (!string.IsNullOrWhiteSpace(expectedDirectory))
+        {
+            candidates.Add(Path.GetFullPath(Path.Combine(expectedDirectory, recordedBaselinePath)));
+
+            var expectedParent = Directory.GetParent(expectedDirectory);
+            if (expectedParent != null)
+            {
+                candidates.Add(Path.GetFullPath(Path.Combine(expectedParent.FullName, recordedBaselinePath)));
+            }
+        }
+
+        return candidates;
     }
 
     private static async Task<bool> TryValidateCurrentDocumentAsync(

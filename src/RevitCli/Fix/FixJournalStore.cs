@@ -35,6 +35,8 @@ internal static class FixJournalStore
             throw new ArgumentNullException(nameof(journal));
         }
 
+        journal.BaselinePath = Path.GetFullPath(baselinePath);
+
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
         {
