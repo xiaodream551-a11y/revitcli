@@ -4,6 +4,19 @@ All notable changes to RevitCli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-04-26
+
+### Added
+
+- `revitcli fix` for dry-run and apply of profile-driven parameter fixes.
+- `revitcli rollback` for journal-scoped restoration of fix changes.
+- Structured `AuditIssue` metadata for fix planning.
+- `setParam` and `renameByPattern` strategies.
+
+### Out of scope
+
+- Delete, geometry, family editing, and cross-document fixes.
+
 ## [1.3.0] - 2026-04-24
 
 Model-as-Code Phase 3 — `revitcli import FILE.csv`. Closes the loop: snapshot

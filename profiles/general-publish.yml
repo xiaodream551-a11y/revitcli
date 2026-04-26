@@ -57,3 +57,19 @@ publish:
       - dwg
       - pdf
       - ifc
+
+# fixes:
+#   - rule: required-parameter
+#     category: sheets
+#     parameter: Sheet Number
+#     strategy: setParam
+#     value: "A-{element.id}"
+#     maxChanges: 20
+#
+#   - rule: naming
+#     category: views
+#     parameter: Name
+#     strategy: renameByPattern
+#     match: "^View (.+)$"
+#     replace: "$1"
+#     maxChanges: 50

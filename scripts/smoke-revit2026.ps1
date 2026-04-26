@@ -38,6 +38,14 @@ param(
 
     [switch]$Apply,
 
+    [switch]$FixDryRun,
+
+    [switch]$FixApply,
+
+    [string]$FixCheckName = "default",
+
+    [string]$FixProfile = "",
+
     [string]$OutputPath = ""
 )
 
@@ -211,6 +219,32 @@ function Assert-DryRunPreview {
     }
 }
 
+function Get-LatestFixBaseline {
+    param([string]$RootPath)
+
+    $fixDirectory = Join-Path $RootPath ".revitcli"
+    if (-not (Test-Path -LiteralPath $fixDirectory)) {
+        return $null
+    }
+
+    return Get-ChildItem -LiteralPath $fixDirectory -Filter "fix-baseline-*.json" -File |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+}
+
+function Get-FixJournalPath {
+    param([string]$BaselinePath)
+
+    if ([string]::IsNullOrWhiteSpace($BaselinePath)) {
+        return ""
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($BaselinePath)
+    $directory = [System.IO.Path]::GetDirectoryName($fullPath)
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($fullPath)
+    return Join-Path $directory "$name.fixjournal.json"
+}
+
 $Steps = [System.Collections.Generic.List[object]]::new()
 $installDir = Resolve-Revit2026InstallDir -OverridePath $RevitInstallDir
 $manifestPath = Join-Path $env:APPDATA "Autodesk\Revit\Addins\2026\RevitCli.addin"
@@ -341,6 +375,35 @@ if (-not $Apply) {
     }
 }
 
+$fixBaselinePath = ""
+$fixJournalPath = ""
+if ($FixDryRun -or $FixApply) {
+    if ([string]::IsNullOrWhiteSpace($FixProfile)) {
+        throw "-FixDryRun and -FixApply require a non-empty -FixProfile."
+    }
+}
+
+if ($FixDryRun) {
+    Invoke-RevitCliSmoke @("fix", $FixCheckName, "--dry-run", "--profile", $FixProfile) | Out-Null
+}
+
+if ($FixApply) {
+    Invoke-RevitCliSmoke @("fix", $FixCheckName, "--apply", "--yes", "--profile", $FixProfile) | Out-Null
+
+    $baseline = Get-LatestFixBaseline -RootPath (Get-Location).Path
+    if ($null -eq $baseline) {
+        throw "fix apply did not create a fix baseline under .revitcli"
+    }
+
+    $fixBaselinePath = $baseline.FullName
+    $candidateJournalPath = Get-FixJournalPath -BaselinePath $fixBaselinePath
+    if (Test-Path -LiteralPath $candidateJournalPath) {
+        $fixJournalPath = (Get-Item -LiteralPath $candidateJournalPath).FullName
+    }
+
+    Invoke-RevitCliSmoke @("rollback", $fixBaselinePath, "--yes") | Out-Null
+}
+
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $OutputPath = Join-Path (Get-Location) "revitcli-smoke-2026-$stamp.json"
@@ -363,6 +426,12 @@ $report = [ordered]@{
     oldValue = $oldValue
     testValue = $Value
     applied = [bool]$Apply
+    fixDryRun = [bool]$FixDryRun
+    fixApply = [bool]$FixApply
+    fixCheckName = $FixCheckName
+    fixProfile = $FixProfile
+    fixBaselinePath = $fixBaselinePath
+    fixJournalPath = $fixJournalPath
     steps = $Steps
 }
 
