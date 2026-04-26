@@ -197,7 +197,19 @@ public class ProtocolTests : IDisposable
     [Fact]
     public async Task Audit_ReturnsPlaceholderResult()
     {
-        var request = new AuditRequest { Rules = new() { "naming" } };
+        var request = new AuditRequest
+        {
+            RequiredParameters = new()
+            {
+                new RequiredParameterSpec
+                {
+                    Category = "doors",
+                    Parameter = "Mark",
+                    RequireNonEmpty = true,
+                    Severity = "warning"
+                }
+            }
+        };
 
         var result = await _client.AuditAsync(request);
 
@@ -212,6 +224,20 @@ public class ProtocolTests : IDisposable
         Assert.Equal("", issue.CurrentValue);
         Assert.Equal("D-100", issue.ExpectedValue);
         Assert.Equal("structured", issue.Source);
+    }
+
+    [Fact]
+    public async Task Audit_NamingRequestRemainsPassingAndEmpty()
+    {
+        var request = new AuditRequest { Rules = new() { "naming" } };
+
+        var result = await _client.AuditAsync(request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(5, result.Data.Passed);
+        Assert.Equal(0, result.Data.Failed);
+        Assert.Empty(result.Data.Issues);
     }
 
     [Fact]

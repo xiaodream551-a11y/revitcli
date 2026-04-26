@@ -870,7 +870,7 @@ public sealed class RealRevitOperations : IRevitOperations
                 }
             }
             var missing = param == null;
-            var value = param?.AsString();
+            var value = param == null ? null : FormatParameterValue(doc, param);
 
             if (!missing && spec.RequireNonEmpty)
             {

@@ -7,6 +7,14 @@ namespace RevitCli.Addin.Services;
 
 public class PlaceholderRevitOperations : IRevitOperations
 {
+    private static bool ShouldReturnRequiredParameterPlaceholder(AuditRequest request)
+    {
+        if (request.RequiredParameters?.Count > 0)
+            return true;
+
+        return request.Rules?.Exists(rule => string.Equals(rule, "required-parameter", StringComparison.OrdinalIgnoreCase)) == true;
+    }
+
     public Task<StatusInfo> GetStatusAsync()
     {
         return Task.FromResult(new StatusInfo
@@ -62,6 +70,16 @@ public class PlaceholderRevitOperations : IRevitOperations
 
     public Task<AuditResult> RunAuditAsync(AuditRequest request)
     {
+        if (!ShouldReturnRequiredParameterPlaceholder(request))
+        {
+            return Task.FromResult(new AuditResult
+            {
+                Passed = 5,
+                Failed = 0,
+                Issues = new List<AuditIssue>()
+            });
+        }
+
         return Task.FromResult(new AuditResult
         {
             Passed = 4,
@@ -70,7 +88,7 @@ public class PlaceholderRevitOperations : IRevitOperations
             {
                 new AuditIssue
                 {
-                    Rule = "naming",
+                    Rule = "required-parameter",
                     Severity = "warning",
                     Message = "Placeholder structured audit issue.",
                     Category = "doors",
