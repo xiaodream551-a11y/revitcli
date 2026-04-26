@@ -191,6 +191,9 @@ $installedAddinVersion = Get-AssemblyVersion $manifestAssemblyPath
 $cliVersionMetadata = Get-CliVersionMetadata -Command $RevitCli
 $cliVersion = $cliVersionMetadata.Version
 $cliVersionError = $cliVersionMetadata.Error
+if (-not [string]::IsNullOrWhiteSpace($cliVersionError) -or [string]::IsNullOrWhiteSpace($cliVersion)) {
+    throw "CLI version metadata unavailable: $cliVersionError"
+}
 
 $serverInfo = Get-Content -Raw -LiteralPath $serverInfoPath | ConvertFrom-Json
 try {

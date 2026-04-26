@@ -198,12 +198,13 @@ if ($PSBoundParameters.ContainsKey("RevitYears")) {
     $targetYears = @()
     foreach ($year in $SupportedYears) {
         $srcAddinYear = Get-SourceAddinDir -Year $year
-        if (Test-Path $srcAddinYear) {
+        $srcAddinDll = Join-Path $srcAddinYear "RevitCli.Addin.dll"
+        if (Test-Path -LiteralPath $srcAddinDll) {
             $targetYears += $year
         }
     }
     if ($targetYears.Count -eq 0) {
-        Write-Host "ERROR: No addin/<year> directories found in the package." -ForegroundColor Red
+        Write-Host "ERROR: No packaged add-in DLLs found under addin/<year>/RevitCli.Addin.dll." -ForegroundColor Red
         exit 1
     }
     Write-Host "Detected add-in packages for: $($targetYears -join ', ')" -ForegroundColor DarkGray
@@ -232,8 +233,9 @@ if (-not (Test-Path -LiteralPath $SrcBin)) {
 # Validate source add-in directories exist
 foreach ($year in $targetYears) {
     $srcAddinYear = Get-SourceAddinDir -Year $year
-    if (-not (Test-Path -LiteralPath $srcAddinYear)) {
-        Write-Host "ERROR: addin/$year/ directory not found in install package." -ForegroundColor Red
+    $srcAddinDll = Join-Path $srcAddinYear "RevitCli.Addin.dll"
+    if (-not (Test-Path -LiteralPath $srcAddinDll)) {
+        Write-Host "ERROR: RevitCli.Addin.dll not found for Revit $year in install package." -ForegroundColor Red
         if ($SourceTreeMode) {
             Write-Host "Run without -SkipBuild, or build source-tree artifacts under $ArtifactsRoot."
         }

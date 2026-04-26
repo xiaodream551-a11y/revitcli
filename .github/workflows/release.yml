@@ -35,12 +35,34 @@ jobs:
 
       - name: Build Add-in (Revit 2025)
         id: build2025
-        run: dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2025 -p:Version=${{ steps.version.outputs.VERSION }} -o ./stage/addin/2025
+        shell: pwsh
+        run: |
+          $tmp = Join-Path $env:RUNNER_TEMP "revitcli-addin-2025"
+          $out = "./stage/addin/2025"
+          Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $out -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet publish src/RevitCli.Addin -c Release -f net8.0-windows -p:RevitYear=2025 -p:Version=${{ steps.version.outputs.VERSION }} -o $tmp
+          if (-not (Test-Path -LiteralPath (Join-Path $tmp "RevitCli.Addin.dll"))) {
+            throw "Revit 2025 add-in publish did not produce RevitCli.Addin.dll"
+          }
+          New-Item -ItemType Directory -Path (Split-Path $out) -Force | Out-Null
+          Move-Item -LiteralPath $tmp -Destination $out
         continue-on-error: true
 
       - name: Build Add-in (Revit 2024)
         id: build2024
-        run: dotnet publish src/RevitCli.Addin -c Release -f net48 -p:RevitYear=2024 -p:Version=${{ steps.version.outputs.VERSION }} -o ./stage/addin/2024
+        shell: pwsh
+        run: |
+          $tmp = Join-Path $env:RUNNER_TEMP "revitcli-addin-2024"
+          $out = "./stage/addin/2024"
+          Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $out -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet publish src/RevitCli.Addin -c Release -f net48 -p:RevitYear=2024 -p:Version=${{ steps.version.outputs.VERSION }} -o $tmp
+          if (-not (Test-Path -LiteralPath (Join-Path $tmp "RevitCli.Addin.dll"))) {
+            throw "Revit 2024 add-in publish did not produce RevitCli.Addin.dll"
+          }
+          New-Item -ItemType Directory -Path (Split-Path $out) -Force | Out-Null
+          Move-Item -LiteralPath $tmp -Destination $out
         continue-on-error: true
 
       - name: Detect packaged Revit years
