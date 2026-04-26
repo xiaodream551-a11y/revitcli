@@ -27,7 +27,7 @@ The current branch already contains the previous Revit 2026 real-slice hardening
   - Render stable diagnostic text.
 - Create `src/RevitCli/Diagnostics/AssemblyVersionReader.cs`
   - Read installed assembly version from a DLL path without loading it into the process.
-  - Prefer `FileVersionInfo.ProductVersion`, fall back to `AssemblyName.GetAssemblyName`.
+  - Prefer parseable `FileVersionInfo.ProductVersion`, preserve SemVer build metadata, convert four-part Windows versions to `major.minor.patch`, and fall back to `AssemblyName.GetAssemblyName`.
 - Modify `src/RevitCli/Commands/DoctorCommand.cs`
   - Report CLI version, installed Add-in version, live Add-in version.
   - Fail on major/minor mismatch, warn on patch/build mismatch.
@@ -308,10 +308,9 @@ internal static class AssemblyVersionReader
         try
         {
             var fileInfo = FileVersionInfo.GetVersionInfo(path);
-            var productVersion = NormalizeVersion(fileInfo.ProductVersion);
-            if (!string.IsNullOrWhiteSpace(productVersion))
+            if (TryNormalizeVersion(fileInfo.ProductVersion, out var productVersion))
             {
-                version = productVersion!;
+                version = productVersion;
                 return true;
             }
 
@@ -332,13 +331,44 @@ internal static class AssemblyVersionReader
         }
     }
 
-    private static string? NormalizeVersion(string? value)
+    internal static bool TryNormalizeVersion(string? value, out string normalized)
     {
+        normalized = "";
         if (string.IsNullOrWhiteSpace(value))
-            return null;
+            return false;
 
-        var plus = value.IndexOf('+');
-        return plus >= 0 ? value[..plus] : value.Trim();
+        var trimmed = value.Trim();
+        if (ComponentVersion.TryParse(trimmed, out _))
+        {
+            normalized = trimmed;
+            return true;
+        }
+
+        var metadata = "";
+        var plusIndex = trimmed.IndexOf('+');
+        var core = trimmed;
+        if (plusIndex >= 0)
+        {
+            metadata = trimmed[plusIndex..];
+            core = trimmed[..plusIndex];
+        }
+
+        var parts = core.Split('.');
+        if (parts.Length == 4
+            && int.TryParse(parts[0], out var major)
+            && int.TryParse(parts[1], out var minor)
+            && int.TryParse(parts[2], out var patch)
+            && int.TryParse(parts[3], out _))
+        {
+            var candidate = $"{major}.{minor}.{patch}{metadata}";
+            if (ComponentVersion.TryParse(candidate, out _))
+            {
+                normalized = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 ```
@@ -1009,7 +1039,7 @@ function Get-AssemblyVersion {
     try {
         $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
         if ($info.ProductVersion) {
-            return (($info.ProductVersion -split '\+')[0]).Trim()
+            return $info.ProductVersion.Trim()
         }
         return ""
     } catch {
