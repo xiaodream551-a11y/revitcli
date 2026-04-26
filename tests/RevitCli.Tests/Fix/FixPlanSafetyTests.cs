@@ -89,4 +89,17 @@ public class FixPlanSafetyTests
         Assert.False(result.Success);
         Assert.Contains("low-confidence", result.Error);
     }
+
+    [Fact]
+    public void ValidateApply_HandlesNullActionsList()
+    {
+        var plan = new FixPlan
+        {
+            Actions = null!
+        };
+
+        var result = FixPlanSafety.ValidateApply(plan, yes: true, allowInferred: true, maxChanges: 50);
+
+        Assert.True(result.Success);
+    }
 }

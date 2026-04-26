@@ -14,7 +14,7 @@ internal static class FixPlanSafety
             return FixSafetyResult.Fail("--max-changes must be greater than 0.");
         }
 
-        var actions = plan?.Actions.Where(a => a is not null).ToList() ?? [];
+        var actions = (plan?.Actions ?? []).Where(a => a is not null).ToList();
 
         if (actions.Count > maxChanges)
         {

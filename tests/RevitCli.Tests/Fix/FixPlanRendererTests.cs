@@ -69,4 +69,19 @@ public class FixPlanRendererTests
         Assert.Contains("Warning: existing warning", output);
         Assert.Equal(1, output.Split("Warning:", StringSplitOptions.None).Length - 1);
     }
+
+    [Fact]
+    public void Render_HandlesNullActionSkippedAndWarningLists()
+    {
+        var plan = new FixPlan
+        {
+            Actions = null!,
+            Skipped = null!,
+            Warnings = null!
+        };
+
+        var output = FixPlanRenderer.Render(plan);
+
+        Assert.Contains("Fix plan for check 'default': 0 action(s), 0 skipped, 0 inferred", output);
+    }
 }
