@@ -25,6 +25,9 @@ public class ProjectProfile
 
     [YamlMember(Alias = "schedules")]
     public Dictionary<string, ScheduleTemplate> Schedules { get; set; } = new();
+
+    [YamlMember(Alias = "fixes")]
+    public List<FixRecipe> Fixes { get; set; } = new();
 }
 
 public class ProfileDefaults
@@ -73,6 +76,33 @@ public class Suppression
 
     [YamlMember(Alias = "expires")]
     public string? Expires { get; set; }
+}
+
+public class FixRecipe
+{
+    [YamlMember(Alias = "rule")]
+    public string? Rule { get; set; }
+
+    [YamlMember(Alias = "category")]
+    public string? Category { get; set; }
+
+    [YamlMember(Alias = "parameter")]
+    public string? Parameter { get; set; }
+
+    [YamlMember(Alias = "strategy")]
+    public string Strategy { get; set; } = "";
+
+    [YamlMember(Alias = "value")]
+    public string? Value { get; set; }
+
+    [YamlMember(Alias = "match")]
+    public string? Match { get; set; }
+
+    [YamlMember(Alias = "replace")]
+    public string? Replace { get; set; }
+
+    [YamlMember(Alias = "maxChanges")]
+    public int? MaxChanges { get; set; }
 }
 
 public class AuditRuleRef

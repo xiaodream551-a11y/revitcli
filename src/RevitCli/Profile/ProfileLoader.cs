@@ -76,6 +76,9 @@ public static class ProfileLoader
     private static readonly HashSet<string> ValidFailOn = new(StringComparer.OrdinalIgnoreCase)
         { "error", "warning" };
 
+    private static readonly HashSet<string> ValidFixStrategies = new(StringComparer.OrdinalIgnoreCase)
+        { "setParam", "renameByPattern" };
+
     private static void ValidateProfile(ProjectProfile profile, string path)
     {
         foreach (var (name, check) in profile.Checks)
@@ -96,6 +99,53 @@ public static class ProfileLoader
                 if (!ValidSeverities.Contains(naming.Severity))
                     throw new InvalidOperationException(
                         $"Profile {path}: checks.{name}.naming severity must be error/warning/info, got '{naming.Severity}'");
+            }
+        }
+
+        ValidateFixes(profile, path);
+    }
+
+    private static void ValidateFixes(ProjectProfile profile, string path)
+    {
+        for (var i = 0; i < profile.Fixes.Count; i++)
+        {
+            var fix = profile.Fixes[i];
+            var prefix = $"Profile {path}: fixes[{i}]";
+
+            if (string.IsNullOrWhiteSpace(fix.Strategy))
+                throw new InvalidOperationException($"{prefix}.strategy is required");
+
+            if (!ValidFixStrategies.Contains(fix.Strategy))
+                throw new InvalidOperationException(
+                    $"{prefix}.strategy '{fix.Strategy}' is not supported. Supported strategies: setParam, renameByPattern");
+
+            if (fix.MaxChanges.HasValue && fix.MaxChanges.Value <= 0)
+                throw new InvalidOperationException($"{prefix}.maxChanges must be greater than 0");
+
+            if (string.Equals(fix.Strategy, "setParam", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(fix.Parameter))
+                    throw new InvalidOperationException($"{prefix}.parameter is required for setParam");
+                if (fix.Value == null)
+                    throw new InvalidOperationException($"{prefix}.value is required for setParam");
+            }
+
+            if (string.Equals(fix.Strategy, "renameByPattern", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(fix.Parameter))
+                    throw new InvalidOperationException($"{prefix}.parameter is required for renameByPattern");
+                if (string.IsNullOrWhiteSpace(fix.Match))
+                    throw new InvalidOperationException($"{prefix}.match is required for renameByPattern");
+                if (fix.Replace == null)
+                    throw new InvalidOperationException($"{prefix}.replace is required for renameByPattern");
+                try
+                {
+                    _ = new System.Text.RegularExpressions.Regex(fix.Match);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException($"{prefix}.match is invalid regex: {ex.Message}", ex);
+                }
             }
         }
     }
@@ -153,6 +203,9 @@ public static class ProfileLoader
             merged.Schedules[kvp.Key] = kvp.Value;
         foreach (var kvp in child.Schedules)
             merged.Schedules[kvp.Key] = kvp.Value;
+
+        merged.Fixes.AddRange(baseProfile.Fixes);
+        merged.Fixes.AddRange(child.Fixes);
 
         return merged;
     }
