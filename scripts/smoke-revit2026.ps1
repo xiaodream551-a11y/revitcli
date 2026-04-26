@@ -219,19 +219,6 @@ function Assert-DryRunPreview {
     }
 }
 
-function Get-LatestFixBaseline {
-    param([string]$RootPath)
-
-    $fixDirectory = Join-Path $RootPath ".revitcli"
-    if (-not (Test-Path -LiteralPath $fixDirectory)) {
-        return $null
-    }
-
-    return Get-ChildItem -LiteralPath $fixDirectory -Filter "fix-baseline-*.json" -File |
-        Sort-Object LastWriteTimeUtc -Descending |
-        Select-Object -First 1
-}
-
 function Get-FixJournalPath {
     param([string]$BaselinePath)
 
@@ -245,195 +232,248 @@ function Get-FixJournalPath {
     return Join-Path $directory "$name.fixjournal.json"
 }
 
+function New-FixBaselineOutputPath {
+    param([string]$RootPath)
+
+    $fixDirectory = Join-Path $RootPath ".revitcli"
+    New-Item -ItemType Directory -Force -Path $fixDirectory | Out-Null
+
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $nonce = [guid]::NewGuid().ToString("N").Substring(0, 8)
+    return Join-Path $fixDirectory ("fix-baseline-{0}-{1}.json" -f $stamp, $nonce)
+}
+
+$scriptFailure = $null
+$fixApplyFailure = $null
+$fixRollbackFailure = $null
+$fixBaselinePath = ""
+$fixJournalPath = ""
+
 $Steps = [System.Collections.Generic.List[object]]::new()
 $installDir = Resolve-Revit2026InstallDir -OverridePath $RevitInstallDir
 $manifestPath = Join-Path $env:APPDATA "Autodesk\Revit\Addins\2026\RevitCli.addin"
 $serverInfoPath = Join-Path $env:USERPROFILE ".revitcli\server.json"
 
-Assert-FileExists (Join-Path $installDir "RevitAPI.dll") "Revit 2026 API DLL"
-Assert-FileExists (Join-Path $installDir "RevitAPIUI.dll") "Revit 2026 API UI DLL"
-Assert-FileExists $manifestPath "RevitCli 2026 add-in manifest"
-Assert-FileExists $serverInfoPath "RevitCli server.json"
-
-$manifestAssemblyPath = Resolve-ManifestAssemblyPath $manifestPath
-Assert-FileExists $manifestAssemblyPath "RevitCli manifest assembly"
-$installedAddinVersion = Get-AssemblyVersion $manifestAssemblyPath
-$cliVersionMetadata = Get-CliVersionMetadata -Command $RevitCli
-$cliVersion = $cliVersionMetadata.Version
-$cliVersionError = $cliVersionMetadata.Error
-if (-not [string]::IsNullOrWhiteSpace($cliVersionError) -or [string]::IsNullOrWhiteSpace($cliVersion)) {
-    throw "CLI version metadata unavailable: $cliVersionError"
-}
-
-$serverInfo = Get-Content -Raw -LiteralPath $serverInfoPath | ConvertFrom-Json
 try {
-    $proc = Get-Process -Id ([int]$serverInfo.pid) -ErrorAction Stop
-} catch {
-    throw "server.json is stale; pid $($serverInfo.pid) is not running. Restart Revit 2026."
-}
-if ($proc.ProcessName -notlike "*Revit*") {
-    throw "server.json pid $($serverInfo.pid) belongs to '$($proc.ProcessName)', not Revit."
-}
+    Assert-FileExists (Join-Path $installDir "RevitAPI.dll") "Revit 2026 API DLL"
+    Assert-FileExists (Join-Path $installDir "RevitAPIUI.dll") "Revit 2026 API UI DLL"
+    Assert-FileExists $manifestPath "RevitCli 2026 add-in manifest"
+    Assert-FileExists $serverInfoPath "RevitCli server.json"
 
-Invoke-RevitCliSmoke @("doctor") | Out-Null
-$statusText = Invoke-RevitCliSmoke @("status")
-$liveAddinVersion = ""
-foreach ($line in ($statusText -split "`r?`n")) {
-    if ($line -match '^Add-in:\s+v?(.+)$') {
-        $liveAddinVersion = $Matches[1].Trim()
-        break
+    $manifestAssemblyPath = Resolve-ManifestAssemblyPath $manifestPath
+    Assert-FileExists $manifestAssemblyPath "RevitCli manifest assembly"
+    $installedAddinVersion = Get-AssemblyVersion $manifestAssemblyPath
+    $cliVersionMetadata = Get-CliVersionMetadata -Command $RevitCli
+    $cliVersion = $cliVersionMetadata.Version
+    $cliVersionError = $cliVersionMetadata.Error
+    if (-not [string]::IsNullOrWhiteSpace($cliVersionError) -or [string]::IsNullOrWhiteSpace($cliVersion)) {
+        throw "CLI version metadata unavailable: $cliVersionError"
     }
-}
 
-$idJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
-$idElements = Convert-JsonArray $idJson "query --id"
-if ($idElements.Count -ne 1) {
-    throw "query --id returned $($idElements.Count) elements; expected exactly 1."
-}
-
-$oldValue = $null
-$paramProperty = Get-ElementParameterProperty -Element $idElements[0] -ParameterName $Param -Context "query --id"
-if ($Apply -and $null -eq $paramProperty.Value) {
-    throw "Element $ElementId parameter '$Param' is null. Pick a writable text parameter with an existing value so the smoke test can restore it exactly."
-}
-$oldValue = if ($null -eq $paramProperty.Value) { $null } else { [string]$paramProperty.Value }
-if ($Apply -and [string]::IsNullOrEmpty($Value)) {
-    throw "-Apply requires a non-empty -Value so query confirmation cannot hide a missing parameter."
-}
-
-$filterJson = Invoke-RevitCliSmoke @("query", $Category, "--filter", $Filter, "--output", "json")
-$filtered = Convert-JsonArray $filterJson "query filter"
-if ($filtered.Count -ne 1) {
-    throw "query $Category --filter '$Filter' returned $($filtered.Count) elements; expected exactly 1."
-}
-if ([long]$filtered[0].id -ne $ElementId) {
-    throw "Filter matched element $($filtered[0].id), expected $ElementId."
-}
-
-$dryRunText = Invoke-RevitCliSmoke @(
-    "set", $Category,
-    "--filter", $Filter,
-    "--param", $Param,
-    "--value", $Value,
-    "--dry-run"
-)
-Assert-DryRunPreview -Text $dryRunText -ElementId $ElementId -OldValue $oldValue -NewValue $Value
-
-if (-not $Apply) {
-    Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
-} else {
-    $restoreNeeded = $false
-    $applyFailure = $null
-    $restoreFailure = $null
-
+    $serverInfo = Get-Content -Raw -LiteralPath $serverInfoPath | ConvertFrom-Json
     try {
-        Invoke-RevitCliSmoke @(
-            "set", $Category,
-            "--filter", $Filter,
-            "--param", $Param,
-            "--value", $Value
-        ) | Out-Null
-        $restoreNeeded = $true
-
-        $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
-        $confirmed = Convert-JsonArray $confirmJson "query confirm"
-        $newParam = Get-ElementParameterProperty -Element $confirmed[0] -ParameterName $Param -Context "query confirm"
-        if ([string]$newParam.Value -ne $Value) {
-            throw "Write verification failed for '$Param': expected '$Value', got '$($newParam.Value)'."
-        }
+        $proc = Get-Process -Id ([int]$serverInfo.pid) -ErrorAction Stop
     } catch {
-        $applyFailure = $_
-    } finally {
-        if ($restoreNeeded) {
-            try {
-                Invoke-RevitCliSmoke @(
-                    "set", "--id", $ElementId.ToString(),
-                    "--param", $Param,
-                    "--value", $oldValue
-                ) | Out-Null
+        throw "server.json is stale; pid $($serverInfo.pid) is not running. Restart Revit 2026."
+    }
+    if ($proc.ProcessName -notlike "*Revit*") {
+        throw "server.json pid $($serverInfo.pid) belongs to '$($proc.ProcessName)', not Revit."
+    }
 
-                $restoreJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
-                $restored = Convert-JsonArray $restoreJson "query restore"
-                $restoredParam = Get-ElementParameterProperty -Element $restored[0] -ParameterName $Param -Context "query restore"
-                if ([string]$restoredParam.Value -ne $oldValue) {
-                    throw "Restore verification failed for '$Param': expected '$oldValue', got '$($restoredParam.Value)'."
+    Invoke-RevitCliSmoke @("doctor") | Out-Null
+    $statusText = Invoke-RevitCliSmoke @("status")
+    $liveAddinVersion = ""
+    foreach ($line in ($statusText -split "`r?`n")) {
+        if ($line -match '^Add-in:\s+v?(.+)$') {
+            $liveAddinVersion = $Matches[1].Trim()
+            break
+        }
+    }
+
+    $idJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
+    $idElements = Convert-JsonArray $idJson "query --id"
+    if ($idElements.Count -ne 1) {
+        throw "query --id returned $($idElements.Count) elements; expected exactly 1."
+    }
+
+    $oldValue = $null
+    $paramProperty = Get-ElementParameterProperty -Element $idElements[0] -ParameterName $Param -Context "query --id"
+    if ($Apply -and $null -eq $paramProperty.Value) {
+        throw "Element $ElementId parameter '$Param' is null. Pick a writable text parameter with an existing value so the smoke test can restore it exactly."
+    }
+    $oldValue = if ($null -eq $paramProperty.Value) { $null } else { [string]$paramProperty.Value }
+    if ($Apply -and [string]::IsNullOrEmpty($Value)) {
+        throw "-Apply requires a non-empty -Value so query confirmation cannot hide a missing parameter."
+    }
+
+    $filterJson = Invoke-RevitCliSmoke @("query", $Category, "--filter", $Filter, "--output", "json")
+    $filtered = Convert-JsonArray $filterJson "query filter"
+    if ($filtered.Count -ne 1) {
+        throw "query $Category --filter '$Filter' returned $($filtered.Count) elements; expected exactly 1."
+    }
+    if ([long]$filtered[0].id -ne $ElementId) {
+        throw "Filter matched element $($filtered[0].id), expected $ElementId."
+    }
+
+    $dryRunText = Invoke-RevitCliSmoke @(
+        "set", $Category,
+        "--filter", $Filter,
+        "--param", $Param,
+        "--value", $Value,
+        "--dry-run"
+    )
+    Assert-DryRunPreview -Text $dryRunText -ElementId $ElementId -OldValue $oldValue -NewValue $Value
+
+    if (-not $Apply -and -not $FixApply) {
+        Write-Host "Dry-run smoke completed. Re-run with -Apply to perform the write/confirm/restore steps."
+    } elseif ($FixApply -and -not $Apply) {
+        Write-Host "Fix apply smoke completed. Review the report for the baseline, journal, and rollback results."
+    }
+
+    if ($Apply) {
+        $restoreNeeded = $false
+        $applyFailure = $null
+        $restoreFailure = $null
+
+        try {
+            Invoke-RevitCliSmoke @(
+                "set", $Category,
+                "--filter", $Filter,
+                "--param", $Param,
+                "--value", $Value
+            ) | Out-Null
+            $restoreNeeded = $true
+
+            $confirmJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
+            $confirmed = Convert-JsonArray $confirmJson "query confirm"
+            $newParam = Get-ElementParameterProperty -Element $confirmed[0] -ParameterName $Param -Context "query confirm"
+            if ([string]$newParam.Value -ne $Value) {
+                throw "Write verification failed for '$Param': expected '$Value', got '$($newParam.Value)'."
+            }
+        } catch {
+            $applyFailure = $_
+        } finally {
+            if ($restoreNeeded) {
+                try {
+                    Invoke-RevitCliSmoke @(
+                        "set", "--id", $ElementId.ToString(),
+                        "--param", $Param,
+                        "--value", $oldValue
+                    ) | Out-Null
+
+                    $restoreJson = Invoke-RevitCliSmoke @("query", "--id", $ElementId.ToString(), "--output", "json")
+                    $restored = Convert-JsonArray $restoreJson "query restore"
+                    $restoredParam = Get-ElementParameterProperty -Element $restored[0] -ParameterName $Param -Context "query restore"
+                    if ([string]$restoredParam.Value -ne $oldValue) {
+                        throw "Restore verification failed for '$Param': expected '$oldValue', got '$($restoredParam.Value)'."
+                    }
+                } catch {
+                    $restoreFailure = $_
                 }
-            } catch {
-                $restoreFailure = $_
             }
         }
+
+        if ($applyFailure -and $restoreFailure) {
+            throw "Apply/confirm failed after write, and restore also failed. Apply error: $($applyFailure.Exception.Message). Restore error: $($restoreFailure.Exception.Message)"
+        }
+        if ($restoreFailure) {
+            throw "Restore failed after smoke write: $($restoreFailure.Exception.Message)"
+        }
+        if ($applyFailure) {
+            throw $applyFailure
+        }
     }
 
-    if ($applyFailure -and $restoreFailure) {
-        throw "Apply/confirm failed after write, and restore also failed. Apply error: $($applyFailure.Exception.Message). Restore error: $($restoreFailure.Exception.Message)"
+    if ($FixDryRun -or $FixApply) {
+        if ([string]::IsNullOrWhiteSpace($FixProfile)) {
+            throw "-FixDryRun and -FixApply require a non-empty -FixProfile."
+        }
     }
-    if ($restoreFailure) {
-        throw "Restore failed after smoke write: $($restoreFailure.Exception.Message)"
+
+    if ($FixDryRun) {
+        Invoke-RevitCliSmoke @("fix", $FixCheckName, "--dry-run", "--profile", $FixProfile) | Out-Null
     }
-    if ($applyFailure) {
-        throw $applyFailure
+
+    if ($FixApply) {
+        $fixBaselinePath = New-FixBaselineOutputPath -RootPath (Get-Location).Path
+        $fixJournalPath = Get-FixJournalPath -BaselinePath $fixBaselinePath
+
+        try {
+            Invoke-RevitCliSmoke @(
+                "fix", $FixCheckName,
+                "--apply", "--yes",
+                "--profile", $FixProfile,
+                "--baseline-output", $fixBaselinePath
+            ) | Out-Null
+        } catch {
+            $fixApplyFailure = $_
+        } finally {
+            if (Test-Path -LiteralPath $fixBaselinePath) {
+                try {
+                    Invoke-RevitCliSmoke @("rollback", $fixBaselinePath, "--yes") | Out-Null
+                } catch {
+                    $fixRollbackFailure = $_
+                }
+            }
+        }
+
+        if ($null -eq $fixApplyFailure -and $null -ne $fixRollbackFailure) {
+            $scriptFailure = $fixRollbackFailure
+        } elseif ($null -ne $fixApplyFailure) {
+            $scriptFailure = $fixApplyFailure
+        }
+    }
+} catch {
+    if ($null -eq $scriptFailure) {
+        $scriptFailure = $_
+    }
+} finally {
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $OutputPath = Join-Path (Get-Location) "revitcli-smoke-2026-$stamp.json"
+    }
+
+    $report = [ordered]@{
+        timestamp = (Get-Date).ToString("o")
+        revitInstallDir = $installDir
+        manifestPath = $manifestPath
+        manifestAssemblyPath = $manifestAssemblyPath
+        serverInfoPath = $serverInfoPath
+        cliVersion = $cliVersion
+        cliVersionError = $cliVersionError
+        installedAddinVersion = $installedAddinVersion
+        liveAddinVersion = $liveAddinVersion
+        elementId = $ElementId
+        category = $Category
+        filter = $Filter
+        parameter = $Param
+        oldValue = $oldValue
+        testValue = $Value
+        applied = [bool]$Apply
+        fixDryRun = [bool]$FixDryRun
+        fixApply = [bool]$FixApply
+        fixCheckName = $FixCheckName
+        fixProfile = $FixProfile
+        fixBaselinePath = $fixBaselinePath
+        fixJournalPath = $fixJournalPath
+        fixApplyError = if ($null -ne $fixApplyFailure) { $fixApplyFailure.Exception.Message } else { "" }
+        fixRollbackError = if ($null -ne $fixRollbackFailure) { $fixRollbackFailure.Exception.Message } else { "" }
+        failure = if ($null -ne $scriptFailure) { $scriptFailure.Exception.Message } else { "" }
+        steps = $Steps
+    }
+
+    try {
+        $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+        Write-Host "Smoke report written to $OutputPath"
+    } catch {
+        if ($null -eq $scriptFailure) {
+            $scriptFailure = $_
+        } else {
+            Write-Warning "Smoke report write failed: $($_.Exception.Message)"
+        }
     }
 }
 
-$fixBaselinePath = ""
-$fixJournalPath = ""
-if ($FixDryRun -or $FixApply) {
-    if ([string]::IsNullOrWhiteSpace($FixProfile)) {
-        throw "-FixDryRun and -FixApply require a non-empty -FixProfile."
-    }
+if ($null -ne $scriptFailure) {
+    throw $scriptFailure
 }
-
-if ($FixDryRun) {
-    Invoke-RevitCliSmoke @("fix", $FixCheckName, "--dry-run", "--profile", $FixProfile) | Out-Null
-}
-
-if ($FixApply) {
-    Invoke-RevitCliSmoke @("fix", $FixCheckName, "--apply", "--yes", "--profile", $FixProfile) | Out-Null
-
-    $baseline = Get-LatestFixBaseline -RootPath (Get-Location).Path
-    if ($null -eq $baseline) {
-        throw "fix apply did not create a fix baseline under .revitcli"
-    }
-
-    $fixBaselinePath = $baseline.FullName
-    $candidateJournalPath = Get-FixJournalPath -BaselinePath $fixBaselinePath
-    if (Test-Path -LiteralPath $candidateJournalPath) {
-        $fixJournalPath = (Get-Item -LiteralPath $candidateJournalPath).FullName
-    }
-
-    Invoke-RevitCliSmoke @("rollback", $fixBaselinePath, "--yes") | Out-Null
-}
-
-if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $OutputPath = Join-Path (Get-Location) "revitcli-smoke-2026-$stamp.json"
-}
-
-$report = [ordered]@{
-    timestamp = (Get-Date).ToString("o")
-    revitInstallDir = $installDir
-    manifestPath = $manifestPath
-    manifestAssemblyPath = $manifestAssemblyPath
-    serverInfoPath = $serverInfoPath
-    cliVersion = $cliVersion
-    cliVersionError = $cliVersionError
-    installedAddinVersion = $installedAddinVersion
-    liveAddinVersion = $liveAddinVersion
-    elementId = $ElementId
-    category = $Category
-    filter = $Filter
-    parameter = $Param
-    oldValue = $oldValue
-    testValue = $Value
-    applied = [bool]$Apply
-    fixDryRun = [bool]$FixDryRun
-    fixApply = [bool]$FixApply
-    fixCheckName = $FixCheckName
-    fixProfile = $FixProfile
-    fixBaselinePath = $fixBaselinePath
-    fixJournalPath = $fixJournalPath
-    steps = $Steps
-}
-
-$report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
-Write-Host "Smoke report written to $OutputPath"
