@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using RevitCli.Client;
 using RevitCli.Config;
+using RevitCli.Diagnostics;
 using RevitCli.Output;
 using RevitCli.Profile;
 using RevitCli.Shared;
@@ -301,6 +302,8 @@ public static class DoctorCommand
 
 internal sealed class DoctorEnvironment
 {
+    public string CliVersion { get; init; } = AssemblyVersionReader.CurrentCliVersion();
+
     public string UserProfile { get; init; } =
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
