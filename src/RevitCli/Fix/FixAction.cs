@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace RevitCli.Fix;
 
 internal sealed class FixAction

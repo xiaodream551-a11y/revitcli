@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using RevitCli.Profile;
 using RevitCli.Shared;
 
@@ -10,21 +9,54 @@ internal static class FixRecipeMatcher
 {
     public static FixRecipeMatch Match(AuditIssue issue, IReadOnlyList<FixRecipe> recipes)
     {
-        var candidates = recipes
-            .Select(recipe => (Recipe: recipe, Priority: GetPriority(issue, recipe)))
-            .Where(item => item.Priority > 0)
-            .ToList();
+        if (issue is null)
+        {
+            return FixRecipeMatch.Fail("The issue parameter cannot be null.");
+        }
+
+        if (recipes is null)
+        {
+            return FixRecipeMatch.NoMatch();
+        }
+
+        var candidates = new List<(FixRecipe Recipe, int Priority)>();
+
+        foreach (var recipe in recipes)
+        {
+            if (recipe is null)
+            {
+                continue;
+            }
+
+            var priority = GetPriority(issue, recipe);
+            if (priority > 0)
+            {
+                candidates.Add((recipe, priority));
+            }
+        }
 
         if (candidates.Count == 0)
         {
             return FixRecipeMatch.NoMatch();
         }
 
-        var bestPriority = candidates.Max(item => item.Priority);
-        var bestCandidates = candidates
-            .Where(item => item.Priority == bestPriority)
-            .Select(item => item.Recipe)
-            .ToList();
+        var bestPriority = 0;
+        foreach (var item in candidates)
+        {
+            if (item.Priority > bestPriority)
+            {
+                bestPriority = item.Priority;
+            }
+        }
+
+        var bestCandidates = new List<FixRecipe>();
+        foreach (var item in candidates)
+        {
+            if (item.Priority == bestPriority)
+            {
+                bestCandidates.Add(item.Recipe);
+            }
+        }
 
         if (bestCandidates.Count != 1)
         {
@@ -89,7 +121,7 @@ internal sealed class FixRecipeMatch
     public bool HasRecipe { get; init; }
     public FixRecipe? Recipe { get; init; }
     public bool Inferred { get; init; }
-    public string? Error { get; init; }
+    public string Error { get; init; } = "";
 
     public static FixRecipeMatch Ok(FixRecipe recipe, bool inferred)
     {

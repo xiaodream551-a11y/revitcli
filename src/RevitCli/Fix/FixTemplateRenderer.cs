@@ -8,6 +8,16 @@ internal static class FixTemplateRenderer
 {
     public static string Render(string template, AuditIssue issue, string parameter)
     {
+        if (template is null)
+        {
+            throw new ArgumentNullException(nameof(template));
+        }
+
+        if (issue is null)
+        {
+            throw new ArgumentNullException(nameof(issue));
+        }
+
         return Regex.Replace(template, "\\{([^}]+)\\}", match =>
         {
             var token = match.Groups[1].Value;

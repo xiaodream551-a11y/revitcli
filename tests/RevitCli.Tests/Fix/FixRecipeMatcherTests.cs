@@ -48,4 +48,41 @@ public class FixRecipeMatcherTests
         Assert.False(match.Success);
         Assert.Contains("ambiguous", match.Error, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Match_NullIssue_ReturnsFailureContainingIssue()
+    {
+        var match = FixRecipeMatcher.Match(null!, new List<FixRecipe>());
+
+        Assert.False(match.Success);
+        Assert.Contains("issue", match.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Match_NullRecipes_ReturnsNoMatch()
+    {
+        var issue = new AuditIssue { Rule = "required-parameter" };
+        var match = FixRecipeMatcher.Match(issue, null!);
+
+        Assert.True(match.Success);
+        Assert.False(match.HasRecipe);
+        Assert.Equal(string.Empty, match.Error);
+    }
+
+    [Fact]
+    public void Match_SkipsNullRecipeEntries()
+    {
+        var issue = new AuditIssue { Rule = "required-parameter", Category = "doors", Parameter = "Mark" };
+        var recipes = new List<FixRecipe>
+        {
+            null!,
+            new() { Rule = "required-parameter", Category = "doors", Parameter = "Mark", Strategy = "setParam", Value = "exact" }
+        };
+
+        var match = FixRecipeMatcher.Match(issue, recipes);
+
+        Assert.True(match.Success);
+        Assert.True(match.HasRecipe);
+        Assert.Equal("exact", match.Recipe!.Value);
+    }
 }

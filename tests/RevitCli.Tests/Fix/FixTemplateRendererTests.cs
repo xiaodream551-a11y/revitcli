@@ -32,4 +32,22 @@ public class FixTemplateRendererTests
 
         Assert.Contains("unknown", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Render_NullTemplate_ThrowsArgumentNull()
+    {
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            FixTemplateRenderer.Render(null!, new AuditIssue { ElementId = 1 }, "Mark"));
+
+        Assert.Equal("template", ex.ParamName);
+    }
+
+    [Fact]
+    public void Render_NullIssue_ThrowsArgumentNull()
+    {
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            FixTemplateRenderer.Render("{category}", null!, "Mark"));
+
+        Assert.Equal("issue", ex.ParamName);
+    }
 }
