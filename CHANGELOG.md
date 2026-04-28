@@ -108,6 +108,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   Without either, the tool returns a content-text refusal explaining how
   to enable. Defense in depth for LLM-driven model writes.
 
+### Added — MCP phase 3 (write tools — fix + rollback)
+
+Closes the agent loop `audit -> fix -> rollback`: an LLM client can now
+delegate "make the model conform to the audit rules" and undo it via the
+baseline snapshot path, without composing individual `set` calls.
+
+- New `fix` tool — wraps `FixCommand`. Same double-gate as `set`
+  (`--allow-writes` plus `confirm: true`). Inputs: `checkName`, `rules`,
+  `severity`, `dryRun`, `allowInferred`, `maxChanges`, `confirm`. The
+  baseline snapshot is always captured before applying (no MCP-level
+  `--no-snapshot` opt-out — failing safe).
+- New `rollback` tool — wraps `RollbackCommand`. Same double-gate.
+  Inputs: `baseline`, `dryRun`, `maxChanges`, `confirm`. The baseline
+  path is passed through unbounded for now; future hardening can bound
+  it to `.revitcli/`.
+- Both tools append a structured audit entry to `.revitcli/journal.jsonl`
+  on every outcome (`refused-writes-disabled`, `refused-no-confirm`,
+  `ok`, `error`) with `transport: "mcp"`. Same shape as the existing CLI
+  journal so post-hoc forensics work uniformly.
+
 ### Added — v2.0 dashboard (phase 1 — skeleton)
 
 - New top-level dashboard project under `dashboard/` (SvelteKit +

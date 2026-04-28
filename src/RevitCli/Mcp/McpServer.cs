@@ -89,6 +89,8 @@ internal sealed class McpServer
             new AuditTool(client),
             new SnapshotTool(client),
             new SetTool(client, allowWrites),
+            new FixTool(client, allowWrites),
+            new RollbackTool(client, allowWrites),
         };
 
         var resources = new List<IMcpResource>
