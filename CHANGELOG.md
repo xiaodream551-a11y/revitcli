@@ -53,6 +53,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - New composite GitHub Action at `.github/actions/revitcli-check/` — drops
   into any GitHub workflow to install the CLI, run `check --output sarif`,
   and upload to Code Scanning. See `docs/ci/github-actions.md`.
+- **Sticky PR comment bot** in the same composite action: on
+  `pull_request` events the action additionally generates the markdown
+  via `--output pr-comment` and posts (or updates) a single comment on
+  the PR. Subsequent pushes update the comment in place — the action
+  finds it by the hidden `<!-- revitcli-pr-comment -->` marker that
+  `PrCommentWriter` now prepends to every render. New action inputs
+  `pr-comment` (default `'true'`) and `github-token` (default
+  `${{ github.token }}`); job needs `pull-requests: write` permission.
+  Pass `pr-comment: 'false'` to opt out without losing the SARIF upload.
 
 ### Added — v1.9 profile governance (complete)
 
@@ -128,6 +137,123 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   [--force]` — copies the prebuilt dashboard + injects the user's
   history index into `public/data/history.json`. Refuses to overwrite
   a non-empty output dir without `--force`.
+
+### Added — v2.0 dashboard (phase 2 — Chart.js + History page)
+
+Per `docs/roadmap-2026q2-q3.md` §7. Phase 1 shipped the skeleton +
+data layer + Overview shell with placeholder DOM; phase 2 swaps in
+real Chart.js charts and adds the dedicated History route.
+
+- New shared chart components under `dashboard/src/lib/charts/`:
+  - `CategoryBarChart.svelte` — horizontal bar chart for "elements
+    per category" on Overview. Uses `indexAxis: 'y'` because category
+    names ("Specialty Equipment", "Generic Models") need horizontal
+    space the vertical layout truncates. Auto-sizes its height with
+    row count so dense models still render every bar.
+  - `ScoreSparkline.svelte` — score-over-time line chart. Default is
+    minimal mode (no axes / grid) for the Overview's "last 7
+    captures" widget; History page passes `minimal={false}` to surface
+    the full y-axis 0–100.
+  - `registerCharts.ts` — idempotent global Chart.js registration so
+    SSR (svelte-kit's prerender) doesn't try to touch `window`.
+- New `/history` route — full time-series chart over every captured
+  snapshot + a delta table that compares each capture to the
+  immediately previous one (Δscore, Δelements). Reads from the same
+  `loadHistory()` source as Overview; no extra fetch. For a full
+  element-by-element diff between two captures, the table footer
+  points the operator at `revitcli history diff`.
+- Layout enables the History nav link (was disabled in phase 1).
+  Multi-project remains the only disabled link, marked for a v2.0
+  follow-up.
+- C# side unchanged: `dashboard serve` already handles SPA fallback
+  for any extension-less path (`/history` → `index.html`), so no
+  routing changes were needed.
+
+### Added — v2.0 dashboard (Multi-project route — last §7 in-scope item)
+
+Closes the v2.0 §7 range (In) checklist: the `/projects` route the
+layout was previously advertising as disabled is now live, and the
+CLI grew the supporting `dashboard build --project NAME:DIR` plumbing.
+
+CLI — `revitcli dashboard build`
+- New repeatable flag `--project NAME:DIR` (e.g. `--project
+  "Office:./projA/.revitcli/history"`). Splits on the FIRST colon so
+  Windows drive paths (`Office:C:\proj\hist`) survive intact. Names
+  are case-insensitively unique within the run; duplicates fail fast.
+- Orthogonal to `--history-dir`: pass both for the single-project
+  Overview/History routes AND the multi-project comparison in one
+  build. Pass neither for the v2.0 phase 1 default.
+- New private writer `InjectProjectsAsync` builds
+  `data/projects.json` of shape `{ version, projects: [{ name,
+  historyDir, history }] }`. A missing or malformed per-project
+  `index.json` becomes an inline placeholder so the build never
+  blocks on one bad input — the dashboard renders a "0 captures"
+  card instead.
+
+Dashboard — `dashboard/`
+- `src/lib/loadProjects.ts` — fetcher mirroring `loadHistory.ts`:
+  `?projects=<url>` query param → `/data/projects.json` →
+  `STUB_PROJECTS` fallback. Plus a `latestSummary(p)` helper that
+  the route uses for card-level projection.
+- `src/routes/projects/+page.svelte` — responsive grid (1 → 2 → 3
+  columns) of project cards. Each card carries name, current score,
+  element count, capture count, and a 7-capture sparkline reusing
+  `ScoreSparkline`. Sorted by current score DESC, ties broken by
+  name for determinism.
+- Layout enables the `/projects` nav link (was disabled in phase 1
+  + phase 2). All three v2.0 routes are now live.
+
+### Added — v2.0 dashboard GitHub Pages deploy template
+
+Per `docs/roadmap-2026q2-q3.md` §7 implementation step 9. Operators
+who want to publish their dashboard get a SHA-pinned, ready-to-paste
+workflow + a privacy-conscious operator guide.
+
+- `docs/ci/dashboard-deploy-template.yml` — copy to
+  `.github/workflows/dashboard-deploy.yml`. Builds the SvelteKit SPA,
+  runs `revitcli dashboard build` to inject `history.json` (and
+  optionally one or more `--project NAME:DIR` for the Multi-project
+  route), uploads via `actions/upload-pages-artifact`, deploys via
+  `actions/deploy-pages`. Concurrency-gated on the `pages` group so
+  parallel pushes don't race the deploy lock. All third-party `uses`
+  are SHA-pinned with version-label comments.
+- `docs/ci/dashboard-github-pages.md` — the operator guide. Covers
+  the privacy story up front (the dashboard's `app.html` already
+  carries `<meta name="robots" content="noindex">`, but a public
+  deploy is still publicly fetchable; pointers to the Pages-from-
+  private-repo flow), the `BASE_PATH` adjustments for project / user /
+  custom-domain Pages, what `dashboard build` writes into `data/`,
+  optional site-wide `static/robots.txt`, and the SHA-pin update
+  workflow.
+- `docs/ci/github-actions.md` cross-links the new doc.
+
+### Added — v2.0 dashboard Playwright e2e (closes §7 step 10)
+
+Per `docs/roadmap-2026q2-q3.md` §7 implementation step 10. Smoke
+coverage for all three v2.0 routes; stub-data driven so the suite
+runs from a fresh checkout with no operator history.
+
+- `dashboard/playwright.config.ts` — single Chromium project,
+  `webServer` launches `npm run dev` automatically. CI gets
+  `forbidOnly`, fewer retries, GitHub reporter; local devs get the
+  default `list` reporter and reused-server semantics.
+- `dashboard/tests/e2e/`:
+  - `overview.spec.ts` — header, demo-data badge, both Chart.js
+    mounts (bar + sparkline), full nav surface
+  - `history.spec.ts` — heading, time-series chart, delta table row
+    count, Δscore column rendering
+  - `projects.spec.ts` — card count, score-DESC sort order, per-card
+    sparkline mount, score / elements / captures labels
+  - `README.md` — run instructions + strategy notes
+- `dashboard/package.json` — adds `@playwright/test` devDep + two
+  scripts (`test:e2e`, `test:e2e:install`)
+- `dashboard/.gitignore` — adds `test-results/`, `playwright-report/`,
+  `playwright/.cache/`
+
+Strategy: every assertion targets `data-test-id` hooks rather than
+display copy, and pins SHAPE (counts, presence) rather than VALUES
+(specific scores) so a future stub-data tweak or copy revision
+doesn't break the suite.
 
 ### Added — MCP adapter (side track, unchanged)
 
