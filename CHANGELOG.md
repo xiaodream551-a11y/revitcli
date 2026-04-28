@@ -146,6 +146,30 @@ their own past actions for self-correction. Both gaps closed here.
   Robust against malformed lines (skipped, not thrown) so a partial
   write from a crash mid-flush doesn't break readers.
 
+### Added — MCP CLI hand-test commands + getting-started doc
+
+Closes the "code complete, product not usable" gap. Three new
+ad-hoc subcommands let an operator exercise the MCP server without
+booting Claude Desktop, and a structured doc explains the entire
+MCP surface.
+
+- `revitcli mcp list [--allow-writes] [--output table|json]` — print
+  the registered tool + resource catalog. Useful for verifying what
+  this binary would expose before connecting an LLM client.
+- `revitcli mcp test <tool> [--args JSON] [--allow-writes] [--verbose]`
+  — synthesize a `tools/call` request, dispatch through an in-process
+  `McpServer.CreateDefault` (the same graph production runs), print
+  the response. Smoke-test the addin endpoint, reproduce what an LLM
+  would do, inspect refusal text — no chat client needed.
+- `revitcli mcp resource <uri> [--verbose]` — same convenience for
+  the `resources/read` path.
+- New `docs/mcp-server.md` operator guide: setup, Claude Desktop
+  config, double-gate safety model, tool/resource reference, audit
+  log how-to, common workflows (cold-start, audit→fix→verify, bulk
+  CSV import, governed publish), troubleshooting matrix, source-tree
+  pointer. README cross-links it.
+
+
 ### Added — MCP phase 2 (resources + safe writes)
 
 - New MCP methods: `resources/list` and `resources/read`. Capabilities
