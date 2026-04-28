@@ -120,15 +120,15 @@ internal sealed class ImportTool : IMcpTool
     public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
     {
         var args = arguments as JsonObject ?? new JsonObject();
-        var file = TryGetString(args, "file");
-        var category = TryGetString(args, "category");
-        var matchBy = TryGetString(args, "matchBy");
-        var dryRun = TryGetBool(args, "dryRun") ?? false;
-        var onMissing = TryGetString(args, "onMissing") ?? "warn";
-        var onDuplicate = TryGetString(args, "onDuplicate") ?? "error";
-        var encoding = TryGetString(args, "encoding") ?? "auto";
-        var batchSize = TryGetInt(args, "batchSize") ?? 100;
-        var rawMap = TryGetString(args, "map");
+        var file = JsonArgs.TryGetString(args, "file");
+        var category = JsonArgs.TryGetString(args, "category");
+        var matchBy = JsonArgs.TryGetString(args, "matchBy");
+        var dryRun = JsonArgs.TryGetBool(args, "dryRun") ?? false;
+        var onMissing = JsonArgs.TryGetString(args, "onMissing") ?? "warn";
+        var onDuplicate = JsonArgs.TryGetString(args, "onDuplicate") ?? "error";
+        var encoding = JsonArgs.TryGetString(args, "encoding") ?? "auto";
+        var batchSize = JsonArgs.TryGetInt(args, "batchSize") ?? 100;
+        var rawMap = JsonArgs.TryGetString(args, "map");
 
         if (!_allowWrites)
         {
@@ -136,7 +136,7 @@ internal sealed class ImportTool : IMcpTool
             return DisabledMessage;
         }
 
-        if (TryGetBool(args, "confirm") != true)
+        if (JsonArgs.TryGetBool(args, "confirm") != true)
         {
             LogAudit("refused-no-confirm", file, category, matchBy, dryRun, batchSize, exitCode: null);
             return ConfirmMessage;
@@ -222,30 +222,4 @@ internal sealed class ImportTool : IMcpTool
         });
     }
 
-    private static string? TryGetString(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
-            return s;
-        return null;
-    }
-
-    private static bool? TryGetBool(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
-        return null;
-    }
-
-    private static int? TryGetInt(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v)
-        {
-            if (v.TryGetValue<int>(out var i)) return i;
-            if (v.TryGetValue<long>(out var l)) return (int)l;
-            if (v.TryGetValue<string>(out var s) && int.TryParse(s, out var parsed)) return parsed;
-        }
-        return null;
-    }
 }

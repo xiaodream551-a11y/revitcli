@@ -170,11 +170,19 @@ checks:
 
     private JsonElement ReadOnlyJournalEntry()
     {
+        // Filter by action="fix" so leaks from cross-class parallel tests
+        // (notably SetCommandTests, which calls JournalLogger.Log against
+        // the test runner's cwd without changing it) cannot fail us. We
+        // own this tool, so we own the action name.
         var journalPath = Path.Combine(_tempDir, ".revitcli", "journal.jsonl");
         Assert.True(File.Exists(journalPath), $"expected journal at {journalPath}");
-        var lines = File.ReadAllLines(journalPath);
-        var line = Assert.Single(lines);
-        return JsonDocument.Parse(line).RootElement.Clone();
+        foreach (var line in File.ReadAllLines(journalPath))
+        {
+            var entry = JsonDocument.Parse(line).RootElement.Clone();
+            if (entry.TryGetProperty("action", out var a) && a.GetString() == "fix")
+                return entry;
+        }
+        throw new Xunit.Sdk.XunitException($"no action=fix entry in {journalPath}");
     }
 
     private static void WriteProfile(string dir, string body)

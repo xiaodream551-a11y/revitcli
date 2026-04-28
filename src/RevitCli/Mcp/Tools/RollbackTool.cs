@@ -90,9 +90,9 @@ internal sealed class RollbackTool : IMcpTool
     public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
     {
         var args = arguments as JsonObject ?? new JsonObject();
-        var baseline = TryGetString(args, "baseline");
-        var dryRun = TryGetBool(args, "dryRun") ?? false;
-        var maxChanges = TryGetInt(args, "maxChanges") ?? 50;
+        var baseline = JsonArgs.TryGetString(args, "baseline");
+        var dryRun = JsonArgs.TryGetBool(args, "dryRun") ?? false;
+        var maxChanges = JsonArgs.TryGetInt(args, "maxChanges") ?? 50;
 
         if (!_allowWrites)
         {
@@ -100,7 +100,7 @@ internal sealed class RollbackTool : IMcpTool
             return DisabledMessage;
         }
 
-        if (TryGetBool(args, "confirm") != true)
+        if (JsonArgs.TryGetBool(args, "confirm") != true)
         {
             LogAudit("refused-no-confirm", baseline, dryRun, maxChanges, exitCode: null);
             return ConfirmMessage;
@@ -167,30 +167,4 @@ internal sealed class RollbackTool : IMcpTool
         });
     }
 
-    private static string? TryGetString(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
-            return s;
-        return null;
-    }
-
-    private static bool? TryGetBool(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
-        return null;
-    }
-
-    private static int? TryGetInt(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v)
-        {
-            if (v.TryGetValue<int>(out var i)) return i;
-            if (v.TryGetValue<long>(out var l)) return (int)l;
-            if (v.TryGetValue<string>(out var s) && int.TryParse(s, out var parsed)) return parsed;
-        }
-        return null;
-    }
 }

@@ -211,11 +211,16 @@ exports:
 
     private JsonElement ReadOnlyJournalEntry()
     {
+        // Filter by action="publish" — see comment in McpFixToolTests.
         var journalPath = Path.Combine(_tempDir, ".revitcli", "journal.jsonl");
         Assert.True(File.Exists(journalPath), $"expected journal at {journalPath}");
-        var lines = File.ReadAllLines(journalPath);
-        var line = Assert.Single(lines);
-        return JsonDocument.Parse(line).RootElement.Clone();
+        foreach (var line in File.ReadAllLines(journalPath))
+        {
+            var entry = JsonDocument.Parse(line).RootElement.Clone();
+            if (entry.TryGetProperty("action", out var a) && a.GetString() == "publish")
+                return entry;
+        }
+        throw new Xunit.Sdk.XunitException($"no action=publish entry in {journalPath}");
     }
 
     private static RevitClient MakeClient(QueueHttpHandler handler) =>

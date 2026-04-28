@@ -110,11 +110,11 @@ internal sealed class PublishTool : IMcpTool
     public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
     {
         var args = arguments as JsonObject ?? new JsonObject();
-        var pipeline = TryGetString(args, "pipeline");
-        var dryRun = TryGetBool(args, "dryRun") ?? false;
-        var since = TryGetString(args, "since");
-        var sinceMode = TryGetString(args, "sinceMode");
-        var updateBaseline = TryGetBool(args, "updateBaseline") ?? false;
+        var pipeline = JsonArgs.TryGetString(args, "pipeline");
+        var dryRun = JsonArgs.TryGetBool(args, "dryRun") ?? false;
+        var since = JsonArgs.TryGetString(args, "since");
+        var sinceMode = JsonArgs.TryGetString(args, "sinceMode");
+        var updateBaseline = JsonArgs.TryGetBool(args, "updateBaseline") ?? false;
 
         if (!_allowWrites)
         {
@@ -122,7 +122,7 @@ internal sealed class PublishTool : IMcpTool
             return DisabledMessage;
         }
 
-        if (TryGetBool(args, "confirm") != true)
+        if (JsonArgs.TryGetBool(args, "confirm") != true)
         {
             LogAudit("refused-no-confirm", pipeline, dryRun, since, sinceMode, updateBaseline, exitCode: null);
             return ConfirmMessage;
@@ -185,18 +185,4 @@ internal sealed class PublishTool : IMcpTool
         });
     }
 
-    private static string? TryGetString(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
-            return s;
-        return null;
-    }
-
-    private static bool? TryGetBool(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
-        return null;
-    }
 }

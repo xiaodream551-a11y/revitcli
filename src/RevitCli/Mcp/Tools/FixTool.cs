@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -109,12 +108,12 @@ internal sealed class FixTool : IMcpTool
     public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
     {
         var args = arguments as JsonObject ?? new JsonObject();
-        var checkName = TryGetString(args, "checkName");
-        var rules = TryGetStringArray(args, "rules");
-        var severity = TryGetString(args, "severity");
-        var dryRun = TryGetBool(args, "dryRun") ?? false;
-        var allowInferred = TryGetBool(args, "allowInferred") ?? false;
-        var maxChanges = TryGetInt(args, "maxChanges") ?? 50;
+        var checkName = JsonArgs.TryGetString(args, "checkName");
+        var rules = JsonArgs.TryGetStringArray(args, "rules");
+        var severity = JsonArgs.TryGetString(args, "severity");
+        var dryRun = JsonArgs.TryGetBool(args, "dryRun") ?? false;
+        var allowInferred = JsonArgs.TryGetBool(args, "allowInferred") ?? false;
+        var maxChanges = JsonArgs.TryGetInt(args, "maxChanges") ?? 50;
 
         if (!_allowWrites)
         {
@@ -122,7 +121,7 @@ internal sealed class FixTool : IMcpTool
             return DisabledMessage;
         }
 
-        if (TryGetBool(args, "confirm") != true)
+        if (JsonArgs.TryGetBool(args, "confirm") != true)
         {
             LogAudit("refused-no-confirm", checkName, rules?.Count ?? 0, severity, dryRun, allowInferred, maxChanges, exitCode: null);
             return ConfirmMessage;
@@ -181,43 +180,4 @@ internal sealed class FixTool : IMcpTool
         });
     }
 
-    private static string? TryGetString(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
-            return s;
-        return null;
-    }
-
-    private static bool? TryGetBool(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v && v.TryGetValue<bool>(out var b)) return b;
-        return null;
-    }
-
-    private static int? TryGetInt(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is JsonValue v)
-        {
-            if (v.TryGetValue<int>(out var i)) return i;
-            if (v.TryGetValue<long>(out var l)) return (int)l;
-            if (v.TryGetValue<string>(out var s) && int.TryParse(s, out var parsed)) return parsed;
-        }
-        return null;
-    }
-
-    private static List<string>? TryGetStringArray(JsonObject args, string key)
-    {
-        if (!args.TryGetPropertyValue(key, out var node) || node is null) return null;
-        if (node is not JsonArray arr) return null;
-        var list = new List<string>();
-        foreach (var entry in arr)
-        {
-            if (entry is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
-                list.Add(s);
-        }
-        return list.Count == 0 ? null : list;
-    }
 }
