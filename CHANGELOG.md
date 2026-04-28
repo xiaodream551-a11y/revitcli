@@ -207,6 +207,36 @@ Scanning ingestion pipeline. Now they can.
   reader can disambiguate model-element issues from family issues.
 
 
+### Added — MCP phase 7: `sampling/createMessage` plumbing
+
+Server-to-client direction of the protocol per spec 2024-11-05. The
+client opts in by advertising `capabilities.sampling` in `initialize`;
+the server can then ask the client's LLM to perform an inference. This
+PR ships the protocol plumbing only — no production tool consumes
+sampling yet, but the infrastructure is in place for any future tool
+that needs LLM judgment server-side.
+
+- Bidirectional dispatch in `McpServer`: server-initiated requests get
+  ids in a separate namespace (`srv-N`); the dispatcher recognizes
+  inbound responses (objects with `result`/`error` and no `method`)
+  and routes them to the awaiting `TaskCompletionSource` rather than
+  treating them as malformed inbound requests.
+- Stale responses (id we never sent) are silently logged and dropped
+  per JSON-RPC §6 — never echoed back as errors.
+- `_outputLock` already added in phase 5 (progress) is reused so
+  outbound requests, notifications, and responses cannot interleave
+  on stdio.
+- Capability tracked from `initialize.params.capabilities.sampling`
+  and reset on every re-handshake.
+- New `IMcpSamplingClient` interface tools call. Mirrors
+  `IMcpProgressReporter`'s shape: tools opt in via the new
+  `IMcpSamplingTool : IMcpTool` marker; dispatcher routes through the
+  3-arg overload with a real client when both sides support sampling,
+  or a `NullMcpSamplingClient` (which throws on call) when the client
+  did not advertise. Tools check `IsSupported` and degrade gracefully.
+- Cancellation honors the caller's CT — drops the pending entry so
+  a stale response landing later has no TCS to complete.
+
 ### Added — MCP phase 2 (resources + safe writes)
 
 - New MCP methods: `resources/list` and `resources/read`. Capabilities

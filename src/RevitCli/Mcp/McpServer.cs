@@ -42,12 +42,30 @@ internal sealed class McpServer
     private readonly TextWriter _output;
     /// <summary>
     /// Serializes writes to <see cref="_output"/>. The dispatch loop only
-    /// emits one response per request, but progress notifications fire
-    /// from worker tasks <em>during</em> a tool call — they share the
-    /// stdio stream with the eventual response. Without this gate, a
-    /// notification line could interleave with the response line.
+    /// emits one response per client request, but progress notifications
+    /// AND server-initiated sampling requests fire from worker tasks
+    /// <em>during</em> a tool call — they share the stdio stream with
+    /// the eventual response. Without this gate, lines could interleave.
     /// </summary>
     private readonly System.Threading.SemaphoreSlim _outputLock = new(1, 1);
+
+    /// <summary>
+    /// Pending server-initiated requests (sampling/createMessage). Key
+    /// is the id we sent; value resolves when the matching response
+    /// shows up on the input stream. Without this map the dispatcher
+    /// would treat the response as a malformed inbound request and
+    /// echo back an error to the client.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<JsonNode>> _pendingOutboundRequests = new();
+    private long _nextOutboundRequestId;
+
+    /// <summary>
+    /// True iff the client advertised <c>capabilities.sampling</c> in
+    /// its <c>initialize</c> request. Set by HandleInitialize before
+    /// any tool runs; checked by <see cref="McpSamplingClient.IsSupported"/>.
+    /// </summary>
+    private bool _clientSupportsSampling;
+
     private readonly TextWriter _logger;
     private readonly string _serverVersion;
 
@@ -150,13 +168,39 @@ internal sealed class McpServer
     {
         JsonRpcRequest? request;
         JsonNode? rawId = null;
+        JsonNode? rawObj = null;
         try
         {
             // Pull the id out first so even a partially-malformed request can
             // reply with the right id (per JSON-RPC §5.1).
-            var raw = JsonNode.Parse(line);
-            if (raw is JsonObject obj && obj.TryGetPropertyValue("id", out var idNode))
+            rawObj = JsonNode.Parse(line);
+            if (rawObj is JsonObject obj && obj.TryGetPropertyValue("id", out var idNode))
                 rawId = idNode?.DeepClone();
+
+            // Bidirectional dispatch: if this line is a RESPONSE to a
+            // server-initiated request (sampling/createMessage), it has
+            // an `id` we sent and a `result`/`error` field but NO
+            // `method`. Route it to the awaiting TCS rather than
+            // treating it as a new client request.
+            if (rawObj is JsonObject env
+                && (env.ContainsKey("result") || env.ContainsKey("error"))
+                && !env.ContainsKey("method"))
+            {
+                if (env["id"] is { } responseId
+                    && responseId.GetValueKind() is JsonValueKind.String or JsonValueKind.Number
+                    && TryCompletePending(responseId, env))
+                {
+                    return;
+                }
+                // A response with an id we don't know about — stale from
+                // a cancelled or timed-out sampling request. Silently
+                // log; do NOT echo back an error as if this were a
+                // malformed inbound request (that would be a protocol
+                // violation per JSON-RPC §6).
+                _logger.WriteLine($"[mcp] dropped stale response (id={env["id"]?.ToJsonString() ?? "null"})");
+                return;
+            }
+
             request = JsonSerializer.Deserialize<JsonRpcRequest>(line);
         }
         catch (JsonException ex)
@@ -203,6 +247,7 @@ internal sealed class McpServer
         switch (request.Method)
         {
             case "initialize":
+                CaptureClientCapabilities(request.Params);
                 return JsonRpcResponse.Success(request.Id, BuildInitializeResult());
 
             case "initialized": // some clients send as a request rather than notification
@@ -285,13 +330,28 @@ internal sealed class McpServer
             ? new McpProgressReporter(this, progressToken, cancellationToken)
             : (IMcpProgressReporter)NullMcpProgressReporter.Instance;
 
+        // Sampling (MCP spec 2024-11-05, server -> client): tools that
+        // opt in via IMcpSamplingTool always get a non-null client, but
+        // its IsSupported flag reflects whether the connected client
+        // actually advertised capabilities.sampling. The tool decides
+        // how to degrade if not supported.
+        var sampling = tool is IMcpSamplingTool
+            ? new McpSamplingClient(this, _clientSupportsSampling)
+            : (IMcpSamplingClient)NullMcpSamplingClient.Instance;
+
         string text;
         bool isError = false;
         try
         {
-            text = tool is IMcpProgressTool progressTool && progressToken is not null
-                ? await progressTool.ExecuteAsync(arguments, cancellationToken, progress).ConfigureAwait(false)
-                : await tool.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false);
+            text = tool switch
+            {
+                IMcpSamplingTool samplingTool =>
+                    await samplingTool.ExecuteAsync(arguments, cancellationToken, sampling).ConfigureAwait(false),
+                IMcpProgressTool progressTool when progressToken is not null =>
+                    await progressTool.ExecuteAsync(arguments, cancellationToken, progress).ConfigureAwait(false),
+                _ =>
+                    await tool.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false),
+            };
         }
         catch (Exception ex)
         {
@@ -420,6 +480,93 @@ internal sealed class McpServer
     }
 
     /// <summary>
+    /// Read the client's advertised capabilities from the <c>initialize</c>
+    /// request and remember the bits we care about (currently just
+    /// sampling). Per spec, missing keys are equivalent to "not advertised";
+    /// we never throw on a malformed shape.
+    /// </summary>
+    private void CaptureClientCapabilities(JsonNode? @params)
+    {
+        // Reset on every initialize so a re-handshake from a different
+        // client with different caps doesn't keep stale state.
+        _clientSupportsSampling = false;
+        if (@params is not JsonObject paramsObj) return;
+        if (paramsObj["capabilities"] is not JsonObject caps) return;
+        // The presence of any object under `sampling` (even empty) means
+        // the client supports it. Per spec, an absent key means no.
+        if (caps["sampling"] is JsonObject)
+            _clientSupportsSampling = true;
+    }
+
+    /// <summary>
+    /// Try to route an inbound message to a pending server-initiated
+    /// request. Returns true if it matched (caller must skip normal
+    /// dispatch), false if the id is unknown to us.
+    /// </summary>
+    private bool TryCompletePending(JsonNode responseId, JsonObject envelope)
+    {
+        var key = responseId.ToJsonString();
+        if (!_pendingOutboundRequests.TryRemove(key, out var tcs))
+            return false;
+        try
+        {
+            tcs.TrySetResult(envelope.DeepClone()!);
+        }
+        catch (Exception ex)
+        {
+            tcs.TrySetException(ex);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Send a server-initiated request and await the matching response.
+    /// Used by <see cref="McpSamplingClient.CreateMessageAsync"/>; could
+    /// in principle back any future server-to-client method (the spec
+    /// also defines roots, etc., though we don't expose those yet).
+    /// </summary>
+    internal async Task<JsonNode> SendRequestAsync(string method, JsonNode @params, CancellationToken cancellationToken)
+    {
+        // Distinct id namespace: prefix our ids with "srv-" so they
+        // never collide with the client's. We use string ids; spec
+        // allows string or int for the same field, but a string keeps
+        // the namespacing trivially obvious in logs.
+        var id = $"srv-{System.Threading.Interlocked.Increment(ref _nextOutboundRequestId)}";
+        var tcs = new TaskCompletionSource<JsonNode>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var idNode = JsonValue.Create(id)!;
+        _pendingOutboundRequests[idNode.ToJsonString()] = tcs;
+
+        var envelope = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = id,
+            ["method"] = method,
+            ["params"] = @params,
+        };
+
+        // Use the same locked write path as responses so we don't
+        // interleave with notifications/responses already in flight.
+        await _outputLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _output.WriteLineAsync(envelope.ToJsonString()).ConfigureAwait(false);
+            await _output.FlushAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _outputLock.Release();
+        }
+
+        // Honor cancellation: drop the pending entry if the caller bailed.
+        using var reg = cancellationToken.Register(() =>
+        {
+            if (_pendingOutboundRequests.TryRemove(idNode.ToJsonString(), out var dropped))
+                dropped.TrySetCanceled(cancellationToken);
+        });
+        return await tcs.Task.ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Pull <c>_meta.progressToken</c> out of the <c>tools/call</c>
     /// params per MCP spec 2024-11-05. The token may be a string or
     /// integer; we preserve it as a <see cref="JsonNode"/> so the same
@@ -430,6 +577,107 @@ internal sealed class McpServer
         if (paramsObj["_meta"] is not JsonObject meta) return null;
         if (!meta.TryGetPropertyValue("progressToken", out var tok) || tok is null) return null;
         return tok.DeepClone();
+    }
+
+    /// <summary>
+    /// Sampling client handed to <see cref="IMcpSamplingTool"/>
+    /// implementations. Wraps <see cref="SendRequestAsync"/> with the
+    /// spec-shape for <c>sampling/createMessage</c> and parses the
+    /// response back into a typed <see cref="SamplingResult"/>.
+    /// </summary>
+    private sealed class McpSamplingClient : IMcpSamplingClient
+    {
+        private readonly McpServer _server;
+        private readonly bool _supported;
+
+        internal McpSamplingClient(McpServer server, bool supported)
+        {
+            _server = server;
+            _supported = supported;
+        }
+
+        public bool IsSupported => _supported;
+
+        public async Task<SamplingResult> CreateMessageAsync(
+            IReadOnlyList<JsonObject> messages,
+            SamplingOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_supported)
+                throw new SamplingNotSupportedException(
+                    "Connected client did not advertise capabilities.sampling. " +
+                    "Check IsSupported before calling.");
+
+            var msgArray = new JsonArray();
+            foreach (var m in messages)
+                msgArray.Add(m.DeepClone());
+
+            var p = new JsonObject
+            {
+                ["messages"] = msgArray,
+                ["maxTokens"] = options?.MaxTokens ?? 1024,
+            };
+            if (!string.IsNullOrEmpty(options?.SystemPrompt))
+                p["systemPrompt"] = options!.SystemPrompt;
+            if (!string.IsNullOrEmpty(options?.IncludeContext))
+                p["includeContext"] = options!.IncludeContext;
+            if (options?.Temperature is double t)
+                p["temperature"] = t;
+            if (options?.ModelPreferences is { } mp)
+                p["modelPreferences"] = mp.DeepClone();
+
+            var envelope = await _server.SendRequestAsync(
+                "sampling/createMessage", p, cancellationToken).ConfigureAwait(false);
+
+            if (envelope is not JsonObject env)
+                throw new SamplingNotSupportedException("Client response was not a JSON object.");
+
+            if (env["error"] is JsonObject error)
+            {
+                var msg = error["message"]?.GetValue<string>() ?? "(unspecified)";
+                throw new SamplingNotSupportedException($"Client returned error: {msg}");
+            }
+
+            if (env["result"] is not JsonObject result)
+                throw new SamplingNotSupportedException("Client response had no result.");
+
+            return new SamplingResult
+            {
+                Role = result["role"]?.GetValue<string>() ?? "assistant",
+                Model = result["model"]?.GetValue<string>(),
+                StopReason = result["stopReason"]?.GetValue<string>(),
+                Text = ExtractText(result["content"]),
+                Raw = result.DeepClone(),
+            };
+        }
+
+        /// <summary>
+        /// Project the spec's <c>content</c> field down to a single
+        /// string. The 2024-11-05 spec defines content as one object
+        /// (<c>{type:"text", text:"..."}</c>) but later drafts allow an
+        /// array of blocks. We handle both so a future spec bump
+        /// doesn't break us; non-text blocks are skipped.
+        /// </summary>
+        private static string ExtractText(JsonNode? content)
+        {
+            if (content is null) return "";
+            if (content is JsonObject single
+                && single["type"]?.GetValue<string>() == "text")
+            {
+                return single["text"]?.GetValue<string>() ?? "";
+            }
+            if (content is JsonArray arr)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var b in arr)
+                {
+                    if (b is JsonObject ob && ob["type"]?.GetValue<string>() == "text")
+                        sb.Append(ob["text"]?.GetValue<string>() ?? "");
+                }
+                return sb.ToString();
+            }
+            return "";
+        }
     }
 
     /// <summary>
