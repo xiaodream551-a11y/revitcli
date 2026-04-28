@@ -148,6 +148,28 @@ and locks down caller-supplied filesystem paths at the MCP boundary.
   follow-up flagged in PR #12 — "future hardening could bound it to
   `.revitcli/`" — lands here.
 
+### Added — MCP phase 4 (publish tool)
+
+Promotes the profile-driven publish pipeline (precheck -> exports ->
+receipt -> webhook) from CLI-only to MCP. With this an LLM agent can
+delegate "publish my project" to a single tool call instead of
+composing audit + export + receipt by hand.
+
+- New `publish` tool — wraps `PublishCommand`. Same double-gate as the
+  rest of phase 3/3.5 (`--allow-writes` plus `confirm: true`). Inputs:
+  `pipeline`, `dryRun`, `since`, `sinceMode`, `updateBaseline`, `confirm`.
+- Long-running by design (sheet exports + webhook I/O can take minutes).
+  No progress notification on this tool — the LLM client blocks until
+  the call returns. If the client times out, the publish continues
+  server-side; the receipt and journal land regardless.
+- Output paths come from the profile, not the caller — the only
+  LLM-controlled filesystem path on this tool is `since`, and that is
+  bound to `.revitcli/` via `McpPathGuard` (same as the import + rollback
+  guards). `--update-baseline` inherits the binding because it writes
+  back to the same path.
+- Audit log every outcome (`refused-writes-disabled`, `refused-no-confirm`,
+  `refused-path-out-of-bounds`, `ok`, `error`) tagged `transport: "mcp"`.
+
 ### Added — v2.0 dashboard (phase 1 — skeleton)
 
 - New top-level dashboard project under `dashboard/` (SvelteKit +
