@@ -109,6 +109,7 @@ internal sealed class McpServer
             HistoryListResource.ForCurrentDirectory(),
             new ProfileResource(),
             new CategoriesResource(client),
+            new JournalRecentResource(),
         };
 
         return new McpServer(tools, resources, input, output, logger);

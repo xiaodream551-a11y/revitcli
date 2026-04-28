@@ -120,6 +120,32 @@ build and test against.
   POST to the new family endpoints. Will return 404 against a v1.7
   addin until the Windows follow-up lands.
 
+
+### Added — journal observability (CLI + MCP)
+
+Closes the audit-trail blind spot: every CLI and MCP write tool has
+been logging to `.revitcli/journal.jsonl` for several phases, but
+until now there was no first-class way to read or summarize the
+log. Operators couldn't observe LLM behavior; LLMs couldn't see
+their own past actions for self-correction. Both gaps closed here.
+
+- New `revitcli journal` command cluster:
+  - `journal tail [--limit N=20] [--action NAME] [--since DUR] [--output table|json] [--path PATH]`
+    — most-recent-first slice with optional filters. The duration
+    parser accepts `30m` / `2h` / `7d` style specs.
+  - `journal stats [--since DUR=24h] [--output table|json]`
+    — counters by action / outcome / transport / user. Default
+    window is 24h; pass `--since 0` for all-time.
+- New MCP resource `revitcli://journal/recent` — bounded slice of the
+  last 50 entries, exposed read-only to LLM clients. Lets an agent
+  ask "what did I just do?" without an out-of-band tool. Tool-specific
+  fields (param/category/baseline/etc.) survive the round-trip via
+  raw JSON pass-through.
+- New `JournalReader` core in `src/RevitCli/Journal/` — single
+  parsing path shared by the CLI command and the MCP resource.
+  Robust against malformed lines (skipped, not thrown) so a partial
+  write from a crash mid-flush doesn't break readers.
+
 ### Added — MCP phase 2 (resources + safe writes)
 
 - New MCP methods: `resources/list` and `resources/read`. Capabilities

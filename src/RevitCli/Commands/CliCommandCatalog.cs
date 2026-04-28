@@ -117,6 +117,7 @@ internal static class CliCommandCatalog
         root.AddCommand(CiCommand.Create());
         root.AddCommand(ProfileCommand.Create());
         root.AddCommand(FamilyCommand.Create(client));
+        root.AddCommand(JournalCommand.Create());
         root.AddCommand(DashboardCommand.Create());
 
         if (includeBatchCommand)
