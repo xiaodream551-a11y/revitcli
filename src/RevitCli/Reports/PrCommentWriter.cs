@@ -32,6 +32,18 @@ public sealed class PrCommentOptions
 /// </summary>
 public static class PrCommentWriter
 {
+    /// <summary>
+    /// Hidden HTML marker emitted as the first line of every rendered
+    /// PR comment. The companion GitHub Action (the "PR comment bot")
+    /// uses it to find the previous comment it posted on a PR and
+    /// update it in place — so a series of pushes accumulates exactly
+    /// one comment that always reflects the latest run, not a log of
+    /// every run. Renderers MUST keep this marker first; the bot's
+    /// `String.Contains` check is non-greedy and tolerant of any
+    /// suffix, but it matches by the literal string below.
+    /// </summary>
+    public const string StickyMarker = "<!-- revitcli-pr-comment -->";
+
     public static string Render(IEnumerable<AuditIssue> issues, PrCommentOptions? options = null)
     {
         options ??= new PrCommentOptions();
@@ -39,6 +51,7 @@ public static class PrCommentWriter
         var nl = Environment.NewLine;
         var builder = new StringBuilder();
 
+        builder.Append(StickyMarker).Append(nl);
         builder.Append("## ").Append(options.Title).Append(nl);
         builder.Append(nl);
 
