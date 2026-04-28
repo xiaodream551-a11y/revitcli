@@ -18,6 +18,40 @@ public class PrCommentWriterTests
     }
 
     [Fact]
+    public void Render_PrependsStickyMarkerAsFirstLine()
+    {
+        // The companion GitHub Action ("PR comment bot") locates the
+        // previous comment to update by looking for this exact marker.
+        // It must be:
+        //   - Present in EVERY rendered comment, including the empty
+        //     "no issues" path
+        //   - The first line, so the bot's substring search has the
+        //     fewest false-positive hits in long PR histories
+        var emptyOutput = PrCommentWriter.Render(new List<AuditIssue>());
+        var firstLineEmpty = emptyOutput.Split('\n').First().TrimEnd('\r');
+        Assert.Equal(PrCommentWriter.StickyMarker, firstLineEmpty);
+
+        var nonEmpty = PrCommentWriter.Render(new[]
+        {
+            new AuditIssue { Rule = "r", Severity = "error", Message = "m", ElementId = 1, Category = "Doors" }
+        });
+        var firstLineNonEmpty = nonEmpty.Split('\n').First().TrimEnd('\r');
+        Assert.Equal(PrCommentWriter.StickyMarker, firstLineNonEmpty);
+    }
+
+    [Fact]
+    public void StickyMarker_IsHtmlComment_NotRenderedToReader()
+    {
+        // The marker is a sticky-comment lookup token, not user-visible
+        // text. Pin its shape so a future "let's add an emoji" change
+        // doesn't accidentally make it visible in rendered markdown
+        // (and break the bot's substring match in old PR threads).
+        Assert.StartsWith("<!--", PrCommentWriter.StickyMarker);
+        Assert.EndsWith("-->", PrCommentWriter.StickyMarker);
+        Assert.Contains("revitcli", PrCommentWriter.StickyMarker);
+    }
+
+    [Fact]
     public void Render_FewIssues_RendersTableHeaderAndRows()
     {
         var issues = new List<AuditIssue>

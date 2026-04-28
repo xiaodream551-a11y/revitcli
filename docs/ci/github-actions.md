@@ -1,10 +1,12 @@
 # RevitCli on GitHub Actions
 
-Wire `revitcli check` into a pull-request workflow in two steps:
+Wire `revitcli check` into a pull-request workflow in three steps:
 
 1. Add `permissions: { security-events: write }` to your job (Code Scanning
    needs it to ingest SARIF).
-2. Reference the bundled composite action at
+2. Add `permissions: { pull-requests: write }` to your job if you want the
+   sticky PR comment bot enabled (the default).
+3. Reference the bundled composite action at
    `.github/actions/revitcli-check`.
 
 ## Quickstart
@@ -17,6 +19,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  pull-requests: write # required by the sticky PR comment bot (default)
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -24,12 +27,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/revitcli-check
         with:
-          revitcli-version: '1.7.0'   # pin in production
-          profile: '.revitcli.yml'    # optional; auto-discovered when omitted
+          revitcli-version: "1.7.0" # pin in production
+          profile: ".revitcli.yml" # optional; auto-discovered when omitted
+          # pr-comment: 'true'        # default; pass 'false' to disable
 ```
 
-Findings appear on the PR's **Files changed** tab (Code Scanning annotations)
-and the **Security** tab.
+Findings appear in three places:
+
+1. **Files changed** tab — Code Scanning annotations (from SARIF).
+2. **Security** tab — full SARIF run with rule descriptions.
+3. **Conversation** tab — a single sticky comment summarizing severity
+   counts and a per-rule table. Subsequent pushes UPDATE this comment in
+   place rather than stacking new ones; the bot identifies the comment by
+   the hidden `<!-- revitcli-pr-comment -->` marker the writer prepends.
+
+## Disabling the PR comment bot
+
+If your repo policy forbids bot comments, or `pull-requests: write` is
+unavailable, pass `pr-comment: 'false'`:
+
+```yaml
+- uses: ./.github/actions/revitcli-check
+  with:
+    pr-comment: "false"
+```
+
+The SARIF upload is independent and continues to work without
+`pull-requests: write`.
 
 ## Webhook payloads
 

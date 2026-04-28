@@ -53,6 +53,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - New composite GitHub Action at `.github/actions/revitcli-check/` — drops
   into any GitHub workflow to install the CLI, run `check --output sarif`,
   and upload to Code Scanning. See `docs/ci/github-actions.md`.
+- **Sticky PR comment bot** in the same composite action: on
+  `pull_request` events the action additionally generates the markdown
+  via `--output pr-comment` and posts (or updates) a single comment on
+  the PR. Subsequent pushes update the comment in place — the action
+  finds it by the hidden `<!-- revitcli-pr-comment -->` marker that
+  `PrCommentWriter` now prepends to every render. New action inputs
+  `pr-comment` (default `'true'`) and `github-token` (default
+  `${{ github.token }}`); job needs `pull-requests: write` permission.
+  Pass `pr-comment: 'false'` to opt out without losing the SARIF upload.
 
 ### Added — v1.9 profile governance (complete)
 
