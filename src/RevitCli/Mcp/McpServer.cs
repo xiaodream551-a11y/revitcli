@@ -108,6 +108,7 @@ internal sealed class McpServer
             new SnapshotLatestResource(client),
             HistoryListResource.ForCurrentDirectory(),
             new ProfileResource(),
+            new CategoriesResource(client),
         };
 
         return new McpServer(tools, resources, input, output, logger);
