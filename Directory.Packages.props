@@ -10,6 +10,12 @@
     <PackageVersion Include="System.Text.Encoding.CodePages" Version="9.0.0" />
     <PackageVersion Include="System.Text.Json" Version="8.0.5" />
     <PackageVersion Include="EmbedIO" Version="3.5.2" />
+    <!--
+      v1.9 Profile Governance: shallow-clones remote profile bundles into
+      .revitcli/profiles/<name>@<ref>/. Pinned to the current LTS so the
+      native binaries (libgit2.so / libgit2.dll) stay reproducible.
+    -->
+    <PackageVersion Include="LibGit2Sharp" Version="0.31.0" />
 
     <!-- Test -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

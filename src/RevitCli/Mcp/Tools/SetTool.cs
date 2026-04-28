@@ -1,10 +1,13 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using RevitCli.Client;
+using RevitCli.Output;
 using RevitCli.Shared;
 
 namespace RevitCli.Mcp.Tools;
@@ -104,22 +107,33 @@ internal sealed class SetTool : IMcpTool
 
     public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
     {
-        if (!_allowWrites)
-            return DisabledMessage;
-
         var args = arguments as JsonObject ?? new JsonObject();
+        var paramName = TryGetString(args, "param");
+        var category = TryGetString(args, "category");
+        var elementCount = CountElementTargets(args);
+        var dryRun = TryGetBool(args, "dryRun") ?? false;
+
+        if (!_allowWrites)
+        {
+            LogAudit("refused-writes-disabled", paramName, category, elementCount, dryRun, affected: null, error: null);
+            return DisabledMessage;
+        }
+
         if (TryGetBool(args, "confirm") != true)
+        {
+            LogAudit("refused-no-confirm", paramName, category, elementCount, dryRun, affected: null, error: null);
             return ConfirmMessage;
+        }
 
         var request = new SetRequest
         {
-            Category = TryGetString(args, "category"),
+            Category = category,
             ElementId = TryGetLong(args, "elementId"),
             ElementIds = TryGetLongArray(args, "elementIds"),
             Filter = TryGetString(args, "filter"),
-            Param = TryGetString(args, "param") ?? "",
+            Param = paramName ?? "",
             Value = TryGetString(args, "value") ?? "",
-            DryRun = TryGetBool(args, "dryRun") ?? false,
+            DryRun = dryRun,
         };
 
         if (string.IsNullOrEmpty(request.Param))
@@ -127,9 +141,14 @@ internal sealed class SetTool : IMcpTool
 
         var result = await _client.SetParameterAsync(request);
         if (!result.Success)
+        {
+            LogAudit("error", paramName, category, elementCount, dryRun, affected: null, error: result.Error);
             return $"Error: {result.Error}";
+        }
 
         var data = result.Data!;
+        LogAudit("ok", paramName, category, elementCount, dryRun, affected: data.Affected, error: null);
+
         var sb = new StringBuilder();
         sb.AppendLine(request.DryRun
             ? $"Dry run — would update {data.Affected} element(s)."
@@ -139,6 +158,43 @@ internal sealed class SetTool : IMcpTool
             sb.AppendLine($"  [{item.Id}] {item.Name}: {item.OldValue ?? "(null)"} -> {item.NewValue}");
         }
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Append an audit entry to <c>.revitcli/journal.jsonl</c>. We record only
+    /// what's needed for attribution (param name, category, element count) —
+    /// never the new value or the filter expression body, since an LLM-driven
+    /// caller could be coaxed into echoing secrets through those fields.
+    /// </summary>
+    private static void LogAudit(string outcome, string? param, string? category,
+        int elementCount, bool dryRun, int? affected, string? error)
+    {
+        var profileDir = Profile.ProfileLoader.Discover() is { } p
+            ? Path.GetDirectoryName(Path.GetFullPath(p))
+            : null;
+
+        JournalLogger.Log(profileDir, new
+        {
+            action = "set",
+            transport = "mcp",
+            outcome,
+            param,
+            category,
+            elementCount,
+            dryRun,
+            affected,
+            error,
+            timestamp = DateTime.UtcNow.ToString("o"),
+            user = Environment.UserName,
+        });
+    }
+
+    private static int CountElementTargets(JsonObject args)
+    {
+        var count = 0;
+        if (TryGetLong(args, "elementId").HasValue) count++;
+        if (TryGetLongArray(args, "elementIds") is { } ids) count += ids.Count;
+        return count;
     }
 
     private static string? TryGetString(JsonObject args, string key)
