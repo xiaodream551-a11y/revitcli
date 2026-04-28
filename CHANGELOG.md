@@ -170,6 +170,26 @@ MCP surface.
   pointer. README cross-links it.
 
 
+### Added — `revitcli mcp init` (Claude Desktop onboarding)
+
+Compresses MCP onboarding from "edit JSON, restart client, hope" to
+one command. Operators no longer need to know where Claude Desktop's
+config file lives or what the `mcpServers` schema looks like.
+
+- `revitcli mcp init [--client claude-desktop] [--allow-writes] [--config-path PATH] [--dry-run] [--smoke-test] [--command NAME]`
+  — auto-detects the Claude Desktop config path (macOS / Windows /
+  Linux), reads the existing file (if any), merges a `revitcli`
+  server entry, and writes back. Other MCP servers in the same
+  config (filesystem, git, etc.) are preserved.
+- `--smoke-test` runs an in-process `tools/call status` after writing
+  to verify the addin responds. Distinct exit code 2 when "config
+  wrote, smoke failed" so CI scripts can retry the smoke without
+  re-doing the merge.
+- `--dry-run` prints the merged config to stdout without writing —
+  useful for review-then-apply workflows or for piping to other tools.
+- New `McpClientConfig` core in `src/RevitCli/Mcp/` — pure JSON-merge
+  function, fully unit-tested independently of file IO.
+
 ### Added — MCP phase 2 (resources + safe writes)
 
 - New MCP methods: `resources/list` and `resources/read`. Capabilities

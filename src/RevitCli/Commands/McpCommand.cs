@@ -40,6 +40,7 @@ public static class McpCommand
         mcp.AddCommand(CreateListCommand(client));
         mcp.AddCommand(CreateTestCommand(client));
         mcp.AddCommand(CreateResourceCommand(client));
+        mcp.AddCommand(CreateInitCommand(client));
         return mcp;
     }
 
@@ -330,5 +331,166 @@ public static class McpCommand
     {
         if (string.IsNullOrEmpty(s)) return "";
         return s.Length <= max ? s : s.Substring(0, Math.Max(0, max - 1)) + "…";
+    }
+
+    // ─── init ─────────────────────────────────────────────────────────────
+
+    private static Command CreateInitCommand(RevitClient client)
+    {
+        var clientOpt = new Option<string>(
+            name: "--client",
+            description: "Which MCP client to set up. Currently only `claude-desktop`.",
+            getDefaultValue: () => "claude-desktop");
+        var allowWrites = new Option<bool>(
+            name: "--allow-writes",
+            description: "Add `--allow-writes` to the configured `mcp serve` invocation. " +
+                          "Enables write tools (set/fix/rollback/import/publish). Each call still needs `confirm: true`.",
+            getDefaultValue: () => false);
+        var configPathOpt = new Option<string?>("--config-path",
+            "Override the auto-detected config-file path. Useful when the client lives at a non-default location.");
+        var dryRunOpt = new Option<bool>("--dry-run",
+            "Print the merged config to stdout without writing the file.");
+        var smokeTestOpt = new Option<bool>("--smoke-test",
+            "After writing, dispatch an in-process `tools/call status` to verify the addin is reachable.");
+        var commandOpt = new Option<string>(
+            name: "--command",
+            description: "Override the launcher command name written into the config (default: `revitcli`). " +
+                          "Useful when the binary is on PATH under a different name.",
+            getDefaultValue: () => "revitcli");
+
+        var cmd = new Command("init", "Generate or update an MCP client config (e.g. Claude Desktop) to include this RevitCli")
+        {
+            clientOpt, allowWrites, configPathOpt, dryRunOpt, smokeTestOpt, commandOpt
+        };
+
+        cmd.SetHandler(async (string clientName, bool writes, string? configPath, bool dryRun, bool smokeTest, string command) =>
+        {
+            Environment.ExitCode = await ExecuteInitAsync(
+                client, clientName, writes, configPath, dryRun, smokeTest, command, Console.Out, Console.Error);
+        }, clientOpt, allowWrites, configPathOpt, dryRunOpt, smokeTestOpt, commandOpt);
+
+        return cmd;
+    }
+
+    public static async Task<int> ExecuteInitAsync(
+        RevitClient client,
+        string clientName,
+        bool allowWrites,
+        string? configPathOverride,
+        bool dryRun,
+        bool smokeTest,
+        string commandName,
+        TextWriter stdout,
+        TextWriter stderr)
+    {
+        // Resolve which client we're configuring.
+        if (!string.Equals(clientName, "claude-desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            await stderr.WriteLineAsync($"Error: unsupported --client '{clientName}'. Currently only `claude-desktop` is supported.");
+            return 1;
+        }
+        var kind = McpClientConfig.ClientKind.ClaudeDesktop;
+
+        // Resolve the config-file path.
+        var configPath = string.IsNullOrWhiteSpace(configPathOverride)
+            ? McpClientConfig.ResolveDefaultPath(kind)
+            : Path.GetFullPath(configPathOverride);
+        if (string.IsNullOrEmpty(configPath))
+        {
+            await stderr.WriteLineAsync(
+                "Error: could not auto-detect the Claude Desktop config path on this platform. " +
+                "Pass --config-path <PATH> explicitly.");
+            return 1;
+        }
+
+        // Read existing config, if any. Missing file is fine — we'll create.
+        string? existing = null;
+        if (File.Exists(configPath))
+        {
+            try
+            {
+                existing = await File.ReadAllTextAsync(configPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                await stderr.WriteLineAsync($"Error: cannot read existing config at {configPath}: {ex.Message}");
+                return 1;
+            }
+        }
+
+        // Merge.
+        string merged;
+        try
+        {
+            merged = McpClientConfig.MergeRevitCliEntry(existing, commandName, allowWrites);
+        }
+        catch (InvalidJsonException ex)
+        {
+            await stderr.WriteLineAsync(
+                $"Error: {ex.Message} Move {configPath} aside (or pass --config-path) and re-run.");
+            return 1;
+        }
+
+        if (dryRun)
+        {
+            await stdout.WriteLineAsync($"# Would write to: {configPath}");
+            await stdout.WriteLineAsync(merged);
+            return 0;
+        }
+
+        // Write atomically: create parent dir if needed, then File.WriteAllText.
+        try
+        {
+            var parentDir = Path.GetDirectoryName(configPath);
+            if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+                Directory.CreateDirectory(parentDir);
+            await File.WriteAllTextAsync(configPath, merged);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await stderr.WriteLineAsync($"Error: cannot write config at {configPath}: {ex.Message}");
+            return 1;
+        }
+
+        await stdout.WriteLineAsync($"Wrote MCP server entry to {configPath}");
+        await stdout.WriteLineAsync(
+            allowWrites
+                ? "Write tools ARE enabled (--allow-writes). Restart your MCP client to apply."
+                : "Write tools are NOT enabled. Re-run with --allow-writes to enable them. Restart your MCP client to apply.");
+
+        if (smokeTest)
+        {
+            await stdout.WriteLineAsync("Smoke test: tools/call status ...");
+            var smokeStdout = new StringWriter();
+            var smokeStderr = new StringWriter();
+            var smokeExit = await ExecuteTestAsync(client, "status",
+                argsJson: null, allowWrites: false, verbose: false, smokeStdout, smokeStderr);
+
+            // Two failure signals:
+            //   1. ExecuteTestAsync returned non-zero (protocol error or
+            //      isError=true on the result).
+            //   2. The status tool returned an "Error: ..." content text
+            //      (its convention when GetStatusAsync().Success is false
+            //      — see StatusTool.ExecuteAsync).
+            // Either means the addin isn't reachable; treat both as a
+            // smoke failure so the operator sees the right outcome.
+            var smokeText = smokeStdout.ToString().TrimEnd();
+            var smokeFailed = smokeExit != 0
+                || smokeText.StartsWith("Error:", StringComparison.Ordinal);
+
+            if (!smokeFailed)
+            {
+                await stdout.WriteLineAsync("Smoke test: OK.");
+                await stdout.WriteLineAsync(smokeText);
+                return 0;
+            }
+            await stdout.WriteLineAsync("Smoke test: FAILED. The config was written, but the addin did not respond.");
+            if (!string.IsNullOrEmpty(smokeText))
+                await stdout.WriteLineAsync(smokeText);
+            await stderr.WriteAsync(smokeStderr.ToString());
+            return 2; // wrote config, smoke failed — distinct from exit 1
+        }
+
+        return 0;
     }
 }
