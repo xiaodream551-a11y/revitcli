@@ -1,5 +1,5 @@
 name: "RevitCli Check"
-description: "Run RevitCli check and upload SARIF to Code Scanning"
+description: "Run RevitCli check, upload SARIF to Code Scanning, and post a sticky PR comment with the findings."
 author: "RevitCli"
 branding:
   icon: "check-circle"
@@ -18,6 +18,20 @@ inputs:
     description: "Directory to run the check in. Defaults to repository root."
     required: false
     default: "."
+  pr-comment:
+    description: |
+      Post (or update) a sticky PR comment summarizing the findings. Defaults
+      to "true". Only takes effect on `pull_request` / `pull_request_target`
+      events; ignored on `push` etc. The job needs `pull-requests: write`
+      permission and a token in `github-token`.
+    required: false
+    default: "true"
+  github-token:
+    description: |
+      Token used to post the PR comment. Defaults to the workflow's GITHUB_TOKEN.
+      The workflow's `permissions:` block must include `pull-requests: write`.
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -68,3 +82,89 @@ runs:
       with:
         sarif_file: ${{ runner.temp }}/revitcli.sarif
         category: revitcli
+
+    # ── PR comment bot ────────────────────────────────────────────────
+    # Only runs on pull_request* events AND when pr-comment input is true.
+    # Generates markdown via the existing `--output pr-comment` writer
+    # (which prepends a hidden sticky marker), then finds-or-creates the
+    # comment on the PR. Like `--output sarif`, this runs with
+    # `if: always()` so a failing check still posts the comment that
+    # explains why.
+    - name: Run RevitCli check (PR comment)
+      if: always() && inputs.pr-comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -n "${{ inputs.profile }}" ]; then
+          revitcli check --profile "${{ inputs.profile }}" --output pr-comment --report "${RUNNER_TEMP}/revitcli-pr-comment.md" || true
+        else
+          revitcli check --output pr-comment --report "${RUNNER_TEMP}/revitcli-pr-comment.md" || true
+        fi
+        # `|| true` because pr-comment is informational — we don't want
+        # a failing check (correctly exiting non-zero on findings) to
+        # skip the post step. The SARIF step above already preserves the
+        # workflow's failure signal.
+
+    - name: Post or update sticky PR comment
+      if: always() && inputs.pr-comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      # actions/github-script v7.0.1 — same SHA-pinning policy as the
+      # other third-party uses above.
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        REPORT_PATH: ${{ runner.temp }}/revitcli-pr-comment.md
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          // Find the previous RevitCli comment on this PR (identified by
+          // the sticky marker the writer prepends) and update it in
+          // place. If absent, create one. Skip silently if the report
+          // file is empty (e.g. the check command crashed before
+          // writing anything).
+          const fs = require('fs');
+          const path = process.env.REPORT_PATH;
+          if (!fs.existsSync(path) || fs.statSync(path).size === 0) {
+            core.info('No PR comment report on disk — skipping post.');
+            return;
+          }
+          const body = fs.readFileSync(path, 'utf8');
+          // The writer prepends `<!-- revitcli-pr-comment -->` as the
+          // first line; that's our sticky marker. Keep it in the body
+          // so subsequent runs find this comment.
+          const STICKY_MARKER = '<!-- revitcli-pr-comment -->';
+
+          const pull = context.payload.pull_request;
+          if (!pull) {
+            core.warning('No pull_request in context payload; skipping PR comment.');
+            return;
+          }
+          const issueNumber = pull.number;
+
+          // Paginate the comments list — large PRs can have many.
+          const existing = await github.paginate(
+            github.rest.issues.listComments,
+            {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            }
+          );
+          const previous = existing.find(c => c.body && c.body.includes(STICKY_MARKER));
+
+          if (previous) {
+            core.info(`Updating existing RevitCli comment #${previous.id}.`);
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: previous.id,
+              body,
+            });
+          } else {
+            core.info('Creating new RevitCli sticky comment.');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body,
+            });
+          }

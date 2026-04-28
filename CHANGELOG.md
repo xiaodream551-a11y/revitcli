@@ -53,6 +53,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - New composite GitHub Action at `.github/actions/revitcli-check/` — drops
   into any GitHub workflow to install the CLI, run `check --output sarif`,
   and upload to Code Scanning. See `docs/ci/github-actions.md`.
+- **Sticky PR comment bot** in the same composite action: on
+  `pull_request` events the action additionally generates the markdown
+  via `--output pr-comment` and posts (or updates) a single comment on
+  the PR. Subsequent pushes update the comment in place — the action
+  finds it by the hidden `<!-- revitcli-pr-comment -->` marker that
+  `PrCommentWriter` now prepends to every render. New action inputs
+  `pr-comment` (default `'true'`) and `github-token` (default
+  `${{ github.token }}`); job needs `pull-requests: write` permission.
+  Pass `pr-comment: 'false'` to opt out without losing the SARIF upload.
 
 ### Added — v1.9 profile governance (complete)
 
@@ -128,6 +137,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   [--force]` — copies the prebuilt dashboard + injects the user's
   history index into `public/data/history.json`. Refuses to overwrite
   a non-empty output dir without `--force`.
+
+### Added — v2.0 dashboard (phase 2 — Chart.js + History page)
+
+Per `docs/roadmap-2026q2-q3.md` §7. Phase 1 shipped the skeleton +
+data layer + Overview shell with placeholder DOM; phase 2 swaps in
+real Chart.js charts and adds the dedicated History route.
+
+- New shared chart components under `dashboard/src/lib/charts/`:
+  - `CategoryBarChart.svelte` — horizontal bar chart for "elements
+    per category" on Overview. Uses `indexAxis: 'y'` because category
+    names ("Specialty Equipment", "Generic Models") need horizontal
+    space the vertical layout truncates. Auto-sizes its height with
+    row count so dense models still render every bar.
+  - `ScoreSparkline.svelte` — score-over-time line chart. Default is
+    minimal mode (no axes / grid) for the Overview's "last 7
+    captures" widget; History page passes `minimal={false}` to surface
+    the full y-axis 0–100.
+  - `registerCharts.ts` — idempotent global Chart.js registration so
+    SSR (svelte-kit's prerender) doesn't try to touch `window`.
+- New `/history` route — full time-series chart over every captured
+  snapshot + a delta table that compares each capture to the
+  immediately previous one (Δscore, Δelements). Reads from the same
+  `loadHistory()` source as Overview; no extra fetch. For a full
+  element-by-element diff between two captures, the table footer
+  points the operator at `revitcli history diff`.
+- Layout enables the History nav link (was disabled in phase 1).
+  Multi-project remains the only disabled link, marked for a v2.0
+  follow-up.
+- C# side unchanged: `dashboard serve` already handles SPA fallback
+  for any extension-less path (`/history` → `index.html`), so no
+  routing changes were needed.
 
 ### Added — MCP adapter (side track, unchanged)
 
