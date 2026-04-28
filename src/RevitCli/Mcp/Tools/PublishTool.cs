@@ -33,7 +33,7 @@ namespace RevitCli.Mcp.Tools;
 /// continues server-side; that's acceptable since the receipt + journal
 /// land regardless.
 /// </summary>
-internal sealed class PublishTool : IMcpTool
+internal sealed class PublishTool : IMcpProgressTool
 {
     public const string DisabledMessage =
         "Write tools are disabled. Restart `mcp serve` with --allow-writes.";
@@ -107,7 +107,10 @@ internal sealed class PublishTool : IMcpTool
         ["additionalProperties"] = false,
     };
 
-    public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
+    public Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken)
+        => ExecuteAsync(arguments, cancellationToken, NullMcpProgressReporter.Instance);
+
+    public async Task<string> ExecuteAsync(JsonNode? arguments, CancellationToken cancellationToken, IMcpProgressReporter progress)
     {
         var args = arguments as JsonObject ?? new JsonObject();
         var pipeline = JsonArgs.TryGetString(args, "pipeline");
@@ -142,6 +145,17 @@ internal sealed class PublishTool : IMcpTool
             }
         }
 
+        // From here on: real work begins. Emit a "starting" notification so
+        // a client subscribed to progress knows the call has cleared the
+        // gates and is now hitting the export pipeline. We don't know the
+        // total step count up front (depends on profile pipeline shape), so
+        // total stays null and progress just monotonically advances.
+        await progress.ReportAsync(
+            progress: 0,
+            total: null,
+            message: $"publish: starting pipeline '{pipeline ?? "default"}'" + (dryRun ? " (dry-run)" : ""),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
         var output = new StringWriter();
         var exitCode = await PublishCommand.ExecuteAsync(
             _client,
@@ -152,6 +166,12 @@ internal sealed class PublishTool : IMcpTool
             sinceMode: sinceMode,
             updateBaseline: updateBaseline,
             output);
+
+        await progress.ReportAsync(
+            progress: 1,
+            total: 1,
+            message: $"publish: complete (exit={exitCode})",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         LogAudit(exitCode == 0 ? "ok" : "error", pipeline, dryRun, since, sinceMode, updateBaseline, exitCode);
         return output.ToString().TrimEnd();

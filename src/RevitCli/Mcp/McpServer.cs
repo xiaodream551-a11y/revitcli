@@ -40,6 +40,14 @@ internal sealed class McpServer
     private readonly Dictionary<string, IMcpResource> _resources;
     private readonly TextReader _input;
     private readonly TextWriter _output;
+    /// <summary>
+    /// Serializes writes to <see cref="_output"/>. The dispatch loop only
+    /// emits one response per request, but progress notifications fire
+    /// from worker tasks <em>during</em> a tool call — they share the
+    /// stdio stream with the eventual response. Without this gate, a
+    /// notification line could interleave with the response line.
+    /// </summary>
+    private readonly System.Threading.SemaphoreSlim _outputLock = new(1, 1);
     private readonly TextWriter _logger;
     private readonly string _serverVersion;
 
@@ -265,11 +273,23 @@ internal sealed class McpServer
 
         var arguments = paramsObj["arguments"];
 
+        // Progress notifications (MCP spec 2024-11-05): the client opts in
+        // by passing _meta.progressToken in the request. If both the client
+        // requested it AND the tool implements IMcpProgressTool, route
+        // through the progress-aware overload; otherwise the token is
+        // silently ignored, which is spec-compliant.
+        var progressToken = ExtractProgressToken(paramsObj);
+        var progress = (progressToken is not null && tool is IMcpProgressTool)
+            ? new McpProgressReporter(this, progressToken, cancellationToken)
+            : (IMcpProgressReporter)NullMcpProgressReporter.Instance;
+
         string text;
         bool isError = false;
         try
         {
-            text = await tool.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false);
+            text = tool is IMcpProgressTool progressTool && progressToken is not null
+                ? await progressTool.ExecuteAsync(arguments, cancellationToken, progress).ConfigureAwait(false)
+                : await tool.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -352,13 +372,100 @@ internal sealed class McpServer
     private async Task WriteResponseAsync(JsonRpcResponse response)
     {
         var json = JsonSerializer.Serialize(response, WriteOptions);
-        await _output.WriteLineAsync(json).ConfigureAwait(false);
-        await _output.FlushAsync().ConfigureAwait(false);
+        await _outputLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await _output.WriteLineAsync(json).ConfigureAwait(false);
+            await _output.FlushAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _outputLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Emit a JSON-RPC notification (no <c>id</c>, no response expected)
+    /// while another request is still in flight. Used for
+    /// <c>notifications/progress</c>; the lock keeps it from interleaving
+    /// with the eventual response.
+    /// </summary>
+    internal async Task WriteNotificationAsync(string method, JsonNode @params, CancellationToken cancellationToken)
+    {
+        var obj = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"] = method,
+            ["params"] = @params,
+        };
+        var json = obj.ToJsonString();
+        await _outputLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _output.WriteLineAsync(json).ConfigureAwait(false);
+            await _output.FlushAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _outputLock.Release();
+        }
     }
 
     private static string GetCliVersion()
     {
         var attr = typeof(McpServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
         return attr?.InformationalVersion ?? "0.0.0";
+    }
+
+    /// <summary>
+    /// Pull <c>_meta.progressToken</c> out of the <c>tools/call</c>
+    /// params per MCP spec 2024-11-05. The token may be a string or
+    /// integer; we preserve it as a <see cref="JsonNode"/> so the same
+    /// wire form roundtrips into the progress notifications.
+    /// </summary>
+    private static JsonNode? ExtractProgressToken(JsonObject paramsObj)
+    {
+        if (paramsObj["_meta"] is not JsonObject meta) return null;
+        if (!meta.TryGetPropertyValue("progressToken", out var tok) || tok is null) return null;
+        return tok.DeepClone();
+    }
+
+    /// <summary>
+    /// Reporter handed to <see cref="IMcpProgressTool"/> implementations.
+    /// Each <see cref="ReportAsync"/> call writes a JSON-RPC notification
+    /// to the same stdio stream as the eventual response, serialized via
+    /// <see cref="WriteNotificationAsync"/>'s lock so notifications and
+    /// the final response do not interleave.
+    /// </summary>
+    private sealed class McpProgressReporter : IMcpProgressReporter
+    {
+        private readonly McpServer _server;
+        private readonly JsonNode _progressToken;
+        private readonly CancellationToken _baseCt;
+
+        internal McpProgressReporter(McpServer server, JsonNode progressToken, CancellationToken baseCt)
+        {
+            _server = server;
+            _progressToken = progressToken;
+            _baseCt = baseCt;
+        }
+
+        public async Task ReportAsync(double progress, double? total = null, string? message = null, CancellationToken cancellationToken = default)
+        {
+            // Honor BOTH the per-call CT (so a slow notification can be
+            // cut short) and the dispatch-loop CT (so a server shutdown
+            // doesn't get blocked on a notification).
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(_baseCt, cancellationToken);
+
+            var p = new JsonObject
+            {
+                ["progressToken"] = _progressToken.DeepClone(),
+                ["progress"] = progress,
+            };
+            if (total.HasValue) p["total"] = total.Value;
+            if (!string.IsNullOrEmpty(message)) p["message"] = message;
+
+            await _server.WriteNotificationAsync("notifications/progress", p, linked.Token).ConfigureAwait(false);
+        }
     }
 }
