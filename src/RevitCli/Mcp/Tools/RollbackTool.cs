@@ -103,10 +103,14 @@ internal sealed class RollbackTool : IMcpTool
             return ConfirmMessage;
         }
 
-        if (string.IsNullOrEmpty(baseline))
+        if (string.IsNullOrWhiteSpace(baseline))
         {
-            // No audit entry for missing required arg — the schema layer
-            // should have caught this; we mirror SetTool's behavior here.
+            // The MCP dispatcher does NOT enforce JSON Schema, so we
+            // replicate the required-arg check here. Logging the refusal
+            // keeps the journal's "every outcome is audited" invariant
+            // intact — without this, a caller that forgets the field
+            // produces a silent gap in journal.jsonl.
+            LogAudit("refused-missing-baseline", baseline, dryRun, maxChanges, exitCode: null);
             return "Error: 'baseline' is required.";
         }
 

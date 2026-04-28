@@ -129,6 +129,41 @@ public class McpRollbackToolTests : IDisposable
         Assert.Equal(1, entry.GetProperty("exitCode").GetInt32());
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task EmptyOrWhitespaceBaseline_AuditsRefusalAndDoesNotInvokeCommand(string baselineValue)
+    {
+        // Required-arg enforcement: the JSON schema declares `baseline` as
+        // required, but the MCP dispatcher does not validate schemas — args
+        // pass straight through to ExecuteAsync. The wrapper must therefore
+        // (a) reject the call locally and (b) still emit an audit entry so
+        // forensic readers see EVERY tool invocation, including malformed
+        // ones. Both empty and whitespace-only inputs hit this branch.
+        var handler = new QueueHttpHandler();
+        var tool = new RollbackTool(MakeClient(handler), allowWrites: true);
+
+        var text = await tool.ExecuteAsync(new JsonObject
+        {
+            ["baseline"] = baselineValue,
+            ["confirm"] = true,
+            ["dryRun"] = true,
+        }, CancellationToken.None);
+
+        Assert.Equal("Error: 'baseline' is required.", text);
+        // The wrapper short-circuits before delegating to RollbackCommand,
+        // so no HTTP traffic is generated.
+        Assert.Empty(handler.Requests);
+
+        var entry = ReadOnlyJournalEntry();
+        Assert.Equal("rollback", entry.GetProperty("action").GetString());
+        Assert.Equal("mcp", entry.GetProperty("transport").GetString());
+        Assert.Equal("refused-missing-baseline", entry.GetProperty("outcome").GetString());
+        // exitCode is null on refusal paths and is omitted by JournalLogger's
+        // WhenWritingNull serializer policy — assert absence, not value.
+        Assert.False(entry.TryGetProperty("exitCode", out _));
+    }
+
     [Fact]
     public void Schema_RequiresBaselineAndConfirm()
     {
