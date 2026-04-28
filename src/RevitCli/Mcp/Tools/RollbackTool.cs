@@ -20,11 +20,14 @@ namespace RevitCli.Mcp.Tools;
 ///   <item><c>confirm: true</c> required per call.</item>
 /// </list>
 ///
-/// The <c>baseline</c> path is currently passed through to the CLI without
-/// directory binding — the trust boundary is "the MCP server trusts the
-/// caller-supplied path". If the file is missing or not a valid baseline,
-/// <see cref="RollbackCommand"/> errors out cleanly. Future hardening could
-/// bound it to <c>.revitcli/</c>; tracked as a follow-up.
+/// The caller-supplied <c>baseline</c> path is bound to <c>.revitcli/</c>
+/// via <see cref="McpPathGuard.ResolveUnderRevitCli"/>. An LLM that passes
+/// <c>/etc/passwd</c>, a relative <c>..</c>-traversal, or a path on a
+/// different drive is refused before the CLI ever sees the value, with an
+/// audit entry tagged <c>refused-path-out-of-bounds</c>. Operators who
+/// need to roll back from a baseline outside <c>.revitcli/</c> should use
+/// the CLI directly; the MCP transport intentionally trades flexibility
+/// for a tighter trust boundary.
 /// </summary>
 internal sealed class RollbackTool : IMcpTool
 {
@@ -114,10 +117,21 @@ internal sealed class RollbackTool : IMcpTool
             return "Error: 'baseline' is required.";
         }
 
+        // The baseline path comes from an LLM-driven caller. Bind it to
+        // .revitcli/ so the tool cannot be coaxed into resolving paths
+        // anywhere on the operator's filesystem (e.g. probing for the
+        // existence of /etc/* via the "not found" / parse-error messages).
+        var boundedBaseline = McpPathGuard.ResolveUnderRevitCli(baseline);
+        if (boundedBaseline is null)
+        {
+            LogAudit("refused-path-out-of-bounds", baseline, dryRun, maxChanges, exitCode: null);
+            return "Error: 'baseline' must be a path under .revitcli/.";
+        }
+
         var output = new StringWriter();
         var exitCode = await RollbackCommand.ExecuteAsync(
             _client,
-            baseline,
+            boundedBaseline,
             dryRun: dryRun,
             yes: true,
             maxChanges: maxChanges,

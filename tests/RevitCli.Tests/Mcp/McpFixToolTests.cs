@@ -35,10 +35,13 @@ public class McpFixToolTests : IDisposable
 
     public McpFixToolTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"revitcli-mcp-fix-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_tempDir);
+        var setupDir = Path.Combine(Path.GetTempPath(), $"revitcli-mcp-fix-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(setupDir);
         _originalCwd = Environment.CurrentDirectory;
-        Environment.CurrentDirectory = _tempDir;
+        Environment.CurrentDirectory = setupDir;
+        // Use the canonical post-cd path to keep McpPathGuard's string
+        // comparisons consistent on macOS (/var → /private/var symlink).
+        _tempDir = Environment.CurrentDirectory;
     }
 
     public void Dispose()

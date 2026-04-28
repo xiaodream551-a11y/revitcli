@@ -27,10 +27,18 @@ public class McpRollbackToolTests : IDisposable
 
     public McpRollbackToolTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"revitcli-mcp-rollback-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_tempDir);
+        var setupDir = Path.Combine(Path.GetTempPath(), $"revitcli-mcp-rollback-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(setupDir);
         _originalCwd = Environment.CurrentDirectory;
-        Environment.CurrentDirectory = _tempDir;
+        Environment.CurrentDirectory = setupDir;
+        // After the cd, ask the OS for the canonical form. On macOS,
+        // /var is a symlink to /private/var, so Path.GetTempPath() and
+        // Environment.CurrentDirectory after cd return different strings
+        // for the same directory. Path.GetRelativePath does string
+        // comparison, not filesystem resolution, so the two forms must
+        // match for McpPathGuard to accept paths constructed against
+        // _tempDir as in-bounds.
+        _tempDir = Environment.CurrentDirectory;
     }
 
     public void Dispose()
@@ -80,7 +88,12 @@ public class McpRollbackToolTests : IDisposable
     [Fact]
     public async Task DryRun_WithValidEmptyJournal_LogsOk_NoSetCalls()
     {
-        var baselinePath = Path.Combine(_tempDir, "baseline.json");
+        // The MCP rollback tool binds `baseline` to .revitcli/ — the
+        // fixture must therefore live under that subtree, not at the
+        // bare temp-dir root.
+        var revitCliDir = Path.Combine(_tempDir, ".revitcli");
+        Directory.CreateDirectory(revitCliDir);
+        var baselinePath = Path.Combine(revitCliDir, "baseline.json");
         File.WriteAllText(baselinePath, JsonSerializer.Serialize(new ModelSnapshot()));
         // Persist an empty fix journal next to the baseline so the rollback
         // command's journal-matching invariant is satisfied.
@@ -115,10 +128,15 @@ public class McpRollbackToolTests : IDisposable
     public async Task MissingBaseline_ReturnsErrorAndLogsError()
     {
         var tool = new RollbackTool(MakeClient(new QueueHttpHandler()), allowWrites: true);
+        // The path is under .revitcli/ (so it clears the path guard) but
+        // the file itself does not exist; the failure surfaces from
+        // RollbackCommand and is recorded as outcome=error, not refusal.
+        var revitCliDir = Path.Combine(_tempDir, ".revitcli");
+        Directory.CreateDirectory(revitCliDir);
 
         var text = await tool.ExecuteAsync(new JsonObject
         {
-            ["baseline"] = Path.Combine(_tempDir, "does-not-exist.json"),
+            ["baseline"] = Path.Combine(revitCliDir, "does-not-exist.json"),
             ["confirm"] = true,
             ["dryRun"] = true,
         }, CancellationToken.None);
@@ -127,6 +145,35 @@ public class McpRollbackToolTests : IDisposable
         var entry = ReadOnlyJournalEntry();
         Assert.Equal("error", entry.GetProperty("outcome").GetString());
         Assert.Equal(1, entry.GetProperty("exitCode").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("/etc/passwd")]
+    [InlineData("../../etc/passwd")]
+    [InlineData("baseline.json")] // not under .revitcli/
+    public async Task BaselineOutsideRevitCli_AuditsRefusalAndDoesNotInvokeCommand(string baselineValue)
+    {
+        // Path-traversal defense for the LLM-driven transport: only paths
+        // resolving inside .revitcli/ are accepted. Empty .revitcli is not
+        // required; the guard works on path resolution, not file existence.
+        var handler = new QueueHttpHandler();
+        var tool = new RollbackTool(MakeClient(handler), allowWrites: true);
+
+        var text = await tool.ExecuteAsync(new JsonObject
+        {
+            ["baseline"] = baselineValue,
+            ["confirm"] = true,
+            ["dryRun"] = true,
+        }, CancellationToken.None);
+
+        Assert.Contains("must be a path under .revitcli/", text);
+        Assert.Empty(handler.Requests);
+
+        var entry = ReadOnlyJournalEntry();
+        Assert.Equal("refused-path-out-of-bounds", entry.GetProperty("outcome").GetString());
+        // The original (unbound) baseline string IS logged so forensic
+        // readers can see what the LLM tried to access.
+        Assert.Equal(baselineValue, entry.GetProperty("baseline").GetString());
     }
 
     [Theory]

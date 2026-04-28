@@ -91,6 +91,7 @@ internal sealed class McpServer
             new SetTool(client, allowWrites),
             new FixTool(client, allowWrites),
             new RollbackTool(client, allowWrites),
+            new ImportTool(client, allowWrites),
         };
 
         var resources = new List<IMcpResource>

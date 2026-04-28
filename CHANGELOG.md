@@ -128,6 +128,26 @@ baseline snapshot path, without composing individual `set` calls.
   `ok`, `error`) with `transport: "mcp"`. Same shape as the existing CLI
   journal so post-hoc forensics work uniformly.
 
+### Added — MCP phase 3.5 (import tool + path hardening)
+
+Completes the MCP write-tool trio (`set` / `fix` / `rollback` / `import`)
+and locks down caller-supplied filesystem paths at the MCP boundary.
+
+- New `import` tool — wraps `ImportCommand`. Same double-gate as the
+  rest of phase 3 (`--allow-writes` + `confirm: true`). Inputs: `file`
+  (CSV path), `category`, `matchBy`, `map`, `dryRun`, `onMissing`,
+  `onDuplicate`, `encoding`, `batchSize`, `confirm`. Closes the
+  bulk-write path of the agent loop alongside `set` (per-element) and
+  `fix` (rule-driven).
+- New `McpPathGuard.ResolveUnderRevitCli` helper — canonicalizes a
+  caller-supplied path and rejects anything outside `.revitcli/`.
+  Operators stage import CSVs / fix baselines there; the LLM cannot
+  point the tool at arbitrary files. Rejection paths emit a
+  `refused-path-out-of-bounds` audit entry.
+- `rollback` tool now binds `baseline` via the same guard. The
+  follow-up flagged in PR #12 — "future hardening could bound it to
+  `.revitcli/`" — lands here.
+
 ### Added — v2.0 dashboard (phase 1 — skeleton)
 
 - New top-level dashboard project under `dashboard/` (SvelteKit +
