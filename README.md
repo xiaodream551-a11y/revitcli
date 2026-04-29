@@ -32,37 +32,39 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `revitcli status` | Show Revit version, addin version, active document |
-| `revitcli doctor` | Diagnose setup and connection issues |
-| `revitcli query <category>` | Query elements with filters; output table/JSON/CSV |
-| `revitcli set <category>` | Modify parameters with `--dry-run` preview |
-| `revitcli fix [checkName]` | Preview or apply profile-driven parameter fixes |
-| `revitcli rollback <baseline>` | Restore parameters changed by a fix baseline |
-| `revitcli export --format <fmt>` | Export DWG / PDF / IFC |
-| `revitcli schedule list` / `export` / `create` | Manage Revit schedules |
-| `revitcli audit` | Run model quality checks |
-| `revitcli check` | Profile-driven check pipeline |
-| `revitcli publish [name]` | Profile-driven export pipeline (DWG/PDF/IFC) |
-| `revitcli init <template>` | Bootstrap a `.revitcli.yml` profile |
-| `revitcli score` | Model health score from `check` results |
-| `revitcli coverage` | Profile coverage report (which checks ran) |
-| `revitcli snapshot` | Capture model semantic state as JSON |
-| `revitcli diff <from> <to>` | Diff two snapshots (table / JSON / markdown) |
-| `revitcli import <file>` | Batch-write parameters from CSV |
-| `revitcli config show` / `set` | View or modify CLI configuration |
-| `revitcli batch <file>` | Execute commands from a JSON file |
-| `revitcli completions <shell>` | Generate shell completions (bash/zsh/PowerShell) |
-| `revitcli interactive` / `-i` | Interactive REPL mode |
-| `revitcli history init` / `capture` / `list` / `prune` / `diff` / `trend` | Local snapshot timeline + ASCII trend (v1.6) |
-| `revitcli score --history <duration>` | Per-day score time series (v1.6) |
-| `revitcli mcp serve` | MCP stdio server for Claude Desktop / Cursor |
-| `revitcli check --output sarif\|pr-comment` | SARIF 2.1.0 / PR-comment report (v1.7) |
-| `revitcli ci doctor` | Detect CI provider + emit workflow snippet (v1.7) |
-| `revitcli profile validate` / `show --resolve` / `diff` / `install` | Profile lint, resolve, diff, git install (v1.9) |
-| `revitcli family ls` | List Revit families (--unused, --category) (v1.8) |
-| `revitcli dashboard serve` / `build` | Serve / package the static dashboard (v2.0 — phase 1) |
+| Command                                                                   | Description                                                                                                        |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `revitcli status`                                                         | Show Revit version, addin version, active document                                                                 |
+| `revitcli doctor`                                                         | Diagnose setup and connection issues                                                                               |
+| `revitcli query <category>`                                               | Query elements with filters; output table/JSON/CSV                                                                 |
+| `revitcli set <category>`                                                 | Modify parameters with `--dry-run` preview                                                                         |
+| `revitcli fix [checkName]`                                                | Preview or apply profile-driven parameter fixes                                                                    |
+| `revitcli rollback <baseline>`                                            | Restore parameters changed by a fix baseline                                                                       |
+| `revitcli export --format <fmt>`                                          | Export DWG / PDF / IFC                                                                                             |
+| `revitcli schedule list` / `export` / `create`                            | Manage Revit schedules                                                                                             |
+| `revitcli audit`                                                          | Run model quality checks                                                                                           |
+| `revitcli check`                                                          | Profile-driven check pipeline                                                                                      |
+| `revitcli publish [name]`                                                 | Profile-driven export pipeline (DWG/PDF/IFC)                                                                       |
+| `revitcli init <template>`                                                | Bootstrap a `.revitcli.yml` profile                                                                                |
+| `revitcli score`                                                          | Model health score from `check` results                                                                            |
+| `revitcli coverage`                                                       | Profile coverage report (which checks ran)                                                                         |
+| `revitcli snapshot`                                                       | Capture model semantic state as JSON                                                                               |
+| `revitcli diff <from> <to>`                                               | Diff two snapshots (table / JSON / markdown)                                                                       |
+| `revitcli import <file>`                                                  | Batch-write parameters from CSV                                                                                    |
+| `revitcli config show` / `set`                                            | View or modify CLI configuration                                                                                   |
+| `revitcli batch <file>`                                                   | Execute commands from a JSON file                                                                                  |
+| `revitcli completions <shell>`                                            | Generate shell completions (bash/zsh/PowerShell)                                                                   |
+| `revitcli interactive` / `-i`                                             | Interactive REPL mode                                                                                              |
+| `revitcli history init` / `capture` / `list` / `prune` / `diff` / `trend` | Local snapshot timeline + ASCII trend (v1.6)                                                                       |
+| `revitcli score --history <duration>`                                     | Per-day score time series (v1.6)                                                                                   |
+| `revitcli mcp serve` / `list` / `test` / `resource`                       | MCP stdio server + CLI tools for hand-testing without an LLM client. See [docs/mcp-server.md](docs/mcp-server.md). |
+| `revitcli journal tail` / `stats`                                         | Read the audit log written by every CLI/MCP write tool                                                             |
+| `revitcli family validate` / `purge` / `export`                           | Family invariant checks + cleanup + .rfa extraction (v1.8)                                                         |
+| `revitcli check --output sarif\|pr-comment`                               | SARIF 2.1.0 / PR-comment report (v1.7)                                                                             |
+| `revitcli ci doctor`                                                      | Detect CI provider + emit workflow snippet (v1.7)                                                                  |
+| `revitcli profile validate` / `show --resolve` / `diff` / `install`       | Profile lint, resolve, diff, git install (v1.9)                                                                    |
+| `revitcli family ls`                                                      | List Revit families (--unused, --category) (v1.8)                                                                  |
+| `revitcli dashboard serve` / `build`                                      | Serve / package the static dashboard (v2.0 — phase 1)                                                              |
 
 ## Features
 
@@ -129,29 +131,29 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 
 ```yaml
 version: 1
-extends: ./shared.yml          # single-parent only; child REPLACES named keys, not deep-merge
+extends: ./shared.yml # single-parent only; child REPLACES named keys, not deep-merge
 
 checks:
   default:
     rules: [naming, room-bounds, level-consistency]
-    failOn: error              # error | warning
+    failOn: error # error | warning
 
 publish:
   default:
     precheck: default
     presets: [publish-dwg]
-    incremental: true                          # v1.2.0
+    incremental: true # v1.2.0
     baselinePath: .revitcli/last-publish.json
-    sinceMode: content                          # content | meta
+    sinceMode: content # content | meta
 ```
 
 Starter templates in `profiles/`:
 
-| Profile | Use case |
-|---|---|
+| Profile                   | Use case                                                               |
+| ------------------------- | ---------------------------------------------------------------------- |
 | `architectural-issue.yml` | Architectural projects — room data, sheet completeness, pre-issue gate |
-| `interior-room-data.yml` | Interior design / FM handover — room metadata, naming, department |
-| `general-publish.yml` | Any project — basic health checks + DWG/PDF/IFC export pipelines |
+| `interior-room-data.yml`  | Interior design / FM handover — room metadata, naming, department      |
+| `general-publish.yml`     | Any project — basic health checks + DWG/PDF/IFC export pipelines       |
 
 `revitcli init <template>` copies one to your project root.
 
