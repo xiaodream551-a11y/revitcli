@@ -90,6 +90,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   v1.7 add-ins paired with the v1.8 CLI return 404, which the client
   maps to a clear "endpoint requires v1.8 add-in" message.
 
+### Added — v1.8 family management (CLI completion: validate / purge / export)
+
+Closes the v1.8 family CLI surface. The CLI side ships in this PR with
+fully mocked HTTP coverage; the corresponding Revit addin endpoints
+(`POST /api/families/purge`, `POST /api/families/export`) land in a
+Windows-only follow-up because the addin needs a live Revit session to
+build and test against.
+
+- `revitcli family validate [--category NAME] [--rules CSV] [--output table|json|csv] [--fail-on error|warning]`
+  — built-in invariant checks: name-non-empty, name-no-path-chars,
+  category-known, loadable-or-in-place. Default `--fail-on=error`
+  matches `audit` semantics; warnings (placeholder category) do not
+  fail CI by default.
+- `revitcli family purge [--category NAME] [--keep CSV] [--apply] [--yes]`
+  — drops families with zero placed instances. Default mode is dry-run
+  (lists candidates); `--apply --yes` actually deletes. In-place
+  families are filtered out client-side (Revit can't drop them as
+  families). `--keep` accepts substring patterns to safelist by name.
+  Audit log entry on apply (`action: "family-purge"`).
+- `revitcli family export [--all|--category NAME|--name SUBSTR] [--output-dir DIR] [--overwrite] [--dry-run]`
+  — saves families as standalone .rfa files. In-place and non-loadable
+  families are filtered out. Partial failures exit 2 (consistent with
+  other write commands). Audit log entry on apply.
+- New shared DTOs: `FamilyPurgeRequest/Result`, `FamilyExportRequest/Result`,
+  `FamilyValidationIssue` (shape mirrors `AuditIssue` so SARIF / dashboard
+  consumers can lift the same fields without conditioning on source).
+- `RevitClient.PurgeFamiliesAsync` / `ExportFamiliesAsync` added; both
+  POST to the new family endpoints. Will return 404 against a v1.7
+  addin until the Windows follow-up lands.
+
 ### Added — MCP phase 2 (resources + safe writes)
 
 - New MCP methods: `resources/list` and `resources/read`. Capabilities
@@ -107,6 +137,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   2. Each call must include `confirm: true` in arguments (per-call opt-in).
   Without either, the tool returns a content-text refusal explaining how
   to enable. Defense in depth for LLM-driven model writes.
+
+### Added — MCP phase 3 (write tools — fix + rollback)
+
+Closes the agent loop `audit -> fix -> rollback`: an LLM client can now
+delegate "make the model conform to the audit rules" and undo it via the
+baseline snapshot path, without composing individual `set` calls.
+
+- New `fix` tool — wraps `FixCommand`. Same double-gate as `set`
+  (`--allow-writes` plus `confirm: true`). Inputs: `checkName`, `rules`,
+  `severity`, `dryRun`, `allowInferred`, `maxChanges`, `confirm`. The
+  baseline snapshot is always captured before applying (no MCP-level
+  `--no-snapshot` opt-out — failing safe).
+- New `rollback` tool — wraps `RollbackCommand`. Same double-gate.
+  Inputs: `baseline`, `dryRun`, `maxChanges`, `confirm`. The baseline
+  path is passed through unbounded for now; future hardening can bound
+  it to `.revitcli/`.
+- Both tools append a structured audit entry to `.revitcli/journal.jsonl`
+  on every outcome (`refused-writes-disabled`, `refused-no-confirm`,
+  `ok`, `error`) with `transport: "mcp"`. Same shape as the existing CLI
+  journal so post-hoc forensics work uniformly.
+
+### Added — MCP phase 3.5 (import tool + path hardening)
+
+Completes the MCP write-tool trio (`set` / `fix` / `rollback` / `import`)
+and locks down caller-supplied filesystem paths at the MCP boundary.
+
+- New `import` tool — wraps `ImportCommand`. Same double-gate as the
+  rest of phase 3 (`--allow-writes` + `confirm: true`). Inputs: `file`
+  (CSV path), `category`, `matchBy`, `map`, `dryRun`, `onMissing`,
+  `onDuplicate`, `encoding`, `batchSize`, `confirm`. Closes the
+  bulk-write path of the agent loop alongside `set` (per-element) and
+  `fix` (rule-driven).
+- New `McpPathGuard.ResolveUnderRevitCli` helper — canonicalizes a
+  caller-supplied path and rejects anything outside `.revitcli/`.
+  Operators stage import CSVs / fix baselines there; the LLM cannot
+  point the tool at arbitrary files. Rejection paths emit a
+  `refused-path-out-of-bounds` audit entry.
+- `rollback` tool now binds `baseline` via the same guard. The
+  follow-up flagged in PR #12 — "future hardening could bound it to
+  `.revitcli/`" — lands here.
+
+### Added — MCP phase 4 (publish tool)
+
+Promotes the profile-driven publish pipeline (precheck -> exports ->
+receipt -> webhook) from CLI-only to MCP. With this an LLM agent can
+delegate "publish my project" to a single tool call instead of
+composing audit + export + receipt by hand.
+
+- New `publish` tool — wraps `PublishCommand`. Same double-gate as the
+  rest of phase 3/3.5 (`--allow-writes` plus `confirm: true`). Inputs:
+  `pipeline`, `dryRun`, `since`, `sinceMode`, `updateBaseline`, `confirm`.
+- Long-running by design (sheet exports + webhook I/O can take minutes).
+  No progress notification on this tool — the LLM client blocks until
+  the call returns. If the client times out, the publish continues
+  server-side; the receipt and journal land regardless.
+- Output paths come from the profile, not the caller — the only
+  LLM-controlled filesystem path on this tool is `since`, and that is
+  bound to `.revitcli/` via `McpPathGuard` (same as the import + rollback
+  guards). `--update-baseline` inherits the binding because it writes
+  back to the same path.
+- Audit log every outcome (`refused-writes-disabled`, `refused-no-confirm`,
+  `refused-path-out-of-bounds`, `ok`, `error`) tagged `transport: "mcp"`.
 
 ### Added — v2.0 dashboard (phase 1 — skeleton)
 
