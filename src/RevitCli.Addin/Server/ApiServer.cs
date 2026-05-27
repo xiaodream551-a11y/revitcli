@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,7 +13,6 @@ using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Actions;
 using EmbedIO.WebApi;
-using RevitCli.Addin.Handlers;
 using RevitCli.Shared;
 
 namespace RevitCli.Addin.Server;
@@ -20,16 +22,26 @@ public class ApiServer : IDisposable
     private WebServer? _server;
     private CancellationTokenSource? _cts;
     private Task? _runTask;
+    private RequestDrainModule? _requestDrain;
     private readonly int _port;
     private readonly IRevitOperations _operations;
+    private readonly IReadOnlyList<Type> _controllerTypes;
+    private readonly IReloadService? _reloadService;
     private readonly string _revitVersion;
+    private readonly string? _addinDirectory;
     private readonly string _serverInfoPath;
     private readonly string _serverInfoMutexName;
     private int _actualPort;
     private string _token = "";
+    private static readonly MethodInfo RegisterControllerFactoryMethod = typeof(WebApiModule)
+        .GetMethods()
+        .Single(method => method.Name == nameof(WebApiModule.RegisterController) &&
+                          method.IsGenericMethodDefinition &&
+                          method.GetParameters().Length == 1);
     private static readonly TimeSpan ServerInfoMutexTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ServerStartTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ServerStopTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RequestDrainTimeout = Timeout.InfiniteTimeSpan;
     private const int ServerInfoPublishAttempts = 8;
     private static readonly TimeSpan ServerInfoPublishRetryDelay = TimeSpan.FromMilliseconds(50);
 
@@ -37,11 +49,21 @@ public class ApiServer : IDisposable
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".revitcli", "server.json");
 
-    public ApiServer(int port, IRevitOperations operations, string revitVersion = "", string? serverInfoPath = null)
+    public ApiServer(
+        int port,
+        IRevitOperations operations,
+        IEnumerable<Type> controllerTypes,
+        string revitVersion = "",
+        string? serverInfoPath = null,
+        IReloadService? reloadService = null,
+        string? addinDirectory = null)
     {
         _port = port;
         _operations = operations;
+        _controllerTypes = ValidateControllerTypes(controllerTypes);
+        _reloadService = reloadService;
         _revitVersion = revitVersion;
+        _addinDirectory = string.IsNullOrWhiteSpace(addinDirectory) ? null : addinDirectory;
         _serverInfoPath = string.IsNullOrWhiteSpace(serverInfoPath)
             ? DefaultServerInfoPath
             : serverInfoPath;
@@ -60,10 +82,12 @@ public class ApiServer : IDisposable
         {
             WebServer? server = null;
             Task? runTask = null;
+            RequestDrainModule? requestDrain = null;
             try
             {
                 actualPort = _port + i;
-                server = CreateServer(actualPort);
+                requestDrain = new RequestDrainModule();
+                server = CreateServer(actualPort, requestDrain);
                 runTask = server.RunAsync(_cts.Token);
                 if (!WaitForListening(server, runTask, ServerStartTimeout))
                 {
@@ -78,6 +102,7 @@ public class ApiServer : IDisposable
 
                 _server = server;
                 _runTask = runTask;
+                _requestDrain = requestDrain;
                 _actualPort = actualPort;
                 WriteServerInfo(actualPort);
                 return;
@@ -100,6 +125,7 @@ public class ApiServer : IDisposable
                 ObserveRunTask(runTask);
                 _server = null;
                 _runTask = null;
+                _requestDrain = null;
                 _actualPort = 0;
                 if (i == 10) throw;
             }
@@ -162,30 +188,83 @@ public class ApiServer : IDisposable
         }
     }
 
-    private WebServer CreateServer(int port)
+    private WebServer CreateServer(int port, RequestDrainModule requestDrain)
     {
         var token = _token;
         return new WebServer(o => o
                 .WithUrlPrefix($"http://127.0.0.1:{port}/")
                 .WithMode(HttpListenerMode.EmbedIO))
+            .WithModule(requestDrain)
             .WithModule(new TokenAuthModule(token))
-            .WithWebApi("/api", m => m
-                .WithController(() => new StatusController(_operations))
-                .WithController(() => new ElementsController(_operations))
-                .WithController(() => new ExportController(_operations))
-                .WithController(() => new SetController(_operations))
-                .WithController(() => new AuditController(_operations))
-                .WithController(() => new ScheduleController(_operations))
-                .WithController(() => new ViewsController(_operations))
-                .WithController(() => new LinksController(_operations))
-                .WithController(() => new ModelMapController(_operations))
-                .WithController(() => new SnapshotController(_operations))
-                .WithController(() => new FamiliesController(_operations)))
+            .WithWebApi("/api", m =>
+            {
+                foreach (var controllerType in _controllerTypes)
+                    RegisterController(m, controllerType);
+
+                if (_reloadService != null)
+                    m.WithController(() => new ReloadController(_reloadService));
+            })
             .WithModule(new ActionModule("/", HttpVerbs.Any, ctx =>
             {
                 ctx.Response.StatusCode = 404;
                 return Task.CompletedTask;
             }));
+    }
+
+    private void RegisterController(WebApiModule module, Type controllerType)
+    {
+        var factory = CreateControllerFactory(controllerType);
+        RegisterControllerFactoryMethod
+            .MakeGenericMethod(controllerType)
+            .Invoke(module, new object[] { factory });
+    }
+
+    private Delegate CreateControllerFactory(Type controllerType)
+    {
+        var method = typeof(ApiServer)
+            .GetMethod(nameof(CreateController), BindingFlags.Instance | BindingFlags.NonPublic)!
+            .MakeGenericMethod(controllerType);
+        return Delegate.CreateDelegate(typeof(Func<>).MakeGenericType(controllerType), this, method);
+    }
+
+    private TController CreateController<TController>()
+        where TController : WebApiController
+    {
+        return (TController)Activator.CreateInstance(typeof(TController), _operations)!;
+    }
+
+    private static IReadOnlyList<Type> ValidateControllerTypes(IEnumerable<Type> controllerTypes)
+    {
+        if (controllerTypes == null)
+            throw new ArgumentNullException(nameof(controllerTypes));
+
+        var result = controllerTypes.ToArray();
+        if (result.Length == 0)
+            throw new ArgumentException("At least one WebApiController type is required.", nameof(controllerTypes));
+
+        foreach (var controllerType in result)
+        {
+            if (controllerType.IsAbstract || !typeof(WebApiController).IsAssignableFrom(controllerType))
+            {
+                throw new ArgumentException(
+                    $"Controller type '{controllerType.FullName}' must be a non-abstract WebApiController.",
+                    nameof(controllerTypes));
+            }
+
+            var hasOperationsConstructor = controllerType.GetConstructor(
+                BindingFlags.Public | BindingFlags.Instance,
+                binder: null,
+                types: new[] { typeof(IRevitOperations) },
+                modifiers: null) != null;
+            if (!hasOperationsConstructor)
+            {
+                throw new ArgumentException(
+                    $"Controller type '{controllerType.FullName}' must expose a public constructor accepting IRevitOperations.",
+                    nameof(controllerTypes));
+            }
+        }
+
+        return result;
     }
 
     private sealed class TokenAuthModule : EmbedIO.WebModuleBase
@@ -209,6 +288,50 @@ public class ApiServer : IDisposable
         }
     }
 
+    private sealed class RequestDrainModule : EmbedIO.WebModuleBase
+    {
+        private readonly ManualResetEventSlim _idle = new(initialState: true);
+        private int _activeRequests;
+        private int _draining;
+
+        public RequestDrainModule() : base("/")
+        {
+        }
+
+        public override bool IsFinalHandler => false;
+
+        public void BeginDraining()
+        {
+            Volatile.Write(ref _draining, 1);
+        }
+
+        public bool WaitForIdle(TimeSpan timeout)
+        {
+            return _idle.Wait(timeout);
+        }
+
+        protected override Task OnRequestAsync(IHttpContext context)
+        {
+            if (Volatile.Read(ref _draining) != 0)
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                context.SetHandled();
+                return Task.CompletedTask;
+            }
+
+            if (Interlocked.Increment(ref _activeRequests) == 1)
+                _idle.Reset();
+
+            context.OnClose(_ =>
+            {
+                if (Interlocked.Decrement(ref _activeRequests) == 0)
+                    _idle.Set();
+            });
+
+            return Task.CompletedTask;
+        }
+    }
+
     private void WriteServerInfo(int port)
     {
         WithServerInfoLock(() =>
@@ -218,6 +341,7 @@ public class ApiServer : IDisposable
                 Port = port,
                 Pid = Process.GetCurrentProcess().Id,
                 RevitVersion = _revitVersion,
+                AddinDirectory = _addinDirectory,
                 StartedAt = DateTime.UtcNow.ToString("o"),
                 Token = _token
             };
@@ -431,12 +555,16 @@ public class ApiServer : IDisposable
     public void Stop()
     {
         var runTask = _runTask;
+        var requestDrain = _requestDrain;
+        requestDrain?.BeginDraining();
         RemoveServerInfo();
+        requestDrain?.WaitForIdle(RequestDrainTimeout);
         _cts?.Cancel();
         _server?.Dispose();
         ObserveRunTask(runTask);
         _server = null;
         _runTask = null;
+        _requestDrain = null;
         _cts?.Dispose();
         _cts = null;
     }

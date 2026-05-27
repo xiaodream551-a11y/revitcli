@@ -1,19 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <RootNamespace>RevitCli.Addin</RootNamespace>
+    <RootNamespace>RevitCli.Addin.Core</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ReloadableCoreProject>..\RevitCli.Addin.Core\RevitCli.Addin.Core.csproj</ReloadableCoreProject>
-    <ReloadableCoreOutputDir>..\RevitCli.Addin.Core\bin\$(Configuration)\$(RevitYear)\</ReloadableCoreOutputDir>
 
-    <!-- RevitYear: 2024 (net48), 2025 (net8.0-windows), 2026 (net8.0-windows) -->
     <RevitYear Condition="'$(RevitYear)' == ''">2026</RevitYear>
     <TargetFramework Condition="'$(TargetFrameworks)' == '' AND '$(TargetFramework)' == '' AND '$(RevitYear)' == '2024'">net48</TargetFramework>
     <TargetFramework Condition="'$(TargetFrameworks)' == '' AND '$(TargetFramework)' == '' AND '$(RevitYear)' != '2024'">net8.0-windows</TargetFramework>
 
-    <!-- Revit install directories per year -->
     <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2026InstallDir)' != '' AND '$(RevitYear)' == '2026'">$(Revit2026InstallDir)</RevitInstallDir>
     <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2025InstallDir)' != '' AND '$(RevitYear)' == '2025'">$(Revit2025InstallDir)</RevitInstallDir>
     <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2024InstallDir)' != '' AND '$(RevitYear)' == '2024'">$(Revit2024InstallDir)</RevitInstallDir>
@@ -21,21 +18,19 @@
     <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2025'">C:\Program Files\Autodesk\Revit 2025</RevitInstallDir>
     <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2026'">C:\Program Files\Autodesk\Revit 2026</RevitInstallDir>
 
-    <!-- Per-year define constants -->
     <DefineConstants>$(DefineConstants);REVIT$(RevitYear)</DefineConstants>
-
-    <!-- Separate output per year so builds don't overwrite each other -->
     <OutputPath>bin\$(Configuration)\$(RevitYear)\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
-  <!-- net8.0-windows needs FrameworkReference -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="EmbedIO" />
+    <PackageReference Include="EmbedIO">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -50,51 +45,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RevitCli.Addin.Contracts\RevitCli.Addin.Contracts.csproj" />
-    <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
-    <ProjectReference Include="..\RevitCli.Addin.Core\RevitCli.Addin.Core.csproj" Condition="'$(RevitYear)' == '2024'" />
+    <ProjectReference Include="..\RevitCli.Addin.Contracts\RevitCli.Addin.Contracts.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="RevitCli.Addin.Tests" />
   </ItemGroup>
 
-  <!-- Generate deployment-ready .addin with absolute DLL path after build (Windows only) -->
   <Target Name="ValidateRevitApiReferences" BeforeTargets="ResolveReferences">
     <Error Condition="!Exists('$(RevitInstallDir)/RevitAPI.dll')"
            Text="Missing RevitAPI.dll at '$(RevitInstallDir)'. Set -p:RevitInstallDir=... or the matching -p:Revit2024InstallDir / -p:Revit2025InstallDir / -p:Revit2026InstallDir override." />
     <Error Condition="!Exists('$(RevitInstallDir)/RevitAPIUI.dll')"
            Text="Missing RevitAPIUI.dll at '$(RevitInstallDir)'. Set -p:RevitInstallDir=... or the matching -p:Revit2024InstallDir / -p:Revit2025InstallDir / -p:Revit2026InstallDir override." />
-  </Target>
-
-  <Target Name="GenerateDeployManifest" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
-    <Copy SourceFiles="RevitCli.addin" DestinationFiles="$(OutputPath)RevitCli.addin" />
-    <XmlPoke XmlInputPath="$(OutputPath)RevitCli.addin"
-             Query="/RevitAddIns/AddIn/Assembly"
-             Value="$(TargetPath)" />
-  </Target>
-
-  <Target Name="BuildReloadableCore" BeforeTargets="Build" Condition="'$(RevitYear)' != '2024'">
-    <MSBuild Projects="$(ReloadableCoreProject)"
-             Targets="Restore;Build"
-             Properties="Configuration=$(Configuration);RevitYear=$(RevitYear);RevitInstallDir=$(RevitInstallDir)" />
-  </Target>
-
-  <Target Name="CopyReloadableCoreToOutput" AfterTargets="Build" Condition="'$(RevitYear)' != '2024'">
-    <ItemGroup>
-      <ReloadableCoreFiles Include="$(ReloadableCoreOutputDir)RevitCli.Addin.Core.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(ReloadableCoreFiles)"
-          DestinationFolder="$(OutputPath)"
-          SkipUnchangedFiles="true" />
-  </Target>
-
-  <Target Name="CopyReloadableCoreToPublish" AfterTargets="Publish" Condition="'$(RevitYear)' != '2024'">
-    <ItemGroup>
-      <ReloadableCorePublishFiles Include="$(ReloadableCoreOutputDir)RevitCli.Addin.Core.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(ReloadableCorePublishFiles)"
-          DestinationFolder="$(PublishDir)"
-          SkipUnchangedFiles="true" />
   </Target>
 </Project>

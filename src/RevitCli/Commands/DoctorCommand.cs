@@ -117,7 +117,8 @@ public static class DoctorCommand
 
         // 2. Local prerequisites for the requested Revit version.
         hasFailure |= !await WriteRevitApiCheck(output, environment);
-        hasFailure |= !await WriteAddinManifestCheck(output, environment, expectedVersion);
+        var addinManifestCheck = await WriteAddinManifestCheck(output, environment, expectedVersion);
+        hasFailure |= !addinManifestCheck.Success;
 
         // 3. Server URL
         await output.WriteLineAsync($"OK: Server URL: {config.ServerUrl}");
@@ -151,7 +152,8 @@ public static class DoctorCommand
                         output,
                         "Live Add-in",
                         expectedVersion.Value,
-                        status.Data.AddinVersion);
+                        status.Data.AddinVersion,
+                        addinManifestCheck.InstalledVersion);
                     if (!liveCompatible)
                     {
                         await output.WriteLineAsync(LiveAddinVersionHint(checkVersion));
@@ -299,7 +301,7 @@ public static class DoctorCommand
         return false;
     }
 
-    private static async Task<bool> WriteAddinManifestCheck(
+    private static async Task<AddinManifestCheck> WriteAddinManifestCheck(
         TextWriter output,
         DoctorEnvironment environment,
         ComponentVersion? expectedVersion)
@@ -310,7 +312,7 @@ public static class DoctorCommand
             await WriteFail(output, $"Add-in manifest missing ({manifestPath})");
             await output.WriteLineAsync(
                 $"HINT: Build/publish the add-in and install RevitCli.addin under Autodesk\\Revit\\Addins\\{environment.TargetRevitYear}.");
-            return false;
+            return new AddinManifestCheck(false, null);
         }
 
         try
@@ -320,7 +322,7 @@ public static class DoctorCommand
             if (string.IsNullOrWhiteSpace(assembly))
             {
                 await WriteFail(output, $"Add-in manifest has no Assembly path ({manifestPath})");
-                return false;
+                return new AddinManifestCheck(false, null);
             }
 
             var assemblyPath = Path.IsPathRooted(assembly)
@@ -329,13 +331,13 @@ public static class DoctorCommand
             if (!File.Exists(assemblyPath))
             {
                 await WriteFail(output, $"Add-in assembly from manifest does not exist ({assemblyPath})");
-                return false;
+                return new AddinManifestCheck(false, null);
             }
 
             if (!AssemblyVersionReader.TryRead(assemblyPath, out var installedVersion, out var versionError))
             {
                 await WriteFail(output, $"Installed Add-in version cannot be read ({assemblyPath}): {versionError}");
-                return false;
+                return new AddinManifestCheck(false, null);
             }
 
             await WriteOk(output, $"Add-in manifest: {manifestPath}");
@@ -343,15 +345,16 @@ public static class DoctorCommand
             if (expectedVersion == null)
             {
                 await WriteOk(output, $"Installed Add-in version: {installedVersion}");
-                return true;
+                return new AddinManifestCheck(true, installedVersion);
             }
 
-            return await WriteVersionCompatibility(output, "Installed Add-in", expectedVersion.Value, installedVersion);
+            var compatible = await WriteVersionCompatibility(output, "Installed Add-in", expectedVersion.Value, installedVersion);
+            return new AddinManifestCheck(compatible, installedVersion);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
             await WriteFail(output, $"Add-in manifest cannot be read ({manifestPath}): {ex.Message}");
-            return false;
+            return new AddinManifestCheck(false, null);
         }
     }
 
@@ -368,7 +371,8 @@ public static class DoctorCommand
         TextWriter output,
         string componentName,
         ComponentVersion expectedVersion,
-        string actualVersionText)
+        string actualVersionText,
+        string? installedVersionText = null)
     {
         await WriteOk(output, $"{componentName} version: {actualVersionText}");
 
@@ -384,9 +388,18 @@ public static class DoctorCommand
             case VersionCompatibility.Compatible:
                 return true;
             case VersionCompatibility.MetadataMismatch:
-                await WriteInfo(
-                    output,
-                    $"{componentName} build metadata differs from CLI but protocol version is compatible: actual={actualVersionText}, CLI={expectedVersion}. CLI-only updates do not require restarting Revit.");
+                if (ShouldReportLiveAddinRestartRequired(componentName, expectedVersion, actualVersionText, installedVersionText))
+                {
+                    await WriteWarn(
+                        output,
+                        $"{componentName} build metadata differs from installed Add-in: live={actualVersionText}, installed={installedVersionText}. Restart Revit to activate the installed add-in; after the new loader is active, Core-only updates can reload without another restart.");
+                }
+                else
+                {
+                    await WriteInfo(
+                        output,
+                        $"{componentName} build metadata differs from CLI but protocol version is compatible: actual={actualVersionText}, CLI={expectedVersion}. CLI-only updates do not require restarting Revit.");
+                }
                 return true;
             case VersionCompatibility.PatchMismatch:
                 await WriteWarn(
@@ -401,6 +414,24 @@ public static class DoctorCommand
             default:
                 throw new ArgumentOutOfRangeException(nameof(compatibility), compatibility, null);
         }
+    }
+
+    private static bool ShouldReportLiveAddinRestartRequired(
+        string componentName,
+        ComponentVersion expectedVersion,
+        string actualVersionText,
+        string? installedVersionText)
+    {
+        if (!string.Equals(componentName, "Live Add-in", StringComparison.Ordinal))
+            return false;
+        if (string.IsNullOrWhiteSpace(installedVersionText))
+            return false;
+        if (string.Equals(actualVersionText, installedVersionText, StringComparison.Ordinal))
+            return false;
+        if (!ComponentVersion.TryParse(installedVersionText, out var installedVersion))
+            return false;
+
+        return ComponentVersion.Compare(expectedVersion, installedVersion) == VersionCompatibility.Compatible;
     }
 
     private static Task WriteOk(TextWriter output, string message)
@@ -591,6 +622,8 @@ public static class DoctorCommand
         [property: JsonPropertyName("status")] string Status,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("message")] string Message);
+
+    private sealed record AddinManifestCheck(bool Success, string? InstalledVersion);
 
 }
 

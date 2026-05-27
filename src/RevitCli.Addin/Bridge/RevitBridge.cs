@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Autodesk.Revit.UI;
+using RevitCli.Addin.Contracts;
 
 namespace RevitCli.Addin.Bridge;
 
@@ -29,7 +30,7 @@ internal sealed class RevitExternalEvent : IExternalEventSource
 /// Bridges HTTP server threads to the Revit main thread via ExternalEvent.
 /// All Revit API calls must go through <see cref="InvokeAsync{T}"/>.
 /// </summary>
-public sealed class RevitBridge : IExternalEventHandler, IDisposable
+public sealed class RevitBridge : IExternalEventHandler, IRevitBridge, IDisposable
 {
     private readonly RevitRequestQueue<UIApplication> _requests;
 

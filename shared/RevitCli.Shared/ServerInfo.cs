@@ -19,6 +19,9 @@ public class ServerInfo
     [JsonPropertyName("revitVersion")]
     public string RevitVersion { get; set; } = "";
 
+    [JsonPropertyName("addinDirectory")]
+    public string? AddinDirectory { get; set; }
+
     [JsonPropertyName("startedAt")]
     public string StartedAt { get; set; } = "";
 

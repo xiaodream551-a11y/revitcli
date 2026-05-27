@@ -10,11 +10,15 @@
 
     Run it from Windows PowerShell. If Revit is running, the installer updates
     the CLI immediately and stages the Add-in for the next Revit restart.
+    Use -TrustLocalDevelopmentCertificate to sign the stable loader with a
+    current-user local development certificate and avoid unsigned add-in prompts.
 #>
 param(
     [string]$Revit2026InstallDir = $(if ($env:REVITCLI_REVIT2026_INSTALL_DIR) { $env:REVITCLI_REVIT2026_INSTALL_DIR } else { "D:\revit2026\Revit 2026" }),
 
-    [switch]$AllowRunningRevit
+    [switch]$AllowRunningRevit,
+
+    [switch]$TrustLocalDevelopmentCertificate
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,6 +47,9 @@ $installArgs = @{
 }
 if ($AllowRunningRevit) {
     $installArgs.AllowRunningRevit = $true
+}
+if ($TrustLocalDevelopmentCertificate) {
+    $installArgs.TrustLocalDevelopmentCertificate = $true
 }
 
 & (Join-Path $installRoot "scripts\install.ps1") @installArgs

@@ -13,6 +13,7 @@ public sealed class InstallScriptTests
         Assert.Contains("[string]$Revit2025InstallDir", script);
         Assert.Contains("[string]$Revit2026InstallDir", script);
         Assert.Contains("[switch]$AllowRunningRevit", script);
+        Assert.Contains("[switch]$TrustLocalDevelopmentCertificate", script);
         Assert.Contains("REVITCLI_REVIT${Year}_INSTALL_DIR", script);
         Assert.Contains("Revit${Year}InstallDir", script);
         Assert.Contains("return Get-FirstNonEmpty -Values @($Revit2024InstallDir, $revitCliEnv, $autodeskEnv)", script);
@@ -21,14 +22,25 @@ public sealed class InstallScriptTests
         Assert.Contains("$publishArgs += \"-p:RevitInstallDir=$revitInstallDirOverride\"", script);
         Assert.Contains("function Test-PathListContains", script);
         Assert.Contains("function Test-AddinPayloadMatches", script);
+        Assert.Contains("function Ensure-RevitCliLocalCodeSigningCertificate", script);
+        Assert.Contains("function Sign-RevitCliAddinLoader", script);
+        Assert.Contains("RevitCli.Addin.loader.sha256", script);
+        Assert.Contains("certutil.exe", script);
+        Assert.Contains("-user -addstore -f", script);
+        Assert.DoesNotContain("Import-Certificate -FilePath $tempCert", script);
         Assert.Contains("function Write-RevitAddinManifest", script);
-        Assert.Contains("Write-RevitAddinManifest -Path $manifestPath -AssemblyPath $assemblyPath", script);
+        Assert.Contains("function Install-StableAddinPayload", script);
+        Assert.Contains("Write-RevitAddinManifest -Path $ManifestPath -AssemblyPath $AssemblyPath", script);
         Assert.Contains("Installer will update CLI now and stage add-ins for next Revit restart.", script);
         Assert.Contains("staging Add-in for Revit $year", script);
-        Assert.Contains("$stagedAssemblyPath = Join-Path $stagedAddinDir \"RevitCli.Addin.dll\"", script);
-        Assert.Contains("Write-RevitAddinManifest -Path $manifestPath -AssemblyPath $stagedAssemblyPath", script);
+        Assert.Contains("stable Add-in path", script);
+        Assert.Contains("Close Revit and rerun the installer to update the stable loader", script);
         Assert.Contains("stagedRevitYears = $stagedYears", script);
+        Assert.Contains("blockedRevitYears = $blockedYears", script);
+        Assert.Contains("exit 2", script);
         Assert.Contains("active after next Revit restart", script);
+        Assert.DoesNotContain("$stagedAssemblyPath = Join-Path $stagedAddinDir \"RevitCli.Addin.dll\"", script);
+        Assert.DoesNotContain("Write-RevitAddinManifest -Path $manifestPath -AssemblyPath $stagedAssemblyPath", script);
         Assert.DoesNotContain("$userPath -notlike \"*$BinDir*\"", script);
         Assert.DoesNotContain("if (-not $Force) {\r\n        $answer = Read-Host \"Continue anyway? (y/N)\"", script);
         Assert.DoesNotContain("($year -eq \"2026\") -and ($RevitInstallDir -ne \"\")", script);
@@ -45,6 +57,7 @@ public sealed class InstallScriptTests
         Assert.Contains("Revit2026InstallDir = $Revit2026InstallDir", script);
         Assert.Contains("Force = $true", script);
         Assert.Contains("$installArgs.AllowRunningRevit = $true", script);
+        Assert.Contains("$installArgs.TrustLocalDevelopmentCertificate = $true", script);
         Assert.Contains("scripts/smoke-revit-wsl.sh --require-current-source", script);
     }
 

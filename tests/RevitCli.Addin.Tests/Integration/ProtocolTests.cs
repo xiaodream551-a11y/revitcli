@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading.Tasks;
+using RevitCli.Addin.Core;
 using RevitCli.Addin.Server;
 using RevitCli.Addin.Services;
 using RevitCli.Client;
@@ -38,7 +39,11 @@ public class ProtocolTests : IDisposable
             ".revitcli", "server.json");
         var requestedPort = GetAvailablePort();
         var operations = new PlaceholderRevitOperations();
-        _server = new ApiServer(requestedPort, operations, serverInfoPath: _serverInfoPath);
+        _server = new ApiServer(
+            requestedPort,
+            operations,
+            CoreControllerRegistry.ControllerTypes,
+            serverInfoPath: _serverInfoPath);
         _server.Start();
 
         var info = ReadServerInfo();
@@ -91,7 +96,11 @@ public class ProtocolTests : IDisposable
         Directory.CreateDirectory(tempDir);
         var serverInfoPath = Path.Combine(tempDir, "server.json");
 
-        using var server = new ApiServer(busyPort, new PlaceholderRevitOperations(), serverInfoPath: serverInfoPath);
+        using var server = new ApiServer(
+            busyPort,
+            new PlaceholderRevitOperations(),
+            CoreControllerRegistry.ControllerTypes,
+            serverInfoPath: serverInfoPath);
         server.Start();
 
         try

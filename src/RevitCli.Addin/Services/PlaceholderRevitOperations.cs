@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using RevitCli.Addin.Contracts;
 using RevitCli.Shared;
 
 namespace RevitCli.Addin.Services;
@@ -26,7 +27,7 @@ public class PlaceholderRevitOperations : IRevitOperations
             // Placeholder protocol tests must not masquerade as the production Add-in.
             AddinVersion = "0.0.0",
             DocumentName = "Placeholder.rvt",
-            Capabilities = RealRevitOperations.BuildCapabilities(2025)
+            Capabilities = AddinCapabilities.Build(2025)
         });
     }
 

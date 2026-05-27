@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RevitCli.Addin.Contracts</RootNamespace>
+
+    <RevitYear Condition="'$(RevitYear)' == ''">2026</RevitYear>
+    <TargetFramework Condition="'$(TargetFrameworks)' == '' AND '$(TargetFramework)' == '' AND '$(RevitYear)' == '2024'">net48</TargetFramework>
+    <TargetFramework Condition="'$(TargetFrameworks)' == '' AND '$(TargetFramework)' == '' AND '$(RevitYear)' != '2024'">net8.0-windows</TargetFramework>
+
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2026InstallDir)' != '' AND '$(RevitYear)' == '2026'">$(Revit2026InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2025InstallDir)' != '' AND '$(RevitYear)' == '2025'">$(Revit2025InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(Revit2024InstallDir)' != '' AND '$(RevitYear)' == '2024'">$(Revit2024InstallDir)</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2024'">C:\Program Files\Autodesk\Revit 2024</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2025'">C:\Program Files\Autodesk\Revit 2025</RevitInstallDir>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND '$(RevitYear)' == '2026'">C:\Program Files\Autodesk\Revit 2026</RevitInstallDir>
+
+    <DefineConstants>$(DefineConstants);REVIT$(RevitYear)</DefineConstants>
+    <OutputPath>bin\$(Configuration)\$(RevitYear)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallDir)/RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
+  </ItemGroup>
+
+  <Target Name="ValidateRevitApiReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(RevitInstallDir)/RevitAPIUI.dll')"
+           Text="Missing RevitAPIUI.dll at '$(RevitInstallDir)'. Set -p:RevitInstallDir=... or the matching -p:Revit2024InstallDir / -p:Revit2025InstallDir / -p:Revit2026InstallDir override." />
+  </Target>
+</Project>

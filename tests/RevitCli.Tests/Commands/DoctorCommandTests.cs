@@ -315,6 +315,31 @@ public class DoctorCommandTests
         Assert.DoesNotContain("WARN: Live Add-in version metadata", output);
     }
 
+    [Fact]
+    public async Task Execute_LiveAddinMetadataDiffersFromInstalledAddin_WarnsRestartRequired()
+    {
+        var environment = CreateDoctorEnvironment();
+        var coreVersion = StripBuildMetadata(environment.CliVersion);
+        var status = new StatusInfo
+        {
+            RevitVersion = "2026",
+            RevitYear = 2026,
+            AddinVersion = $"{coreVersion}+loaded-old",
+            DocumentName = "Test.rvt"
+        };
+        var handler = new FakeHttpHandler(JsonSerializer.Serialize(ApiResponse<StatusInfo>.Ok(status)));
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new System.Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await DoctorCommand.ExecuteAsync(client, new CliConfig(), writer, environment);
+
+        var output = writer.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("WARN: Live Add-in build metadata differs from installed Add-in", output);
+        Assert.Contains("Restart Revit to activate the installed add-in", output);
+        Assert.DoesNotContain("CLI-only updates do not require restarting Revit", output);
+    }
+
     private static string StripBuildMetadata(string version)
     {
         var plusIndex = version.IndexOf('+');

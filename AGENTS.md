@@ -37,6 +37,18 @@ Use C# with 4-space indentation, `nullable` enabled, and implicit usings. Keep p
 
 Tests use xUnit with Moq where needed. Add CLI command tests under `tests/RevitCli.Tests/Commands/`; shared behavior belongs in the matching feature folder. Prefer fake HTTP handlers and `StringWriter` for CLI output assertions. Put add-in integration coverage under `tests/RevitCli.Addin.Tests/Integration/`. Run at least `dotnet test tests/RevitCli.Tests/` before submitting changes.
 
+## Revit Add-in Hot Reload Baseline
+
+As of 2026-05-27, the Revit 2026 add-in hot-reload and local development signing path has been validated on this machine.
+
+- The Revit manifest should stay on the stable loader path: `%LOCALAPPDATA%\RevitCli\addin\2026\RevitCli.Addin.dll`.
+- The stable loader is signed with the current-user local development certificate `CN=RevitCli Local Development`; Revit journal evidence showed `RevitCli.addin` as `AddInCodeSigningStatus: Signed`.
+- Revit 2025/2026 business-code updates should go through reloadable `RevitCli.Addin.Core.*` files and `POST /api/reload`; Revit 2024 remains on the non-hot-reload `net48` path.
+- `scripts/install-current-source-revit2026.ps1 -TrustLocalDevelopmentCertificate` was verified to install/sign with Revit closed, and later to update Core plus accept reload while Revit stayed open.
+- The no-write WSL smoke `scripts/smoke-revit-wsl.sh --require-current-source` passed with `currentSourceDriftKind=none` in `.artifacts/live-smoke/revit2026-wsl-20260527-115557/summary.json`.
+- Loader-side changes, such as `RevitCli.Addin.dll` lifecycle or server drain changes, still require closing Revit once and reinstalling before they can be runtime-verified.
+- For local Revit smoke after a significant add-in or `revitcli` update, the default test model is `D:\桌面\revit\revit_cli.rvt`. It is OK to launch Revit with this file for local validation unless the user says otherwise.
+
 ## Codex `/goal` Subagent Orchestration
 
 For non-trivial `/goal` work, use the repo-specific subagents deliberately instead of carrying every investigation and edit in one long context.
@@ -49,6 +61,18 @@ For non-trivial `/goal` work, use the repo-specific subagents deliberately inste
 - After a resume, context compaction, or long implementation stretch, reread `.codex/state/goal-delegation.md` before spawning more agents or finalizing.
 - Close completed subagents once their results have been integrated or deemed unnecessary, and record the closure in `.codex/state/goal-delegation.md`.
 - Do not call write-capable project agents directly through `.codex/agents/*.toml` outside the tick loop. In `/goal`, the top-level Codex session coordinates subagents; for audited single-checkbox automation use `scripts/codex tick` or `scripts/codex loop`.
+
+## opencode-DeepSeek MCP Usage
+
+For opencode-DeepSeek MCP work on this repository, use the asynchronous job flow by default for read-only, review, diagnostic, test-planning, and patch-proposal DeepSeek work:
+
+1. Start with `deepseek_start_job` and a narrow `job_type` plus the relevant scoped fields (`task`, `focus`, `context`, `files_hint`, `related_files`, `failure_log`, `changed_files`; use `max_diff_chars` mainly for `job_type=diff_review`).
+2. Poll with `deepseek_job_status`.
+3. Read `codex_brief.md` or a targeted artifact with `deepseek_read_artifact`; use `deepseek_list_artifacts` if the artifact id is lost.
+
+Prefer async jobs for `ask`, `scout`, `diff_review`, `failure_hunt`, `test_plan`, `patch`, and `raw`. Keep write-capable tools such as `deepseek_apply_small` and `deepseek_apply_medium` explicit opt-in only; they are not covered by async job mode and must be followed by Codex diff inspection and verification.
+
+Avoid synchronous read/review/planning calls such as `deepseek_diff_review`, `deepseek_patch`, `deepseek_scout`, and `deepseek_failure_hunt` unless the user explicitly asks for that exact synchronous tool. The tool layer can time out at 120 seconds even when the DeepSeek job would complete successfully as an async job.
 
 ## Commit & Pull Request Guidelines
 

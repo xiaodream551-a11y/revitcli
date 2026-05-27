@@ -19,6 +19,7 @@
     <PackageReference Include="Moq" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\RevitCli.Addin.Core\RevitCli.Addin.Core.csproj" />
     <ProjectReference Include="..\..\src\RevitCli.Addin\RevitCli.Addin.csproj" />
     <ProjectReference Include="..\..\src\RevitCli\RevitCli.csproj" />
     <ProjectReference Include="..\..\shared\RevitCli.Shared\RevitCli.Shared.csproj" />
