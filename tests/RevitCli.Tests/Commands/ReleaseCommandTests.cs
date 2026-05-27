@@ -865,6 +865,46 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotRegister_RejectsUnsafePathWithDuplicatePilot_NextActionsUseNewPublicId()
+    {
+        WriteHealthyTree(_root);
+        WriteFile("docs/smoke/v6.0/pilot-01.md", CompletedPilotEvidencePacketContent("pilot-01"));
+        Assert.Equal(0, await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot-01",
+            "docs/smoke/v6.0/pilot-01.md",
+            yes: true,
+            outputFormat: "json",
+            output: new StringWriter()));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot-01",
+            "../pilot-01.md",
+            yes: false,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "path-safety");
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "pilot-duplicate");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.DoesNotContain(nextActions, action => action!.Contains("../pilot-01.md", StringComparison.Ordinal));
+        Assert.DoesNotContain("release pilot scaffold --pilot-id pilot-01 --output json", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+        Assert.Contains("release pilot scaffold --pilot-id <new-public-id> --output json", nextActions);
+        Assert.Contains("release pilot validate --path docs/smoke/v6.0/<new-public-id>.md --output json", nextActions);
+        Assert.Contains("release pilot register --pilot-id <new-public-id> --path docs/smoke/v6.0/<new-public-id>.md --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotRegister_RejectsUnsafePilotId_NextActionsDoNotRepeatUnsafeInput()
     {
         WriteHealthyTree(_root);

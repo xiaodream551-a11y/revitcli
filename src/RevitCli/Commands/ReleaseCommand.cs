@@ -412,7 +412,7 @@ public static class ReleaseCommand
         issues.AddRange(validation.Issues);
 
         var statusPath = Path.Combine(normalizedRoot, OfficeRolloutStatusPath.Replace('/', Path.DirectorySeparatorChar));
-        var status = issues.Count == 0 ? ReadOfficeRolloutStatus(statusPath, issues) : null;
+        var status = ReadOfficeRolloutStatus(statusPath, issues);
         if (status is not null)
         {
             AddPilotRegisterStatusIssues(status, pilotId, path, issues);
@@ -1988,18 +1988,18 @@ public static class ReleaseCommand
             var actions = new List<string>();
             if (!success || issues.Any(issue => issue.Severity == "error"))
             {
-                if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
-                {
-                    actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
-                    return actions.Distinct(StringComparer.Ordinal).ToArray();
-                }
-
                 if (issues.Any(issue => issue.Id is "pilot-duplicate" or "pilot-path-duplicate"))
                 {
                     actions.Add("release pilot status --output json");
                     actions.Add("release pilot scaffold --pilot-id <new-public-id> --output json");
                     actions.Add("release pilot validate --path docs/smoke/v6.0/<new-public-id>.md --output json");
                     actions.Add("release pilot register --pilot-id <new-public-id> --path docs/smoke/v6.0/<new-public-id>.md --output json");
+                    return actions.Distinct(StringComparer.Ordinal).ToArray();
+                }
+
+                if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
+                {
+                    actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
                     return actions.Distinct(StringComparer.Ordinal).ToArray();
                 }
 
