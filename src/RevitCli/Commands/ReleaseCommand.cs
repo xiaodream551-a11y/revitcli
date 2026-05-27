@@ -1112,6 +1112,30 @@ public static class ReleaseCommand
         }
     }
 
+    private static IEnumerable<string> BuildStatusIssueRepairActions(List<ReleasePilotValidateIssue> issues)
+    {
+        if (issues.Any(issue => issue.Id is "rollout-status-missing" or "rollout-status-unreadable"))
+            yield return $"restore {OfficeRolloutStatusPath}";
+        if (issues.Any(issue => issue.Id == "rollout-status-schema"))
+            yield return $"set {OfficeRolloutStatusPath} schemaVersion to {OfficeRolloutStatusSchemaVersion}";
+        if (issues.Any(issue => issue.Id == "rollout-status-counts"))
+            yield return $"reconcile {OfficeRolloutStatusPath} minimumOfficePilotCount, completedOfficePilotCount, completedPilotIds, and completedPilots";
+        if (issues.Any(issue => issue.Id == "rollout-status-required-evidence"))
+            yield return $"restore {OfficeRolloutStatusPath} requiredEvidence flags to true";
+        if (issues.Any(issue => issue.Id == "rollout-status-pilot-id-mismatch"))
+            yield return $"reconcile {OfficeRolloutStatusPath} completedPilotIds with completedPilots[*].pilotId";
+        if (issues.Any(issue => issue.Id == "rollout-status-pilot-id-safety"))
+            yield return $"replace unsafe completed pilot ids in {OfficeRolloutStatusPath} with public-safe ids and matching packet Pilot identifier values";
+        if (issues.Any(issue => issue.Id == "rollout-status-packet-path-safety"))
+            yield return $"move completed pilot evidence packets under docs/smoke/v6.0/ and update {OfficeRolloutStatusPath} evidencePacketPath values";
+        if (issues.Any(issue => issue.Id == "rollout-status-completed-pilot-evidence"))
+            yield return $"complete required evidence flags for completedPilots in {OfficeRolloutStatusPath}";
+        if (issues.Any(issue => issue.Id == "rollout-status-overclaim"))
+            yield return $"reset {OfficeRolloutStatusPath} officeRolloutCompletion and productionSupportClaim until pilot evidence is claim-ready";
+        if (issues.Any(issue => issue.Id == "rollout-status-production-support-review"))
+            yield return $"create or complete the public-safe productionSupportReviewPath summary, or reset productionSupportClaim in {OfficeRolloutStatusPath}";
+    }
+
     private static OfficeRolloutStatusDocument AddCompletedPilot(
         OfficeRolloutStatusDocument status,
         string pilotId,
@@ -1997,6 +2021,18 @@ public static class ReleaseCommand
                     return actions.Distinct(StringComparer.Ordinal).ToArray();
                 }
 
+                var statusRepairActions = BuildStatusIssueRepairActions(issues).ToArray();
+                if (statusRepairActions.Length > 0)
+                {
+                    actions.AddRange(statusRepairActions);
+                    if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
+                        actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
+                    else if (IsPublicSafePilotEvidencePath(evidencePacketPath))
+                        actions.Add($"release pilot validate --path {evidencePacketPath} --output json");
+                    actions.Add("release pilot status --output json");
+                    return actions.Distinct(StringComparer.Ordinal).ToArray();
+                }
+
                 if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
                 {
                     actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
@@ -2121,7 +2157,8 @@ public static class ReleaseCommand
                 remainingOfficePilotCount,
                 evidenceCompleteOfficePilotCount,
                 missingEvidenceSummary,
-                errorCount);
+                errorCount,
+                issues);
 
             return new ReleasePilotStatusResult(
                 PilotStatusSchemaVersion,
@@ -2152,14 +2189,18 @@ public static class ReleaseCommand
             int remainingOfficePilotCount,
             int evidenceCompleteOfficePilotCount,
             ReleasePilotMissingEvidenceSummary[] missingEvidenceSummary,
-            int errorCount)
+            int errorCount,
+            List<ReleasePilotValidateIssue> issues)
         {
             if (status is null)
                 return new[] { "restore docs/smoke/v6.0/office-rollout-status.json" };
 
             var actions = new List<string>();
             if (errorCount > 0)
+            {
+                actions.AddRange(BuildStatusIssueRepairActions(issues));
                 actions.Add("release pilot status --output json");
+            }
             if (missingEvidenceSummary.Length > 0)
                 actions.Add("complete missingEvidence for registered pilots");
             if (completedOfficePilotCount == 0 || remainingOfficePilotCount > 0 || evidenceCompleteOfficePilotCount < status.MinimumOfficePilotCount)
@@ -2177,6 +2218,7 @@ public static class ReleaseCommand
 
             return actions.Distinct(StringComparer.Ordinal).ToArray();
         }
+
     }
 
     private sealed record ReleasePilotStatusCompletedPilot(

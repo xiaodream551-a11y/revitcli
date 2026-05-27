@@ -40,11 +40,11 @@ public sealed class InstallScriptTests
         var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "scripts", "install-current-source-revit2026.ps1"));
 
         Assert.Contains("install.ps1", script);
-        Assert.Contains("-RevitYears", script);
+        Assert.Contains("RevitYears = @(\"2026\")", script);
         Assert.Contains("2026", script);
-        Assert.Contains("-Revit2026InstallDir", script);
-        Assert.Contains("-Force", script);
-        Assert.Contains("-AllowRunningRevit", script);
+        Assert.Contains("Revit2026InstallDir = $Revit2026InstallDir", script);
+        Assert.Contains("Force = $true", script);
+        Assert.Contains("$installArgs.AllowRunningRevit = $true", script);
         Assert.Contains("scripts/smoke-revit-wsl.sh --require-current-source", script);
     }
 

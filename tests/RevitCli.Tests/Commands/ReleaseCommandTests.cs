@@ -800,6 +800,35 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotRegister_InvalidStatusSchema_ReportsRepairNextAction()
+    {
+        WriteHealthyTree(_root);
+        WriteFile("docs/smoke/v6.0/pilot-01.md", CompletedPilotEvidencePacketContent("pilot-01"));
+        ReplaceOfficeRolloutStatus("\"schemaVersion\": \"v6-office-rollout-status.v1\"", "\"schemaVersion\": \"old\"");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot-01",
+            "docs/smoke/v6.0/pilot-01.md",
+            yes: true,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-schema");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.Contains("set docs/smoke/v6.0/office-rollout-status.json schemaVersion to v6-office-rollout-status.v1", nextActions);
+        Assert.Contains("release pilot validate --path docs/smoke/v6.0/pilot-01.md --output json", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotRegister_DuplicatePilot_ReturnsFailure()
     {
         WriteHealthyTree(_root);
@@ -997,6 +1026,102 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotStatus_InvalidStatusSchema_ReportsRepairNextAction()
+    {
+        WriteHealthyTree(_root);
+        ReplaceOfficeRolloutStatus("\"schemaVersion\": \"v6-office-rollout-status.v1\"", "\"schemaVersion\": \"old\"");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotStatusAsync(
+            _root,
+            "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-schema");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains("set docs/smoke/v6.0/office-rollout-status.json schemaVersion to v6-office-rollout-status.v1", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+    }
+
+    [Fact]
+    public async Task PilotStatus_InvalidStatusCounts_ReportsRepairNextAction()
+    {
+        WriteHealthyTree(_root);
+        ReplaceOfficeRolloutStatus("\"minimumOfficePilotCount\": 2", "\"minimumOfficePilotCount\": 1");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotStatusAsync(
+            _root,
+            "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-counts");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains("reconcile docs/smoke/v6.0/office-rollout-status.json minimumOfficePilotCount, completedOfficePilotCount, completedPilotIds, and completedPilots", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+    }
+
+    [Fact]
+    public async Task PilotStatus_IncompleteRequiredEvidence_ReportsRepairNextAction()
+    {
+        WriteHealthyTree(_root);
+        ReplaceOfficeRolloutStatus("\"rollbackResult\": true", "\"rollbackResult\": false");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotStatusAsync(
+            _root,
+            "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-required-evidence");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains("restore docs/smoke/v6.0/office-rollout-status.json requiredEvidence flags to true", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+    }
+
+    [Fact]
+    public async Task PilotStatus_OverclaimedStatus_ReportsRepairNextAction()
+    {
+        WriteHealthyTree(_root);
+        ReplaceOfficeRolloutStatus("\"officeRolloutCompletion\": false", "\"officeRolloutCompletion\": true");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotStatusAsync(
+            _root,
+            "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-overclaim");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains("reset docs/smoke/v6.0/office-rollout-status.json officeRolloutCompletion and productionSupportClaim until pilot evidence is claim-ready", nextActions);
+        Assert.Contains("release pilot status --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotStatus_RegisteredPilot_ReportsPacketValidation()
     {
         WriteHealthyTree(_root);
@@ -1125,6 +1250,8 @@ jobs:
             issue.GetProperty("id").GetString() == "rollout-status-completed-pilot-evidence");
         Assert.Contains(json.RootElement.GetProperty("nextActions").EnumerateArray(), item =>
             item.GetString() == "complete missingEvidence for registered pilots");
+        Assert.Contains(json.RootElement.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == "complete required evidence flags for completedPilots in docs/smoke/v6.0/office-rollout-status.json");
     }
 
     [Fact]
@@ -2131,7 +2258,7 @@ Run `release verify --strict`.
         var templatePath = Path.Combine(_root, "docs", "smoke", "v6.0", "pilot-evidence-template.md");
         File.WriteAllText(
             templatePath,
-            File.ReadAllText(templatePath).Replace("duplicate register attempts", "duplicate attempts", StringComparison.Ordinal));
+            File.ReadAllText(templatePath).Replace("duplicate register attempts", "duplicate attempts", StringComparison.OrdinalIgnoreCase));
         var output = new StringWriter();
 
         var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
@@ -2354,6 +2481,27 @@ Run `release verify --strict`.
         Assert.False(json.RootElement.GetProperty("success").GetBoolean());
         Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
             check.GetProperty("id").GetString() == "v6.0:pilot-evidence-next-actions" &&
+            check.GetProperty("status").GetString() == "error");
+    }
+
+    [Fact]
+    public async Task Verify_MissingV60PilotEvidenceStatusRepairNextActions_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        var templatePath = Path.Combine(_root, "docs", "smoke", "v6.0", "pilot-evidence-template.md");
+        File.WriteAllText(
+            templatePath,
+            File.ReadAllText(templatePath)
+                .Replace("status structural repair nextActions", "status structural repair guidance", StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:pilot-evidence-rollout-status-repair-next-actions" &&
             check.GetProperty("status").GetString() == "error");
     }
 
@@ -3475,6 +3623,7 @@ Run `release verify --strict`.
     "ledgerAppend": true,
     "ledgerQueryValidate": true,
     "ledgerReplay": true,
+    "ledgerAnalytics": true,
     "ledgerStats": true,
     "ledgerTimeline": true,
     "allRuntimeChecksPass": false
@@ -3524,6 +3673,7 @@ Run `release verify --strict`.
     "ledgerAppend": true,
     "ledgerQueryValidate": true,
     "ledgerReplay": true,
+    "ledgerAnalytics": true,
     "ledgerStats": true,
     "ledgerTimeline": true,
     "allRuntimeChecksPass": true
@@ -3622,6 +3772,7 @@ Run `release verify --strict`.
     "ledgerAppend": true,
     "ledgerQueryValidate": true,
     "ledgerReplay": true,
+    "ledgerAnalytics": true,
     "ledgerStats": true,
     "ledgerTimeline": true,
     "allRuntimeChecksPass": true
@@ -3776,6 +3927,7 @@ Run `release verify --strict`.
     "ledgerAppend": true,
     "ledgerQueryValidate": true,
     "ledgerReplay": true,
+    "ledgerAnalytics": true,
     "ledgerStats": true,
     "ledgerTimeline": true,
     "allRuntimeChecksPass": true
@@ -3969,6 +4121,7 @@ Run `release verify --strict`.
     "ledgerAppend": true,
     "ledgerQueryValidate": true,
     "ledgerReplay": true,
+    "ledgerAnalytics": true,
     "ledgerStats": true,
     "ledgerTimeline": true,
     "allRuntimeChecksPass": true
@@ -4177,7 +4330,7 @@ No SaaS, no MCP, no dashboard-central, and no built-in LLM runtime is introduced
 The product phrase is BIM Release OS and the technical kernel is the Revit Model Operations Ledger.
 The contract is terminal-first, local-first, deterministic, dry-run first, and requires explicit approval.
 
-Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, completedOfficePilotCountBefore, completedOfficePilotCountAfter, register nextActions, duplicate register attempts, invalid register identifiers and paths route back to a public-safe intake path, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, release pilot claim, claimBlockers, nextActions, --support-review, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
+Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, completedOfficePilotCountBefore, completedOfficePilotCountAfter, register nextActions, duplicate register attempts, invalid register identifiers and paths route back to a public-safe intake path, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, status structural repair nextActions, release pilot claim, claimBlockers, nextActions, --support-review, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
 
 No SaaS, no MCP, no built-in LLM, no dashboard-central workflow state, and no database runtime are introduced.
 """);
@@ -4204,7 +4357,7 @@ Validate nextActions ensure unsafe paths route back to a public-safe scaffold pa
 Dry-run release pilot register --pilot-id v6-pilot-2026-office-copy-01 --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before using --yes and inspect completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions.
 Duplicate register attempts route to status plus a new public pilot id intake path.
 Invalid register identifiers and paths route back to a public-safe intake path.
-Check release pilot status --output json after registration to report remaining office pilots, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, and nextActions.
+Check release pilot status --output json after registration to report remaining office pilots, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, status structural repair nextActions, and nextActions.
 Run release pilot claim --output json as a dry-run and inspect claimBlockers and nextActions before using --yes for an office rollout completion claim.
 Use release pilot claim --production-support --support-review docs/smoke/v6.0/v6-production-support-review.md --output json only after private support review, and record productionSupportReviewPath in office-rollout-status.json.
 Support review creation is deferred until the completed pilot threshold is satisfied.
@@ -4675,6 +4828,13 @@ Run `release verify --strict`.
 
     private void WriteFile(string relativePath, string content) =>
         WriteFile(_root, relativePath, content);
+
+    private void ReplaceOfficeRolloutStatus(string oldValue, string newValue)
+    {
+        var path = Path.Combine(_root, "docs", "smoke", "v6.0", "office-rollout-status.json");
+        var content = File.ReadAllText(path).Replace(oldValue, newValue, StringComparison.Ordinal);
+        File.WriteAllText(path, content);
+    }
 
     private async Task RegisterCompletedPilotAsync(string pilotId)
     {

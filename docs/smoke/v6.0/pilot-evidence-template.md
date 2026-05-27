@@ -29,7 +29,9 @@ registered packet validation, per-pilot `missingEvidence`, aggregate
 `remainingEvidenceCompleteOfficePilotCount`, `productionSupportReviewPath`, and
 the no-production-support boundary after registration. Status and claim outputs must include
 machine-readable `nextActions` so the remaining pilot intake steps can be
-scripted. After the minimum completed pilot threshold is satisfied and private
+scripted. status structural repair nextActions identify schema, count,
+requiredEvidence, evidence flag, and overclaim repairs without mutating rollout
+status. After the minimum completed pilot threshold is satisfied and private
 review is complete, run
 `release pilot claim --output json` first as a dry-run, then repeat with
 `--yes` only to write the office rollout completion claim. The dry-run claim

@@ -415,7 +415,9 @@ The contract baseline is acceptable when:
   `remainingEvidenceCompleteOfficePilotCount` so registered-but-incomplete
   pilots are not confused with evidence-complete rollout progress. It reports
   `productionSupportReviewPath` and machine-readable `nextActions` for
-  remaining pilot intake steps.
+  remaining pilot intake steps, including status structural repair nextActions
+  for schema, count, requiredEvidence, evidence flag, and overclaim repairs
+  without mutating rollout status.
   `release pilot claim` is dry-run by default, reports machine-readable
   `claimBlockers` and `nextActions`, and writes the office rollout completion
   claim only after validated completed pilot evidence reaches the threshold;
