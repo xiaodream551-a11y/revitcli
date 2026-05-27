@@ -407,6 +407,7 @@ The contract baseline is acceptable when:
   or writes the completed-pilot entry after validation and reports
   `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
   register nextActions for validation failures, duplicate register attempts,
+  invalid register identifiers and paths route back to a public-safe intake path,
   dry-run writes, and post-write status checks. `release pilot status` reports the machine-readable office pilot rollout progress, registered packet
   validation, per-pilot `missingEvidence`, and aggregate
   `missingEvidenceSummary` flags without mutating status. It also reports

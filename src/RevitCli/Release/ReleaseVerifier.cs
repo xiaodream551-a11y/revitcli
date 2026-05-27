@@ -1217,6 +1217,8 @@ internal static partial class ReleaseVerifier
             "v6.0 pilot register reports machine-readable next actions after validation or writes.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-duplicate-next-actions", pilotEvidence, "duplicate register attempts",
             "v6.0 pilot register duplicate failures route back to status and a new public-id intake path.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-register-safe-intake-next-actions", pilotEvidence, "invalid register identifiers and paths route back to a public-safe intake path",
+            "v6.0 pilot register unsafe input failures route back to public-safe intake next actions.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-before-after-counts", pilotEvidence, "completedOfficePilotCountBefore",
             "v6.0 pilot register reports the completed pilot count before a dry-run or write.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-after-count", pilotEvidence, "completedOfficePilotCountAfter",

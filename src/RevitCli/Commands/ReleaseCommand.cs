@@ -1988,6 +1988,12 @@ public static class ReleaseCommand
             var actions = new List<string>();
             if (!success || issues.Any(issue => issue.Severity == "error"))
             {
+                if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
+                {
+                    actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
+                    return actions.Distinct(StringComparer.Ordinal).ToArray();
+                }
+
                 if (issues.Any(issue => issue.Id is "pilot-duplicate" or "pilot-path-duplicate"))
                 {
                     actions.Add("release pilot status --output json");
@@ -2024,6 +2030,27 @@ public static class ReleaseCommand
             }
 
             return actions.Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        private static IEnumerable<string> BuildSafeIntakeRepairActions(
+            string pilotId,
+            string evidencePacketPath)
+        {
+            var trimmedPilotId = pilotId.Trim();
+            var hasSafePilotId = IsPublicSafePilotId(trimmedPilotId);
+            var safePilotId = hasSafePilotId ? trimmedPilotId : "<public-id>";
+            var path = evidencePacketPath.Trim();
+            if (IsPublicSafePilotEvidencePath(path))
+            {
+                yield return $"release pilot validate --path {path} --output json";
+                yield return $"release pilot register --pilot-id {safePilotId} --path {path} --output json";
+                yield break;
+            }
+
+            var safePath = $"docs/smoke/v6.0/{safePilotId}.md";
+            yield return $"release pilot scaffold --pilot-id {safePilotId} --output json";
+            yield return $"release pilot validate --path {safePath} --output json";
+            yield return $"release pilot register --pilot-id {safePilotId} --path {safePath} --output json";
         }
     }
 

@@ -21,7 +21,8 @@ evidence review is complete. Register outputs include machine-readable
 `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
 `register nextActions` for validation failures, dry-run writes, and post-write
 status checks. Duplicate register attempts route to status plus a new public
-pilot id intake path. Use
+pilot id intake path. Invalid register identifiers and paths route back to a public-safe intake path
+instead of repeating unsafe input. Use
 `release pilot status --output json` to confirm remaining office pilots,
 registered packet validation, per-pilot `missingEvidence`, aggregate
 `missingEvidenceSummary`, `evidenceCompleteOfficePilotCount`,

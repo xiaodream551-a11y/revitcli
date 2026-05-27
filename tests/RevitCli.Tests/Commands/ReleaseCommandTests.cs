@@ -837,6 +837,62 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotRegister_RejectsUnsafePath_NextActionsUsePublicSafeIntake()
+    {
+        WriteHealthyTree(_root);
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot-01",
+            "../pilot-01.md",
+            yes: false,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "path-safety");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.DoesNotContain(nextActions, action => action!.Contains("../pilot-01.md", StringComparison.Ordinal));
+        Assert.Contains("release pilot scaffold --pilot-id pilot-01 --output json", nextActions);
+        Assert.Contains("release pilot validate --path docs/smoke/v6.0/pilot-01.md --output json", nextActions);
+        Assert.Contains("release pilot register --pilot-id pilot-01 --path docs/smoke/v6.0/pilot-01.md --output json", nextActions);
+    }
+
+    [Fact]
+    public async Task PilotRegister_RejectsUnsafePilotId_NextActionsDoNotRepeatUnsafeInput()
+    {
+        WriteHealthyTree(_root);
+        WriteFile("docs/smoke/v6.0/pilot-01.md", CompletedPilotEvidencePacketContent("pilot-01"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot 01",
+            "docs/smoke/v6.0/pilot-01.md",
+            yes: false,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "pilot-id-safety");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.DoesNotContain(nextActions, action => action!.Contains("pilot 01", StringComparison.Ordinal));
+        Assert.Contains("release pilot validate --path docs/smoke/v6.0/pilot-01.md --output json", nextActions);
+        Assert.Contains("release pilot register --pilot-id <public-id> --path docs/smoke/v6.0/pilot-01.md --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotRegister_PacketPilotIdMismatch_ReturnsFailure()
     {
         WriteHealthyTree(_root);
@@ -2045,6 +2101,26 @@ Run `release verify --strict`.
         Assert.False(json.RootElement.GetProperty("success").GetBoolean());
         Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
             check.GetProperty("id").GetString() == "v6.0:pilot-evidence-register-duplicate-next-actions" &&
+            check.GetProperty("status").GetString() == "error");
+    }
+
+    [Fact]
+    public async Task Verify_MissingV60PilotEvidenceRegisterSafeIntakeNextActions_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        var templatePath = Path.Combine(_root, "docs", "smoke", "v6.0", "pilot-evidence-template.md");
+        File.WriteAllText(
+            templatePath,
+            File.ReadAllText(templatePath).Replace("invalid register identifiers and paths route back to a public-safe intake path", "invalid register inputs repeat", StringComparison.OrdinalIgnoreCase));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:pilot-evidence-register-safe-intake-next-actions" &&
             check.GetProperty("status").GetString() == "error");
     }
 
@@ -4061,7 +4137,7 @@ No SaaS, no MCP, no dashboard-central, and no built-in LLM runtime is introduced
 The product phrase is BIM Release OS and the technical kernel is the Revit Model Operations Ledger.
 The contract is terminal-first, local-first, deterministic, dry-run first, and requires explicit approval.
 
-Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, register nextActions, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, release pilot claim, claimBlockers, nextActions, --support-review, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
+Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, completedOfficePilotCountBefore, completedOfficePilotCountAfter, register nextActions, duplicate register attempts, invalid register identifiers and paths route back to a public-safe intake path, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, release pilot claim, claimBlockers, nextActions, --support-review, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
 
 No SaaS, no MCP, no built-in LLM, no dashboard-central workflow state, and no database runtime are introduced.
 """);
@@ -4082,12 +4158,16 @@ No SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, and no d
 
 Use this packet only for controlled project-copy pilots. It is not a production support claim.
 
-Create packets with release pilot scaffold --pilot-id v6-pilot-2026-office-copy-01 --output json before collecting private office evidence.
-Run release pilot validate --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before listing a packet as complete.
-Dry-run release pilot register --pilot-id v6-pilot-2026-office-copy-01 --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before using --yes and inspect register nextActions.
+Create packets with release pilot scaffold --pilot-id v6-pilot-2026-office-copy-01 --output json before collecting private office evidence, then follow scaffold `nextActions`.
+Run release pilot validate --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before listing a packet as complete and follow validate `nextActions`.
+Validate nextActions ensure unsafe paths route back to a public-safe scaffold path and missing packets route to scaffold with the requested safe path.
+Dry-run release pilot register --pilot-id v6-pilot-2026-office-copy-01 --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before using --yes and inspect completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions.
+Duplicate register attempts route to status plus a new public pilot id intake path.
+Invalid register identifiers and paths route back to a public-safe intake path.
 Check release pilot status --output json after registration to report remaining office pilots, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, and nextActions.
 Run release pilot claim --output json as a dry-run and inspect claimBlockers and nextActions before using --yes for an office rollout completion claim.
 Use release pilot claim --production-support --support-review docs/smoke/v6.0/v6-production-support-review.md --output json only after private support review, and record productionSupportReviewPath in office-rollout-status.json.
+Support review creation is deferred until the completed pilot threshold is satisfied.
 Each packet records a Pilot identifier that must match the registered pilot id.
 
 Required commands include doctor --check-version 2026 --output json, `status --output json`, workbench verify --contract workbench-contract.v2 --dir . --output json, release verify --strict --output json, ledger query --source ledger --output json, ledger validate --source ledger --output json, ledger stats --source ledger --analytics-snapshot .revitcli/analytics/ledger-stats.json --output json, ledger timeline --source ledger --analytics-snapshot .revitcli/analytics/ledger-timeline.json --output json, and journal verify --output json.

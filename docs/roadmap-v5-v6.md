@@ -243,6 +243,7 @@ Done means:
   status entry only after validation and reports
   `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
   register nextActions for validation failures, duplicate register attempts,
+  invalid register identifiers and paths route back to a public-safe intake path,
   dry-run writes, and post-write status checks. `release pilot status` reports current
   completed/remaining office pilots, validates registered evidence packets,
   and surfaces per-pilot `missingEvidence` plus aggregate
