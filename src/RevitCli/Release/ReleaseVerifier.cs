@@ -1289,6 +1289,7 @@ internal static partial class ReleaseVerifier
             "v6.0 pilot evidence template excludes dashboard-central.", "docs/smoke/v6.0/pilot-evidence-template.md", V60DashboardCentralContradictions);
         AddGuardedContains(report, "v6.0:pilot-evidence-no-database", pilotEvidence, "database",
             "v6.0 pilot evidence template excludes database runtime.", "docs/smoke/v6.0/pilot-evidence-template.md", V60DatabaseContradictions);
+        AddV60ReleasePilotSpine(root, report);
         AddV60OfficeRolloutStatus(root, report);
 
         var localPilotPath = Path.Combine(root, ToNativePath("docs/smoke/v6.0/local-controlled-pilot-20260525.md"));
@@ -1842,6 +1843,50 @@ internal static partial class ReleaseVerifier
             "v6.0 workflow registry smoke doc avoids a centralized workflow database claim.", "docs/smoke/v6.0/workflow-registry.md", V60DatabaseContradictions);
 
         AddV60WorkbenchGate(root, report, workbenchVerify);
+    }
+
+    private static void AddV60ReleasePilotSpine(string root, ReleaseVerifyReport report)
+    {
+        const string path = "docs/smoke/v6.0/release-pilot-spine.md";
+        var fullPath = Path.Combine(root, ToNativePath(path));
+        if (!File.Exists(fullPath))
+        {
+            report.Add("v6.0:release-pilot-spine-smoke-doc", ReleaseVerifyStatus.Error,
+                "Missing docs/smoke/v6.0/release-pilot-spine.md; v6.0 release pilot helper command spine smoke evidence is not documented.",
+                path);
+            return;
+        }
+
+        var text = ReadText(fullPath, report, "v6.0:release-pilot-spine-readable");
+        if (text is null)
+            return;
+
+        AddContains(report, "v6.0:release-pilot-spine-smoke-doc", text, "Release Pilot Spine Portable Smoke",
+            "v6.0 release pilot helper command spine smoke evidence is documented.", path);
+        AddContains(report, "v6.0:release-pilot-spine-synthetic-boundary", text, "synthetic CLI fixture",
+            "v6.0 release pilot spine evidence is scoped to a synthetic CLI fixture.", path);
+        AddContains(report, "v6.0:release-pilot-spine-no-office-claim", text, "not office rollout completion",
+            "v6.0 release pilot spine evidence does not overclaim office rollout completion.", path);
+        AddContains(report, "v6.0:release-pilot-spine-no-support-claim", text, "not a production support claim",
+            "v6.0 release pilot spine evidence does not overclaim production support.", path);
+        AddContains(report, "v6.0:release-pilot-spine-scaffold-schema", text, "release-pilot-scaffold.v1",
+            "v6.0 release pilot spine records scaffold schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-validate-schema", text, "release-pilot-validate.v1",
+            "v6.0 release pilot spine records validate schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-register-schema", text, "release-pilot-register.v1",
+            "v6.0 release pilot spine records register schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-status-schema", text, "release-pilot-status.v1",
+            "v6.0 release pilot spine records status schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-claim-schema", text, "release-pilot-claim.v1",
+            "v6.0 release pilot spine records claim schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-register-dry-run", text, "dry-run register",
+            "v6.0 release pilot register evidence stays dry-run first.", path);
+        AddContains(report, "v6.0:release-pilot-spine-before-after-counts", text, "completedOfficePilotCountBefore",
+            "v6.0 release pilot register evidence records before/after pilot counts.", path);
+        AddContains(report, "v6.0:release-pilot-spine-claim-blockers", text, "claimBlockers",
+            "v6.0 release pilot claim evidence records machine-readable blockers.", path);
+        AddContains(report, "v6.0:release-pilot-spine-next-actions", text, "machine-readable nextActions",
+            "v6.0 release pilot spine records machine-readable next actions.", path);
     }
 
     private static void AddV60OfficeRolloutStatus(string root, ReleaseVerifyReport report)

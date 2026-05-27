@@ -2046,6 +2046,44 @@ Run `release verify --strict`.
     }
 
     [Fact]
+    public async Task Verify_MissingV60ReleasePilotSpine_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        File.Delete(Path.Combine(_root, "docs", "smoke", "v6.0", "release-pilot-spine.md"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:release-pilot-spine-smoke-doc" &&
+            check.GetProperty("status").GetString() == "error" &&
+            check.GetProperty("message").GetString()!.Contains("release-pilot-spine.md", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Verify_IncompleteV60ReleasePilotSpine_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        var spinePath = Path.Combine(_root, "docs", "smoke", "v6.0", "release-pilot-spine.md");
+        File.WriteAllText(
+            spinePath,
+            File.ReadAllText(spinePath).Replace("release-pilot-register.v1", "release-pilot-record.v1", StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:release-pilot-spine-register-schema" &&
+            check.GetProperty("status").GetString() == "error");
+    }
+
+    [Fact]
     public async Task Verify_MissingV60PilotEvidenceSignoff_ReturnsFailure()
     {
         WriteHealthyTree(_root);
@@ -4369,6 +4407,17 @@ BIM manager signoff, Project-copy owner signoff, Support ticket review, and Mult
 Minimum office pilots: 2-3 completed office pilots before any v6.0 office rollout completion claim.
 
 Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime, no central production model mutation, and no production support claim without completed office rollout pilots.
+""");
+        WriteFile(root, "docs/smoke/v6.0/release-pilot-spine.md", """
+# RevitCli v6.0 Release Pilot Spine Portable Smoke
+
+This document records a synthetic CLI fixture. It is not office rollout completion and not a production support claim.
+
+release pilot scaffold emits release-pilot-scaffold.v1 and scaffold nextActions.
+release pilot validate emits release-pilot-validate.v1.
+release pilot register is a dry-run register path that emits release-pilot-register.v1 and reports completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions.
+release pilot status emits release-pilot-status.v1 and reports remainingEvidenceCompleteOfficePilotCount plus status structural repair nextActions.
+release pilot claim emits release-pilot-claim.v1 and reports claimBlockers plus machine-readable nextActions.
 """);
         WriteFile(root, "docs/smoke/v6.0/office-rollout-status.json", """
 {

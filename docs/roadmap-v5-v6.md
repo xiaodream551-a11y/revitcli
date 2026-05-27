@@ -233,7 +233,9 @@ Done means:
   production support before 2-3 completed office pilots have command evidence,
   BIM manager signoff, project-copy owner signoff, support review, and
   multi-user rollout postmortems, with each packet `Pilot identifier` matching
-  the registered pilot id. `release pilot scaffold` creates the
+  the registered pilot id. `docs/smoke/v6.0/release-pilot-spine.md` records a
+  synthetic CLI fixture for the release pilot scaffold/validate/register/status/claim
+  command spine without claiming real office rollout evidence. `release pilot scaffold` creates the
   public-safe per-pilot Markdown scaffold without changing rollout status and
   reports scaffold `nextActions` for validate/register intake. `release pilot
   validate` checks a packet before it is listed as completed evidence and
