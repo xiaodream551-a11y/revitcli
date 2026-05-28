@@ -48,6 +48,7 @@ As of 2026-05-27, the Revit 2026 add-in hot-reload and local development signing
 - The no-write WSL smoke `scripts/smoke-revit-wsl.sh --require-current-source` passed with `currentSourceDriftKind=none` in `.artifacts/live-smoke/revit2026-wsl-20260527-115557/summary.json`.
 - Loader-side changes, such as `RevitCli.Addin.dll` lifecycle or server drain changes, still require closing Revit once and reinstalling before they can be runtime-verified.
 - For local Revit smoke after a significant add-in or `revitcli` update, the default test model is `D:\桌面\revit\revit_cli.rvt`. It is OK to launch Revit with this file for local validation unless the user says otherwise.
+- Keep an existing Revit session open during local validation. First check `revitcli status` / the running `Revit` process and reuse it; only launch the default test model when Revit is not already running. Prefer hot reload for Revit 2025/2026 Core-only add-in updates. The user has granted standing permission for a controlled Revit close/restart when loader-level add-in changes cannot be validated without replacing files locked by Revit; use graceful close first and reserve force-kill for hung processes.
 
 ## Codex `/goal` Subagent Orchestration
 
@@ -62,9 +63,21 @@ For non-trivial `/goal` work, use the repo-specific subagents deliberately inste
 - Close completed subagents once their results have been integrated or deemed unnecessary, and record the closure in `.codex/state/goal-delegation.md`.
 - Do not call write-capable project agents directly through `.codex/agents/*.toml` outside the tick loop. In `/goal`, the top-level Codex session coordinates subagents; for audited single-checkbox automation use `scripts/codex tick` or `scripts/codex loop`.
 
+## Antigravity CLI MCP Usage
+
+Prefer the Antigravity CLI MCP (`antigravity-mcp`) for sidecar agent work on this repository by default, including read-only exploration, review, diagnostic, test-planning, and patch-proposal tasks.
+
+Use the async flow:
+
+1. Start with `antigravity_start_job` and a narrow `job_type` plus scoped fields such as `task`, `focus`, `context`, `files_hint`, `related_files`, and `failure_log`.
+2. Poll with `antigravity_job_status`.
+3. Read `codex_brief.md` or a targeted artifact with `antigravity_read_artifact`; use `antigravity_list_artifacts` if the artifact id is lost.
+
+Keep Antigravity prompts narrow and concrete: objective, relevant files/symbols, observed outputs, constraints, and expected deliverable. Codex must still inspect artifacts, verify claims, and own all final edits, tests, commits, and pushes.
+
 ## opencode-DeepSeek MCP Usage
 
-For opencode-DeepSeek MCP work on this repository, use the asynchronous job flow by default for read-only, review, diagnostic, test-planning, and patch-proposal DeepSeek work:
+Use opencode-DeepSeek MCP as a fallback or when the user explicitly wants DeepSeek review/diagnostics. For opencode-DeepSeek MCP work on this repository, use the asynchronous job flow by default for read-only, review, diagnostic, test-planning, and patch-proposal DeepSeek work:
 
 1. Start with `deepseek_start_job` and a narrow `job_type` plus the relevant scoped fields (`task`, `focus`, `context`, `files_hint`, `related_files`, `failure_log`, `changed_files`; use `max_diff_chars` mainly for `job_type=diff_review`).
 2. Poll with `deepseek_job_status`.
