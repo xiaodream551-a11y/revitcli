@@ -55,6 +55,21 @@ with
 add-in source, but the already-open Revit process still needs a restart before
 the live add-in/source alignment claim can pass.
 
+After the hot-reload/Core split and signed stable-loader installer path were
+committed, the current-source helper wrote
+`.artifacts/live-smoke/revit2026-wsl-hot-reload-20260527-9633727/summary.json`
+with `success=true`,
+`sourceHead=9633727e8c1df77fa50502cd017b82043e833e8a`,
+matching `cliCommit`, `installedAddinCommit`, `liveAddinCommit`, and
+`statusAddinCommit`, `currentSourceInstalled=true`,
+`currentSourceDriftKind=none`, `stagedAddinCommit=""`,
+`mutatesModel=false`, and empty `nextActions`. That run followed a controlled
+Revit close, `scripts\install-current-source-revit2026.ps1
+-TrustLocalDevelopmentCertificate`, Revit restart on the controlled model, and
+the no-write WSL helper. It proves the checked-out hot-reload/Core split source
+was installed and loaded for Revit 2026 at the time of the smoke; it is not an
+office rollout pilot or production support claim.
+
 Environment:
 
 - Revit process: `D:\revit2026\Revit 2026\Revit.exe`
