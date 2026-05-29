@@ -30,6 +30,7 @@ public sealed class ExamplesCommandTests
         Assert.Contains("deliverables", text);
         Assert.Contains("standards", text);
         Assert.Contains("family", text);
+        Assert.Contains("rvt", text);
         Assert.Contains("release", text);
         Assert.Contains("recipes", text);
         Assert.Contains("Run: revitcli examples <topic>", text);
@@ -208,6 +209,22 @@ public sealed class ExamplesCommandTests
         Assert.Contains("revitcli model map-check --against .revitcli/model-mapping.yml --worksets --phases --output markdown", text);
         Assert.Contains("revitcli model map-fix --against .revitcli/model-mapping.yml --scope rooms,doors,walls --plan-output .revitcli/plans/model-map-fix.json --dry-run --output json", text);
         Assert.Contains("write prechecks", text);
+    }
+
+    [Fact]
+    public async Task Execute_RvtTopic_PrintsBackupCleanupWorkflow()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await ExamplesCommand.ExecuteAsync(output, "rvt");
+
+        var text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("# rvt", text);
+        Assert.Contains("revitcli rvt scan /mnt/d/revit --output markdown", text);
+        Assert.Contains("revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown --report .revitcli/reports/rvt-backups.json", text);
+        Assert.Contains("revitcli rvt clean-backups /mnt/d/revit --apply --yes --report .revitcli/reports/rvt-backups-applied.json", text);
+        Assert.Contains("wait for approval before deleting", text);
     }
 
     [Fact]

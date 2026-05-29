@@ -59,6 +59,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("deliverables", script);
         Assert.Contains("standards", script);
         Assert.Contains("release", script);
+        Assert.Contains("rvt", script);
+        Assert.Contains("rvt)", script);
         Assert.Contains("sheets", script);
         Assert.Contains("rooms", script);
         Assert.Contains("marks", script);
@@ -124,6 +126,13 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("list export create --category --name --fields --filter --sort --sort-desc --output --template --place-on-sheet --dry-run --receipt-dir", script);
         Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"table json csv markdown\" -- \"$cur\"", script);
+        var rvtBlock = ExtractBlock(
+            script,
+            "        rvt)",
+            "        sheets)");
+        Assert.Contains("compgen -W \"scan clean-backups --output --dry-run --apply --yes --include-orphans --non-recursive --older-than --report\" -- \"$cur\"", rvtBlock);
+        Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", rvtBlock);
+        Assert.Contains("compgen -f -- \"$cur\"", rvtBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "        rollback)",
@@ -154,6 +163,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'deliverables:Review local delivery plans, manifests, and receipts'", script);
         Assert.Contains("'standards:Install and validate local office standards requirements'", script);
         Assert.Contains("'release:Verify local release readiness and CI guardrails'", script);
+        Assert.Contains("'rvt:Find RVT files and clean numbered Revit backups'", script);
         Assert.Contains("'sheets:Verify sheet numbering and local sheet-frame expectations'", script);
         Assert.Contains("'rooms:Plan and review room numbering workflows'", script);
         Assert.Contains("'marks:Plan and verify door/window Mark numbering workflows'", script);
@@ -217,6 +227,13 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("--report[Write family purge JSON report]:file:_files", script);
         Assert.Contains("--output[Output format]:format:(table json)", script);
         Assert.Contains("_arguments '1:file:_files'", script);
+        var rvtBlock = ExtractBlock(
+            script,
+            "                rvt)",
+            "                journal)");
+        Assert.Contains("_values 'subcommand' scan clean-backups", rvtBlock);
+        Assert.Contains("--include-orphans[Also delete backups without a main RVT]", rvtBlock);
+        Assert.Contains("--older-than[Only delete backups older than duration]:duration:", rvtBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "                rollback)",
@@ -295,6 +312,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("$releaseOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$releasePilotSubcommands = @('scaffold', 'validate', 'register', 'status', 'claim', 'support-review')", script);
         Assert.Contains("$releasePilotSupportReviewSubcommands = @('scaffold', 'validate')", script);
+        Assert.Contains("'rvt' = @('scan', 'clean-backups', '--output', '--dry-run', '--apply', '--yes', '--include-orphans', '--non-recursive', '--older-than', '--report')", script);
+        Assert.Contains("$rvtSubcommands = @('scan', 'clean-backups')", script);
+        Assert.Contains("$rvtOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$previous -eq '--root' -or $previous -eq '--path' -or $previous -eq '--support-review'", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $releasePilotSupportReviewSubcommands -ToolTip 'Release pilot support-review subcommand'", script);
         Assert.Contains("'sheets' = @('verify', 'issue-meta', 'renumber', 'index', 'init', 'show', '--against', '--rule', '--issues-only', '--output', '--path', '--force', '--selector', '--issue-code', '--issue-date', '--plan-output', '--param-map', '--dry-run', '--max-changes')", script);

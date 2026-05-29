@@ -53,6 +53,13 @@ public sealed class WorkbenchCommandTests
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review scaffold") &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review validate"));
         Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "rvt" &&
+            command.GetProperty("risk").GetString() == "local-write" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt scan") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt clean-backups"));
+        Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "inspect" &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "inspect plans"));
         Assert.Contains(commands, command =>
@@ -3150,6 +3157,14 @@ journal verify
             contract.GetProperty("commandPath").GetString() == "workbench handoff" &&
             contract.GetProperty("jsonSchema").GetString() == "workbench-handoff.v1");
         Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "rvt scan" &&
+            contract.GetProperty("jsonSchema").GetString() == "rvt-file-scan.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "rvt clean-backups" &&
+            contract.GetProperty("jsonSchema").GetString() == "rvt-backup-cleanup-report.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "schedule create" &&
             contract.GetProperty("jsonSchema").GetString() == "schedule-create.v1");
         Assert.Contains(outputs, contract =>
@@ -3298,6 +3313,12 @@ journal verify
             safeguard.GetProperty("dryRunCommand").GetString()!.Contains("model map-fix", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("dryRunCommand").GetString()!.Contains("--plan-output", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("reviewCommand").GetString()!.Contains("model map-check", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(safeguards, safeguard =>
+            safeguard.GetProperty("name").GetString() == "rvt-clean-backups" &&
+            safeguard.GetProperty("dryRunCommand").GetString()!.Contains("rvt clean-backups", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("dryRunCommand").GetString()!.Contains("--dry-run", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("approvalCommand").GetString()!.Contains("--apply --yes", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("reviewCommand").GetString()!.Contains("rvt scan", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

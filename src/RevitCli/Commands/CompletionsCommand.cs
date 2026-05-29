@@ -78,6 +78,10 @@ public static class CompletionsCommand
     private static readonly string[] ReleasePilotSupportReviewSubcommands = { "scaffold", "validate" };
     private static readonly string[] ReleaseOptions = { "--root", "--output", "--tag", "--strict", "--pilot-id", "--path", "--force", "--yes", "--production-support", "--support-review" };
     private static readonly string[] ReleaseOutputFormats = { "table", "json", "markdown" };
+    private static readonly string[] RvtSubcommands = { "scan", "clean-backups" };
+    private static readonly string[] RvtOptions =
+        { "--output", "--dry-run", "--apply", "--yes", "--include-orphans", "--non-recursive", "--older-than", "--report" };
+    private static readonly string[] RvtOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] SheetsSubcommands = { "verify", "issue-meta", "renumber", "index", "init", "show" };
     private static readonly string[] SheetsOptions =
     {
@@ -321,6 +325,9 @@ public static class CompletionsCommand
         var releasePilotSubcommands = JoinWords(ReleasePilotSubcommands);
         var releasePilotSupportReviewSubcommands = JoinWords(ReleasePilotSupportReviewSubcommands);
         var releaseOutputFormats = JoinWords(ReleaseOutputFormats);
+        var rvtWords = JoinWords(RvtSubcommands.Concat(RvtOptions));
+        var rvtOptions = JoinWords(RvtOptions);
+        var rvtOutputFormats = JoinWords(RvtOutputFormats);
         var sheetsWords = JoinWords(SheetsSubcommands.Concat(SheetsOptions));
         var sheetsOptions = JoinWords(SheetsOptions);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
@@ -814,6 +821,27 @@ public static class CompletionsCommand
             "            fi",
             $"            COMPREPLY=($(compgen -W \"{releaseOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        rvt)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{rvtOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --report)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{rvtWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            "            if [ $COMP_CWORD -eq 3 ] && [[ \"$cur\" != -* ]]; then",
+            "                COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{rvtOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        sheets)",
             "            case \"$prev\" in",
             "                --output)",
@@ -1086,6 +1114,8 @@ public static class CompletionsCommand
         var releasePilotSubcommands = JoinWords(ReleasePilotSubcommands);
         var releasePilotSupportReviewSubcommands = JoinWords(ReleasePilotSupportReviewSubcommands);
         var releaseOutputFormats = JoinWords(ReleaseOutputFormats);
+        var rvtSubcommands = JoinWords(RvtSubcommands);
+        var rvtOutputFormats = JoinWords(RvtOutputFormats);
         var sheetsSubcommands = JoinWords(SheetsSubcommands);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
         var roomsSubcommands = JoinWords(RoomsSubcommands);
@@ -1637,6 +1667,22 @@ public static class CompletionsCommand
                 "                            '--overwrite[Overwrite exported .rfa files]'",
                 "                    fi",
                 "                    ;;",
+                "                rvt)",
+                "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {rvtSubcommands}",
+                "                    else",
+                "                        _arguments \\",
+                "                            '2:root directory:_directories' \\",
+            $"                            '--output[Output format]:format:({rvtOutputFormats})' \\",
+                "                            '--dry-run[Preview backup cleanup without deleting]' \\",
+                "                            '--apply[Delete matched backup files]' \\",
+                "                            '--yes[Confirm backup deletion]' \\",
+                "                            '--include-orphans[Also delete backups without a main RVT]' \\",
+                "                            '--non-recursive[Only scan the root directory]' \\",
+                "                            '--older-than[Only delete backups older than duration]:duration:' \\",
+                "                            '--report[Write RVT cleanup JSON report]:file:_files'",
+                "                    fi",
+                "                    ;;",
                 "                journal)",
                 "                    _arguments \\",
                 $"                        '1:subcommand:({journalSubcommands})' \\",
@@ -1705,6 +1751,8 @@ public static class CompletionsCommand
         var releaseOptions = FormatPowerShellArray(ReleaseSubcommands.Concat(ReleaseOptions));
         var releasePilotSubcommands = FormatPowerShellArray(ReleasePilotSubcommands);
         var releasePilotSupportReviewSubcommands = FormatPowerShellArray(ReleasePilotSupportReviewSubcommands);
+        var rvtOptions = FormatPowerShellArray(RvtSubcommands.Concat(RvtOptions));
+        var rvtSubcommands = FormatPowerShellArray(RvtSubcommands);
         var sheetsOptions = FormatPowerShellArray(SheetsSubcommands.Concat(SheetsOptions));
         var roomsOptions = FormatPowerShellArray(RoomsSubcommands.Concat(RoomsOptions));
         var marksOptions = FormatPowerShellArray(MarksSubcommands.Concat(MarksOptions));
@@ -1751,6 +1799,7 @@ public static class CompletionsCommand
         var issueFailOnValues = FormatPowerShellArray(IssueFailOnValues);
         var standardsOutputFormats = FormatPowerShellArray(StandardsOutputFormats);
         var releaseOutputFormats = FormatPowerShellArray(ReleaseOutputFormats);
+        var rvtOutputFormats = FormatPowerShellArray(RvtOutputFormats);
         var sheetsOutputFormats = FormatPowerShellArray(SheetsOutputFormats);
         var roomsOutputFormats = FormatPowerShellArray(RoomsOutputFormats);
         var marksOutputFormats = FormatPowerShellArray(MarksOutputFormats);
@@ -1811,6 +1860,7 @@ public static class CompletionsCommand
             $"        'issue' = @({issueOptions})",
             $"        'standards' = @({standardsOptions})",
             $"        'release' = @({releaseOptions})",
+            $"        'rvt' = @({rvtOptions})",
             $"        'sheets' = @({sheetsOptions})",
             $"        'rooms' = @({roomsOptions})",
             $"        'marks' = @({marksOptions})",
@@ -1863,6 +1913,8 @@ public static class CompletionsCommand
             $"    $releaseOutputFormats = @({releaseOutputFormats})",
             $"    $releasePilotSubcommands = @({releasePilotSubcommands})",
             $"    $releasePilotSupportReviewSubcommands = @({releasePilotSupportReviewSubcommands})",
+            $"    $rvtSubcommands = @({rvtSubcommands})",
+            $"    $rvtOutputFormats = @({rvtOutputFormats})",
             $"    $sheetsOutputFormats = @({sheetsOutputFormats})",
             $"    $roomsOutputFormats = @({roomsOutputFormats})",
             $"    $marksOutputFormats = @({marksOutputFormats})",
@@ -2314,6 +2366,27 @@ public static class CompletionsCommand
             "            }",
             "",
             "            New-RevitCliCompletionResults -Values $commandOptions['release'] -ToolTip 'Release option'",
+            "            return",
+            "        }",
+            "        'rvt' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $rvtOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--report') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $rvtSubcommands -ToolTip 'RVT subcommand'",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 3 -or ($tokens.Count -eq 4 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['rvt'] -ToolTip 'RVT option'",
             "            return",
             "        }",
             "        'sheets' {",

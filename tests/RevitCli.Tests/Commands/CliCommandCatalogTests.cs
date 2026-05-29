@@ -41,6 +41,7 @@ public class CliCommandCatalogTests
         Assert.Contains("deliverables", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
+        Assert.Contains("rvt", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -84,6 +85,7 @@ public class CliCommandCatalogTests
         Assert.Contains("rollback", names);
         Assert.Contains("deliverables", names);
         Assert.Contains("release", names);
+        Assert.Contains("rvt", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -107,6 +109,7 @@ public class CliCommandCatalogTests
         Assert.Contains("deliverables", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
+        Assert.Contains("rvt", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -122,6 +125,19 @@ public class CliCommandCatalogTests
             CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "workbench contract" &&
                      entry.Description.Contains("exit-code"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeRvtCleanup()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "rvt scan" &&
+                     entry.Description.Contains("classify numbered Revit backups"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "rvt clean-backups" &&
+                     entry.Description.Contains("dry-run review"));
     }
 
     [Fact]

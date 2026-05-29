@@ -36,6 +36,7 @@ internal static class CliCommandCatalog
         ("issue", "Run issue preflight, diff, and package contracts"),
         ("standards", "Install and validate local office standards requirements"),
         ("release", "Verify local release readiness and CI guardrails"),
+        ("rvt", "Find RVT files and clean numbered Revit backups"),
         ("sheets", "Verify sheet numbering and local sheet-frame expectations"),
         ("rooms", "Plan and review room numbering workflows"),
         ("marks", "Plan and verify door/window Mark numbering workflows"),
@@ -121,6 +122,8 @@ internal static class CliCommandCatalog
         ("release pilot claim", "Claim v6 office rollout completion after validated pilot evidence"),
         ("release pilot support-review scaffold", "Create a public-safe v6 production support review summary scaffold"),
         ("release pilot support-review validate", "Validate a public-safe v6 production support review summary"),
+        ("rvt scan", "List RVT files and classify numbered Revit backups"),
+        ("rvt clean-backups", "Delete numbered Revit backup files after dry-run review"),
         ("sheets verify", "Verify sheet numbering, required sheets, and placed-view counts"),
         ("sheets issue-meta", "Plan sheet issue metadata updates with frozen sheet ids"),
         ("sheets renumber", "Plan sheet number updates from numbering rules with frozen sheet ids"),
@@ -212,6 +215,7 @@ internal static class CliCommandCatalog
         root.AddCommand(IssueCommand.Create(client));
         root.AddCommand(StandardsCommand.Create());
         root.AddCommand(ReleaseCommand.Create());
+        root.AddCommand(RvtCommand.Create());
         root.AddCommand(SheetsCommand.Create(client));
         root.AddCommand(RoomsCommand.Create(client));
         root.AddCommand(MarksCommand.Create(client));

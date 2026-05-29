@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added — RVT backup cleanup
+
+- Added `revitcli rvt scan` and `revitcli rvt clean-backups` to find local
+  `.rvt` files, classify numbered backups such as `model.0001.rvt`, preview
+  cleanup candidates with JSON/Markdown reports, and delete only after
+  explicit `--apply --yes` confirmation.
+
 ## [6.0.0] - 2026-05-29
 
 ### Added — v2.4 safe batch plans

@@ -136,6 +136,16 @@ public static class WorkbenchCommand
             "revitcli release verify --strict --output json",
             "0 when release gates pass; 1 when required docs, workflows, smoke disclosures, or strict gates fail."),
         new(
+            "rvt",
+            "Find RVT files and clean Revit numbered backup files from local folders.",
+            "local-write",
+            SupportsJson: true,
+            SupportsMarkdown: true,
+            "required before backup cleanup apply",
+            "rvt-backup-cleanup-report.v1 when --report is used",
+            "revitcli rvt clean-backups . --dry-run --output markdown",
+            "0 when scans or cleanups complete; 1 for invalid paths/options/refused cleanup; 2 for partial delete failures."),
+        new(
             "check",
             "Run profile-driven model checks as a gate before issue work.",
             "read-only",
@@ -571,6 +581,20 @@ public static class WorkbenchCommand
             SupportsMarkdown: true,
             "One-command terminal handoff summary with verification status, project artifact counts, readiness actions, and next commands."),
         new(
+            "rvt-file-scan",
+            "rvt scan",
+            SupportsTable: true,
+            "rvt-file-scan.v1",
+            SupportsMarkdown: true,
+            "Read-only local RVT file inventory with numbered backup and orphan backup classification."),
+        new(
+            "rvt-backup-cleanup",
+            "rvt clean-backups",
+            SupportsTable: true,
+            "rvt-backup-cleanup-report.v1",
+            SupportsMarkdown: true,
+            "Dry-run-first cleanup report for numbered Revit backup files."),
+        new(
             "schedule-create",
             "schedule create",
             SupportsTable: true,
@@ -925,6 +949,15 @@ public static class WorkbenchCommand
             "family-purge-report.v1 when --report is used",
             "revitcli family validate --output json",
             "Family purge defaults to dry-run and applies only with explicit approval."),
+        new(
+            "rvt-clean-backups",
+            "rvt clean-backups",
+            "local-write",
+            "revitcli rvt clean-backups . --dry-run --output markdown --report .revitcli/reports/rvt-backups.json",
+            "revitcli rvt clean-backups . --apply --yes --report .revitcli/reports/rvt-backups-applied.json",
+            "rvt-backup-cleanup-report.v1 when --report is used",
+            "revitcli rvt scan . --output markdown",
+            "RVT backup cleanup defaults to dry-run and deletes only numbered backups with explicit approval."),
         new(
             "history-prune",
             "history prune",
@@ -2136,6 +2169,8 @@ public static class WorkbenchCommand
             "release pilot claim",
             "release pilot support-review scaffold",
             "release pilot support-review validate",
+            "rvt scan",
+            "rvt clean-backups",
             "examples workbench",
             "examples workflow",
             "score --history",
@@ -2791,7 +2826,7 @@ public static class WorkbenchCommand
         var safeguardIndex = CreateSafeguardIndex();
         var requiredSafeguards = new[]
         {
-            "export", "publish", "plan-apply", "rollback", "workflow-run", "deliverables-bundle", "issue-package", "schedule-create", "schedules-ensure", "views-template-apply", "views-clone-set", "links-repair", "model-map-fix", "sheet-issue-meta", "sheet-renumber", "rooms-renumber", "marks-assign"
+            "export", "publish", "plan-apply", "rollback", "workflow-run", "deliverables-bundle", "issue-package", "schedule-create", "schedules-ensure", "views-template-apply", "views-clone-set", "links-repair", "model-map-fix", "sheet-issue-meta", "sheet-renumber", "rooms-renumber", "marks-assign", "rvt-clean-backups"
         };
         var safeguardNames = safeguardIndex.Safeguards
             .Select(safeguard => safeguard.Name)
@@ -9792,6 +9827,7 @@ schedules:
                 "release pilot support-review scaffold",
                 "release pilot support-review validate",
             },
+            "rvt" => new[] { "rvt scan", "rvt clean-backups" },
             "check" => new[] { "check" },
             "score" => new[] { "score", "score --history" },
             "sheets" => new[] { "sheets verify", "sheets issue-meta", "sheets renumber", "sheets index init", "sheets index show" },

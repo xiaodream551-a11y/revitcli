@@ -69,6 +69,8 @@ revitcli standards install profiles/office-standard --dry-run --output markdown 
 revitcli standards install profiles/office-standard              # bootstrap a new project
 revitcli standards validate --output markdown                # check local office standards
 revitcli family purge --dry-run --report .revitcli/reports/family-purge.json # review cleanup candidates
+revitcli rvt scan /mnt/d/revit --output markdown             # find RVT files and numbered backups
+revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown # preview .0001.rvt backup cleanup
 revitcli release verify --tag v6.0.0 --output markdown       # local release preflight handoff
 revitcli release verify --strict --output markdown           # v5 RC / v6 release no-go gate
 revitcli publish --since baseline.json                       # incremental re-export
@@ -133,6 +135,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli ledger timeline` | Bucket local ledger project memory by day or hour with source, action, category counts per bucket, operator counts per bucket, receipt status, issue severity, and unbucketed timestamp evidence as `ledger-timeline.v1` without writing or requiring Revit |
 | `revitcli deliverables list` / `stats` / `verify` / `plan` / `bundle` | Review delivery plans, manifest entries, receipt traceability, and package handoff zips |
 | `revitcli standards install` / `validate` | Install and validate required profiles, workflows, outputs, schedules, and family rules |
+| `revitcli rvt scan` / `clean-backups` | Find local `.rvt` files, classify `model.0001.rvt` backups, and delete numbered backups only after dry-run review plus `--apply --yes` |
 | `revitcli release verify` | Check local release files, version/tag consistency, CI guardrails, v5.0 RC and v6.0 release boundary docs, and smoke documentation; use `--strict` for no-go blocking and `--output markdown` for handoff notes |
 | `revitcli snapshot` | Capture model semantic state as JSON |
 | `revitcli diff <from> <to>` | Diff two snapshots, or add `--review` for anomaly/notable/routine triage |
@@ -302,6 +305,13 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 - `family ls --unused` lists unplaced families before cleanup.
 - `family purge` defaults to dry-run unless `--apply --yes` is provided.
 - `family purge --dry-run --report .revitcli/reports/family-purge.json` writes a stable `family-purge-report.v1` JSON artifact with candidates, keep-pattern matches, placed/in-place exclusions, safety gates, and apply results.
+
+### RVT File Cleanup
+
+- `rvt scan <root> --output json|markdown` recursively lists local `.rvt` files and classifies numbered Revit backups such as `model.0001.rvt` without requiring Revit.
+- `rvt clean-backups <root> --dry-run --report .revitcli/reports/rvt-backups.json` previews backup deletion candidates with file size, timestamp, main-file linkage, orphan status, and skipped reasons.
+- `rvt clean-backups <root> --apply --yes` deletes only matched numbered backups. By default it requires the same-directory main file, skips orphan backups, and leaves ordinary names such as `project.2026.rvt` untouched.
+- Add `--include-orphans` only when orphaned numbered backups should also be deleted, and `--older-than 7d` to require an age threshold.
 - The built-in `family-cleanup` workflow uses the same purge report path so Codex CLI can show review evidence before destructive cleanup.
 
 Example manifest:
