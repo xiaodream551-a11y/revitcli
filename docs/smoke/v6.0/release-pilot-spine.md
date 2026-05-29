@@ -25,9 +25,11 @@ The portable CLI spine is intentionally dry-run first:
    emits `release-pilot-validate.v1`, reports validation issues before status
    registration, and uses validate `nextActions` for safe repair.
 3. `release pilot register --pilot-id v6-synthetic-pilot-spine-01 --path docs/smoke/v6.0/v6-synthetic-pilot-spine-01.md --output json`
-   is a dry-run register path, emits `release-pilot-register.v1`, reports
-   `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
-   register nextActions without mutating rollout status.
+   is a rejected dry-run register path, emits `release-pilot-register.v1`,
+   reports `completedOfficePilotCountBefore`,
+   `completedOfficePilotCountAfter`, and register nextActions without mutating
+   rollout status. The register/status gates reject synthetic or local
+   controlled evidence so this fixture cannot become a completed office pilot.
 4. `release pilot status --output json` emits `release-pilot-status.v1`,
    reports `missingEvidence`, `missingEvidenceSummary`,
    `evidenceCompleteOfficePilotCount`,
@@ -36,12 +38,21 @@ The portable CLI spine is intentionally dry-run first:
 5. `release pilot claim --output json` emits `release-pilot-claim.v1`, remains
    dry-run first, reports machine-readable `claimBlockers`, and keeps
    completion/support writes behind explicit readiness gates.
+6. `release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json`
+   emits `release-pilot-support-review-scaffold.v1` for the public-safe
+   production support review summary path, reports
+   `rolloutStatusMutated=false`, and does not turn a blank scaffold into a
+   production support claim.
+7. `release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json`
+   emits `release-pilot-support-review-validate.v1`, checks the public-safe
+   summary before claim, and keeps blank summaries claim-blocking.
 
 ## Result Boundary
 
-The synthetic spine proves the helper commands, schemas, dry-run behavior, and
-machine-readable nextActions. It does not satisfy the office rollout pilot
-threshold in `docs/smoke/v6.0/office-rollout-status.json`. Real completion still
-requires 2-3 completed office pilots with private review, BIM manager signoff,
+The synthetic spine proves the helper commands, schemas, dry-run behavior,
+machine-readable nextActions, and support review validation shape. It does not
+satisfy the office rollout pilot threshold in
+`docs/smoke/v6.0/office-rollout-status.json`. Real completion still requires
+2-3 completed office pilots with private review, BIM manager signoff,
 project-copy owner signoff, support ticket review, and multi-user rollout
 postmortem evidence.

@@ -74,7 +74,8 @@ public static class CompletionsCommand
         { "--manifest", "--dir", "--output", "--ref", "--subpath", "--force", "--dry-run" };
     private static readonly string[] StandardsOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] ReleaseSubcommands = { "verify", "pilot" };
-    private static readonly string[] ReleasePilotSubcommands = { "scaffold", "validate", "register", "status", "claim" };
+    private static readonly string[] ReleasePilotSubcommands = { "scaffold", "validate", "register", "status", "claim", "support-review" };
+    private static readonly string[] ReleasePilotSupportReviewSubcommands = { "scaffold", "validate" };
     private static readonly string[] ReleaseOptions = { "--root", "--output", "--tag", "--strict", "--pilot-id", "--path", "--force", "--yes", "--production-support", "--support-review" };
     private static readonly string[] ReleaseOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] SheetsSubcommands = { "verify", "issue-meta", "renumber", "index", "init", "show" };
@@ -318,6 +319,7 @@ public static class CompletionsCommand
         var releaseWords = JoinWords(ReleaseSubcommands.Concat(ReleaseOptions));
         var releaseOptions = JoinWords(ReleaseOptions);
         var releasePilotSubcommands = JoinWords(ReleasePilotSubcommands);
+        var releasePilotSupportReviewSubcommands = JoinWords(ReleasePilotSupportReviewSubcommands);
         var releaseOutputFormats = JoinWords(ReleaseOutputFormats);
         var sheetsWords = JoinWords(SheetsSubcommands.Concat(SheetsOptions));
         var sheetsOptions = JoinWords(SheetsOptions);
@@ -793,7 +795,7 @@ public static class CompletionsCommand
             "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
             "                    return",
             "                    ;;",
-            "                --path)",
+            "                --path|--support-review)",
             "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
             "                    return",
             "                    ;;",
@@ -804,6 +806,10 @@ public static class CompletionsCommand
             "            fi",
             "            if [ \"${COMP_WORDS[2]}\" = \"pilot\" ] && [ $COMP_CWORD -eq 3 ]; then",
             $"                COMPREPLY=($(compgen -W \"{releasePilotSubcommands}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            "            if [ \"${COMP_WORDS[2]}\" = \"pilot\" ] && [ \"${COMP_WORDS[3]}\" = \"support-review\" ] && [ $COMP_CWORD -eq 4 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{releasePilotSupportReviewSubcommands}\" -- \"$cur\"))",
             "                return",
             "            fi",
             $"            COMPREPLY=($(compgen -W \"{releaseOptions}\" -- \"$cur\"))",
@@ -1078,6 +1084,7 @@ public static class CompletionsCommand
         var standardsOutputFormats = JoinWords(StandardsOutputFormats);
         var releaseSubcommands = JoinWords(ReleaseSubcommands);
         var releasePilotSubcommands = JoinWords(ReleasePilotSubcommands);
+        var releasePilotSupportReviewSubcommands = JoinWords(ReleasePilotSupportReviewSubcommands);
         var releaseOutputFormats = JoinWords(ReleaseOutputFormats);
         var sheetsSubcommands = JoinWords(SheetsSubcommands);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
@@ -1428,6 +1435,8 @@ public static class CompletionsCommand
                 "                release)",
                 "                    if (( CURRENT == 3 )); then",
             $"                        _values 'subcommand' {releaseSubcommands}",
+                "                    elif [[ ${words[3]} == pilot && ${words[4]} == support-review && CURRENT == 5 ]]; then",
+            $"                        _values 'subcommand' {releasePilotSupportReviewSubcommands}",
                 "                    elif [[ ${words[3]} == pilot && CURRENT == 4 ]]; then",
             $"                        _values 'subcommand' {releasePilotSubcommands}",
                 "                    else",
@@ -1438,7 +1447,10 @@ public static class CompletionsCommand
                 "                            '--strict[Treat warnings as failures]' \\",
                 "                            '--pilot-id[Public-safe pilot identifier]:pilot-id:' \\",
                 "                            '--path[Evidence packet path]:file:_files' \\",
-                "                            '--force[Overwrite an existing evidence packet]'",
+                "                            '--force[Overwrite an existing evidence packet]' \\",
+                "                            '--yes[Write the requested release state change]' \\",
+                "                            '--production-support[Claim production support after rollout readiness]' \\",
+                "                            '--support-review[Production support review summary path]:file:_files'",
                 "                    fi",
                 "                    ;;",
                 "                sheets)",
@@ -1692,6 +1704,7 @@ public static class CompletionsCommand
         var standardsOptions = FormatPowerShellArray(StandardsSubcommands.Concat(StandardsOptions));
         var releaseOptions = FormatPowerShellArray(ReleaseSubcommands.Concat(ReleaseOptions));
         var releasePilotSubcommands = FormatPowerShellArray(ReleasePilotSubcommands);
+        var releasePilotSupportReviewSubcommands = FormatPowerShellArray(ReleasePilotSupportReviewSubcommands);
         var sheetsOptions = FormatPowerShellArray(SheetsSubcommands.Concat(SheetsOptions));
         var roomsOptions = FormatPowerShellArray(RoomsSubcommands.Concat(RoomsOptions));
         var marksOptions = FormatPowerShellArray(MarksSubcommands.Concat(MarksOptions));
@@ -1849,6 +1862,7 @@ public static class CompletionsCommand
             $"    $standardsOutputFormats = @({standardsOutputFormats})",
             $"    $releaseOutputFormats = @({releaseOutputFormats})",
             $"    $releasePilotSubcommands = @({releasePilotSubcommands})",
+            $"    $releasePilotSupportReviewSubcommands = @({releasePilotSupportReviewSubcommands})",
             $"    $sheetsOutputFormats = @({sheetsOutputFormats})",
             $"    $roomsOutputFormats = @({roomsOutputFormats})",
             $"    $marksOutputFormats = @({marksOutputFormats})",
@@ -2282,8 +2296,12 @@ public static class CompletionsCommand
             "                New-RevitCliCompletionResults -Values $releaseOutputFormats -ToolTip 'Output format'",
             "                return",
             "            }",
-            "            if ($previous -eq '--root' -or $previous -eq '--path') {",
+            "            if ($previous -eq '--root' -or $previous -eq '--path' -or $previous -eq '--support-review') {",
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if ($tokens.Count -ge 4 -and $tokens[2] -eq 'pilot' -and $tokens[3] -eq 'support-review' -and (($tokens.Count -eq 4 -and $endsWithSpace) -or ($tokens.Count -eq 5 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $releasePilotSupportReviewSubcommands -ToolTip 'Release pilot support-review subcommand'",
             "                return",
             "            }",
             "            if ($tokens.Count -ge 3 -and $tokens[2] -eq 'pilot' -and (($tokens.Count -eq 3 -and $endsWithSpace) -or ($tokens.Count -eq 4 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",

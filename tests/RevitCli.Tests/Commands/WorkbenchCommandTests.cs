@@ -48,7 +48,10 @@ public sealed class WorkbenchCommandTests
         Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "release" &&
             command.GetProperty("supportsJson").GetBoolean() &&
-            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release verify --strict"));
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release verify --strict") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot scaffold") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review scaffold") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review validate"));
         Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "inspect" &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "inspect plans"));
@@ -1087,6 +1090,130 @@ Post-rollback evidence
     }
 
     [Fact]
+    public async Task Verify_Json_WithContractV2_FailsWhenV60ProductionSupportReviewTemplateIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"revitcli-workbench-v60-missing-support-review-template-{Guid.NewGuid():N}");
+        var previousDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "docs"), Path.Combine(root, "docs"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "office-standard"), Path.Combine(root, "profiles", "office-standard"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "team-pilot"), Path.Combine(root, "profiles", "team-pilot"));
+            File.Delete(Path.Combine(root, "docs", "smoke", "v6.0", "production-support-review-template.md"));
+            Directory.SetCurrentDirectory(FindRepositoryRoot());
+            var output = new StringWriter();
+
+            var exitCode = await WorkbenchCommand.ExecuteVerifyAsync(
+                output,
+                "json",
+                projectDirectory: root,
+                contractSchema: "workbench-contract.v2");
+
+            Assert.Equal(1, exitCode);
+            using var document = JsonDocument.Parse(output.ToString());
+            Assert.Contains(
+                document.RootElement.GetProperty("checks").EnumerateArray(),
+                check => check.GetProperty("id").GetString() == "v60LocalBimOpsContractGate" &&
+                    check.GetProperty("status").GetString() == "fail" &&
+                    check.GetProperty("evidence").GetString()!.Contains("production-support-review-template.md", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Verify_Json_WithContractV2_FailsWhenV60ProductionSupportReviewTitleAndFieldAreMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"revitcli-workbench-v60-missing-support-review-title-{Guid.NewGuid():N}");
+        var previousDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "docs"), Path.Combine(root, "docs"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "office-standard"), Path.Combine(root, "profiles", "office-standard"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "team-pilot"), Path.Combine(root, "profiles", "team-pilot"));
+            var templatePath = Path.Combine(root, "docs", "smoke", "v6.0", "production-support-review-template.md");
+            File.WriteAllText(
+                templatePath,
+                File.ReadAllText(templatePath)
+                    .Replace("Production Support Review Summary", "Support Review Summary", StringComparison.Ordinal)
+                    .Replace("Production support review", "Support review", StringComparison.Ordinal));
+            Directory.SetCurrentDirectory(FindRepositoryRoot());
+            var output = new StringWriter();
+
+            var exitCode = await WorkbenchCommand.ExecuteVerifyAsync(
+                output,
+                "json",
+                projectDirectory: root,
+                contractSchema: "workbench-contract.v2");
+
+            Assert.Equal(1, exitCode);
+            using var document = JsonDocument.Parse(output.ToString());
+            Assert.Contains(
+                document.RootElement.GetProperty("checks").EnumerateArray(),
+                check => check.GetProperty("id").GetString() == "v60LocalBimOpsContractGate" &&
+                    check.GetProperty("status").GetString() == "fail" &&
+                    check.GetProperty("evidence").GetString()!.Contains("Production Support Review Summary", StringComparison.OrdinalIgnoreCase) &&
+                    check.GetProperty("evidence").GetString()!.Contains("Production support review", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("private support review approved", "support review approved")]
+    [InlineData("office rollout completion", "rollout completion")]
+    [InlineData("production support claim", "support claim")]
+    [InlineData("Blank fields are not claim-ready", "Blank fields are drafts")]
+    [InlineData("release pilot claim --production-support --support-review", "release pilot claim --production-support --review")]
+    public async Task Verify_Json_WithContractV2_FailsWhenV60ProductionSupportReviewTemplatePhraseIsMissing(
+        string requiredPhrase,
+        string replacement)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"revitcli-workbench-v60-missing-support-review-phrase-{Guid.NewGuid():N}");
+        var previousDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "docs"), Path.Combine(root, "docs"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "office-standard"), Path.Combine(root, "profiles", "office-standard"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "team-pilot"), Path.Combine(root, "profiles", "team-pilot"));
+            var templatePath = Path.Combine(root, "docs", "smoke", "v6.0", "production-support-review-template.md");
+            var text = File.ReadAllText(templatePath);
+            Assert.Contains(requiredPhrase, text, StringComparison.Ordinal);
+            File.WriteAllText(templatePath, text.Replace(requiredPhrase, replacement, StringComparison.Ordinal));
+            Directory.SetCurrentDirectory(FindRepositoryRoot());
+            var output = new StringWriter();
+
+            var exitCode = await WorkbenchCommand.ExecuteVerifyAsync(
+                output,
+                "json",
+                projectDirectory: root,
+                contractSchema: "workbench-contract.v2");
+
+            Assert.Equal(1, exitCode);
+            using var document = JsonDocument.Parse(output.ToString());
+            Assert.Contains(
+                document.RootElement.GetProperty("checks").EnumerateArray(),
+                check => check.GetProperty("id").GetString() == "v60LocalBimOpsContractGate" &&
+                    check.GetProperty("status").GetString() == "fail" &&
+                    check.GetProperty("evidence").GetString()!.Contains(requiredPhrase, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Verify_Json_WithContractV2_FailsWhenV60PilotEvidenceSignoffIsMissing()
     {
         var root = Path.Combine(Path.GetTempPath(), $"revitcli-workbench-v60-missing-pilot-signoff-{Guid.NewGuid():N}");
@@ -1513,6 +1640,51 @@ Post-rollback evidence
             var mismatchedPacketPath = Path.Combine(root, "docs", "smoke", "v6.0", "pilot-02.md");
             Directory.CreateDirectory(Path.GetDirectoryName(mismatchedPacketPath)!);
             File.WriteAllText(mismatchedPacketPath, CompletedPilotEvidencePacketContent("pilot-03"));
+            Directory.SetCurrentDirectory(FindRepositoryRoot());
+            var output = new StringWriter();
+
+            var exitCode = await WorkbenchCommand.ExecuteVerifyAsync(
+                output,
+                "json",
+                projectDirectory: root,
+                contractSchema: "workbench-contract.v2");
+
+            Assert.Equal(1, exitCode);
+            using var document = JsonDocument.Parse(output.ToString());
+            Assert.Contains(
+                document.RootElement.GetProperty("checks").EnumerateArray(),
+                check => check.GetProperty("id").GetString() == "v60LocalBimOpsContractGate" &&
+                    check.GetProperty("status").GetString() == "fail" &&
+                    check.GetProperty("evidence").GetString()!.Contains("completedPilots", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Verify_Json_WithContractV2_FailsWhenV60OfficeRolloutUsesSyntheticPilotEvidence()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"revitcli-workbench-v60-office-rollout-synthetic-{Guid.NewGuid():N}");
+        var previousDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "docs"), Path.Combine(root, "docs"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "office-standard"), Path.Combine(root, "profiles", "office-standard"));
+            CopyDirectory(Path.Combine(FindRepositoryRoot(), "profiles", "team-pilot"), Path.Combine(root, "profiles", "team-pilot"));
+            var statusPath = Path.Combine(root, "docs", "smoke", "v6.0", "office-rollout-status.json");
+            File.WriteAllText(
+                statusPath,
+                File.ReadAllText(statusPath)
+                    .Replace("\"completedOfficePilotCount\": 0", "\"completedOfficePilotCount\": 2", StringComparison.Ordinal)
+                    .Replace("\"completedPilotIds\": []", "\"completedPilotIds\": [\"v6-synthetic-pilot-spine-01\", \"pilot-02\"]", StringComparison.Ordinal)
+                    .Replace("\"completedPilots\": []", "\"completedPilots\": [" + CompletedPilotEvidenceJson("v6-synthetic-pilot-spine-01") + ", " + CompletedPilotEvidenceJson("pilot-02") + "]", StringComparison.Ordinal)
+                    .Replace("\"officeRolloutCompletion\": false", "\"officeRolloutCompletion\": true", StringComparison.Ordinal)
+                    .Replace("\"productionSupportClaim\": false", "\"productionSupportClaim\": true", StringComparison.Ordinal));
+            WriteCompletedPilotEvidencePackets(root, "v6-synthetic-pilot-spine-01", "pilot-02");
             Directory.SetCurrentDirectory(FindRepositoryRoot());
             var output = new StringWriter();
 
@@ -2714,6 +2886,18 @@ journal verify
             path.GetProperty("command").GetString() == "workbench" &&
             path.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "release pilot scaffold" &&
+            path.GetProperty("command").GetString() == "release" &&
+            path.GetProperty("supportsJson").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "release pilot support-review validate" &&
+            path.GetProperty("command").GetString() == "release" &&
+            path.GetProperty("supportsJson").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "release pilot support-review scaffold" &&
+            path.GetProperty("command").GetString() == "release" &&
+            path.GetProperty("supportsJson").GetBoolean());
+        Assert.Contains(paths, path =>
             path.GetProperty("path").GetString() == "plan apply" &&
             path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase) &&
             path.GetProperty("exitCodeNotes").GetString()!.Contains("validation", StringComparison.OrdinalIgnoreCase));
@@ -3572,6 +3756,7 @@ journal verify
         File.WriteAllText(path, """
 # Production support review
 
+- Production support review: complete
 - private support review approved: yes
 - office rollout completion: reviewed
 - production support claim: approved
@@ -3608,6 +3793,6 @@ journal verify
         - Support ticket review: reviewed
         - Multi-user rollout postmortem: complete
 
-        Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime.
+        Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime. This single packet is not office rollout completion by itself; threshold and claim gates still decide rollout completion.
         """;
 }

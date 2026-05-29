@@ -13,6 +13,7 @@ using RevitCli.Config;
 using RevitCli.History;
 using RevitCli.Output;
 using RevitCli.Plans;
+using RevitCli.Release;
 using RevitCli.Shared;
 using RevitCli.Standards;
 using RevitCli.Team;
@@ -2128,6 +2129,13 @@ public static class WorkbenchCommand
             "workbench project",
             "workbench handoff",
             "release verify --strict",
+            "release pilot scaffold",
+            "release pilot validate",
+            "release pilot register",
+            "release pilot status",
+            "release pilot claim",
+            "release pilot support-review scaffold",
+            "release pilot support-review validate",
             "examples workbench",
             "examples workflow",
             "score --history",
@@ -3918,6 +3926,11 @@ public static class WorkbenchCommand
             "release pilot claim",
             "claimBlockers",
             "nextActions",
+            "release pilot support-review scaffold",
+            "release-pilot-support-review-scaffold.v1",
+            "release pilot support-review validate",
+            "release-pilot-support-review-validate.v1",
+            "complete private support review summary",
             "ledger-append.v1",
             "ledger-replay.v1",
             "ledger-query.v1",
@@ -3973,6 +3986,9 @@ public static class WorkbenchCommand
             "office rollout pilots",
             "--support-review",
             "productionSupportReviewPath",
+            "release pilot support-review validate",
+            "release-pilot-support-review-validate.v1",
+            "complete private support review summary",
             "pilot evidence packet",
             "local controlled pilot packet",
             "read-only ledger query",
@@ -4058,6 +4074,7 @@ public static class WorkbenchCommand
             "release pilot register",
             "register nextActions",
             "invalid register identifiers and paths route back to a public-safe intake path",
+            "reject synthetic or local controlled evidence",
             "release pilot status",
             "missingEvidence",
             "missingEvidenceSummary",
@@ -4068,6 +4085,12 @@ public static class WorkbenchCommand
             "claimBlockers",
             "nextActions",
             "--support-review",
+            "release pilot support-review scaffold",
+            "release-pilot-support-review-scaffold.v1",
+            "release pilot support-review validate",
+            "release-pilot-support-review-validate.v1",
+            "complete private support review summary",
+            "rolloutStatusMutated=false",
             "productionSupportReviewPath",
             "Support review creation is deferred until the completed pilot threshold",
             "doctor --check-version 2026 --output json",
@@ -4111,6 +4134,38 @@ public static class WorkbenchCommand
                 "v60LocalBimOpsContractGate",
                 false,
                 $"docs/smoke/v6.0/pilot-evidence-template.md has contradictory or bare non-goal boundary disclosures: {string.Join(", ", pilotEvidenceBoundaryIssues)}.");
+        }
+
+        var supportReviewTemplatePath = Path.Combine(docsRoot, "smoke", "v6.0", "production-support-review-template.md");
+        var supportReviewTemplateText = TryReadText(supportReviewTemplatePath);
+        if (string.IsNullOrWhiteSpace(supportReviewTemplateText))
+        {
+            return Check(
+                "v60LocalBimOpsContractGate",
+                false,
+                "docs/smoke/v6.0/production-support-review-template.md is missing or unreadable; v6.0 production support review scaffolding is not disclosed.");
+        }
+
+        var supportReviewTemplatePhrases = new[]
+        {
+            "Production Support Review Summary",
+            "Production support review",
+            "private support review approved",
+            "office rollout completion",
+            "production support claim",
+            "Blank fields are not claim-ready",
+            "release pilot support-review validate",
+            "release pilot claim --production-support --support-review",
+        };
+        var missingSupportReviewTemplate = supportReviewTemplatePhrases
+            .Where(phrase => !supportReviewTemplateText.Contains(phrase, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (missingSupportReviewTemplate.Length > 0)
+        {
+            return Check(
+                "v60LocalBimOpsContractGate",
+                false,
+                $"docs/smoke/v6.0/production-support-review-template.md is missing production support review template disclosures: {string.Join(", ", missingSupportReviewTemplate)}.");
         }
 
         var officeRolloutStatusPath = Path.Combine(docsRoot, "smoke", "v6.0", "office-rollout-status.json");
@@ -8396,7 +8451,8 @@ steps:
             return false;
         }
 
-        return ContainsPilotIdentifier(text, expectedPilotId) &&
+        return IsOfficePilotEvidenceCandidate(expectedPilotId, relativePath, text) &&
+            ContainsPilotIdentifier(text, expectedPilotId) &&
             ContainsAll(text,
             "Pilot identifier",
             "Required Commands",
@@ -8418,6 +8474,9 @@ steps:
             "Multi-user rollout postmortem",
             "Boundary summary");
     }
+
+    private static bool IsOfficePilotEvidenceCandidate(string pilotId, string? relativePath, string text) =>
+        OfficePilotEvidenceGuard.IsOfficePilotEvidenceCandidate(pilotId, relativePath, text);
 
     private static bool ProductionSupportReviewComplete(string root, JsonElement status)
     {
@@ -8443,12 +8502,7 @@ steps:
         try
         {
             var text = File.ReadAllText(fullPath);
-            return ContainsAll(
-                text,
-                "Production support review",
-                "private support review approved",
-                "office rollout completion",
-                "production support claim");
+            return ProductionSupportReviewGuard.IsComplete(text);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -9726,7 +9780,18 @@ schedules:
                 "workbench project",
                 "workbench handoff"
             },
-            "release" => new[] { "release verify", "release verify --strict" },
+            "release" => new[]
+            {
+                "release verify",
+                "release verify --strict",
+                "release pilot scaffold",
+                "release pilot validate",
+                "release pilot register",
+                "release pilot status",
+                "release pilot claim",
+                "release pilot support-review scaffold",
+                "release pilot support-review validate",
+            },
             "check" => new[] { "check" },
             "score" => new[] { "score", "score --history" },
             "sheets" => new[] { "sheets verify", "sheets issue-meta", "sheets renumber", "sheets index init", "sheets index show" },

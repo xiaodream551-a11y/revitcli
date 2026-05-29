@@ -22,7 +22,10 @@ evidence review is complete. Register outputs include machine-readable
 `register nextActions` for validation failures, dry-run writes, and post-write
 status checks. Duplicate register attempts route to status plus a new public
 pilot id intake path. Invalid register identifiers and paths route back to a public-safe intake path
-instead of repeating unsafe input. Use
+instead of repeating unsafe input. Register and status gates reject synthetic or local controlled evidence,
+including packets that explicitly say they are not office rollout evidence, so
+command-spine fixtures and local controlled smoke packets cannot be counted as
+completed office pilots. Use
 `release pilot status --output json` to confirm remaining office pilots,
 registered packet validation, per-pilot `missingEvidence`, aggregate
 `missingEvidenceSummary`, `evidenceCompleteOfficePilotCount`,
@@ -40,7 +43,19 @@ write. Add
 `--production-support` only after the private support review approves it, and
 include `--support-review docs/smoke/v6.0/<support-review>.md` so
 `office-rollout-status.json` records a public-safe
-`productionSupportReviewPath` summary for the production support claim.
+`productionSupportReviewPath` summary for the production support claim. Create
+the public-safe summary with
+`release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json`;
+it emits `release-pilot-support-review-scaffold.v1`, keeps
+`rolloutStatusMutated=false`. Run
+`release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json`;
+it emits `release-pilot-support-review-validate.v1` and checks the filled
+public-safe summary before any production support claim. Blank fields remain
+claim-blocking until they are filled after private support review approval. If
+the production-support claim dry-run is blocked by support review readiness, its
+nextActions must include scaffolding the summary,
+`complete private support review summary`, running support-review validate, and
+rerunning the claim dry-run.
 Support review creation is deferred until the completed pilot threshold is
 satisfied, so premature production-support requests keep the next actions on
 pilot packet intake first.

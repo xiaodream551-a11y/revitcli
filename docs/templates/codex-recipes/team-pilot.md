@@ -38,8 +38,13 @@ Compare `completedOfficePilotCount` with `evidenceCompleteOfficePilotCount`
 and `remainingEvidenceCompleteOfficePilotCount` before any completion claim.
 After the threshold is met, run `revitcli release pilot claim --output json`
 as a dry-run and inspect `claimBlockers` and `nextActions` before any `--yes`
-completion write.
+completion write. For a production support claim, create the public-safe summary
+with `revitcli release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json`,
+fill every field after private review approval, validate it with
+`revitcli release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json`,
+then rerun the claim dry-run with `--production-support --support-review`.
 Do not claim office rollout completion until 2-3 completed office pilots have
 BIM manager signoff, project-copy owner signoff, support ticket review, and
 multi-user rollout postmortems. Keep the packet `Pilot identifier` identical
-to the registered pilot id.
+to the registered pilot id. Do not register synthetic or local controlled
+evidence packets; the v6 gates reject them as completed office rollout pilots.

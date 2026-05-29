@@ -246,6 +246,7 @@ Done means:
   `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
   register nextActions for validation failures, duplicate register attempts,
   invalid register identifiers and paths route back to a public-safe intake path,
+  synthetic or local controlled evidence is rejected so command-spine fixtures and local controlled smoke packets cannot count as completed office pilots,
   dry-run writes, and post-write status checks. `release pilot status` reports current
   completed/remaining office pilots, validates registered evidence packets,
   and surfaces per-pilot `missingEvidence` plus aggregate
@@ -262,9 +263,19 @@ Done means:
   completed pilots reach the threshold. Production support claims additionally
   require `--support-review docs/smoke/v6.0/<support-review>.md` so the status
   file records a public-safe `productionSupportReviewPath` summary after
-  private support review. Support review creation is deferred until the
-  completed pilot threshold is satisfied, so premature production-support
-  requests keep the next actions on pilot packet intake first.
+  private support review. `release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json`
+  creates that public-safe summary from the template, emits
+  `release-pilot-support-review-scaffold.v1`, reports
+  `rolloutStatusMutated=false`; `release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json`
+  emits `release-pilot-support-review-validate.v1` and checks the filled
+  public-safe summary before any production support claim. Blank fields remain
+  claim-blocking until they are filled after private approval. When a claim
+  dry-run is blocked by support review readiness, its nextActions include
+  scaffolding the summary, `complete private support review summary`,
+  running support-review validate, and rerunning the production-support claim
+  dry-run. Support review creation is deferred until the completed pilot
+  threshold is satisfied, so premature production-support requests keep the
+  next actions on pilot packet intake first.
 - `docs/smoke/v6.0/office-rollout-status.json` records the current
   machine-readable status as 0 completed office pilots and no office rollout
   completion claim. Future completion requires per-pilot evidence flags, not

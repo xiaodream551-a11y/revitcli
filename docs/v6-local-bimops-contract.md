@@ -408,7 +408,7 @@ The contract baseline is acceptable when:
   `completedOfficePilotCountBefore`, `completedOfficePilotCountAfter`, and
   register nextActions for validation failures, duplicate register attempts,
   invalid register identifiers and paths route back to a public-safe intake path,
-  dry-run writes, and post-write status checks. `release pilot status` reports the machine-readable office pilot rollout progress, registered packet
+  dry-run writes, and post-write status checks. Register and status gates reject synthetic or local controlled evidence so local smoke packets and command-spine fixtures cannot satisfy the office rollout threshold. `release pilot status` reports the machine-readable office pilot rollout progress, registered packet
   validation, per-pilot `missingEvidence`, and aggregate
   `missingEvidenceSummary` flags without mutating status. It also reports
   `evidenceCompleteOfficePilotCount` and
@@ -424,9 +424,19 @@ The contract baseline is acceptable when:
   production support still requires an explicit
   `--production-support` request plus
   `--support-review docs/smoke/v6.0/<support-review>.md` after private support
-  review. Support review creation is deferred until the completed pilot
-  threshold is satisfied, so premature production-support requests keep the
-  next actions on pilot packet intake first. The written status records
+  review. `release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json`
+  creates the public-safe summary from
+  `docs/smoke/v6.0/production-support-review-template.md`, emits
+  `release-pilot-support-review-scaffold.v1`, reports
+  `rolloutStatusMutated=false`; `release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json`
+  emits `release-pilot-support-review-validate.v1` and checks the filled
+  public-safe summary before any production support claim. Blank scaffolds are
+  not claim-ready. When a claim dry-run is blocked by support review readiness,
+  its nextActions include scaffolding the summary, `complete private support review summary`,
+  running support-review validate, and rerunning the
+  production-support claim dry-run. Support review creation is deferred until
+  the completed pilot threshold is satisfied, so premature production-support
+  requests keep the next actions on pilot packet intake first. The written status records
   `productionSupportReviewPath`; it is not a production support claim by
   default.
 - `docs/smoke/v6.0/office-rollout-status.json` records the current

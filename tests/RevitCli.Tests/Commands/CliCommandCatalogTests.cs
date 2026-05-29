@@ -179,6 +179,24 @@ public class CliCommandCatalogTests
     }
 
     [Fact]
+    public void InteractiveHelpEntries_IncludeReleasePilotSupportReviewScaffold()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "release pilot support-review scaffold" &&
+                     entry.Description.Contains("support review"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeReleasePilotSupportReviewValidate()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "release pilot support-review validate" &&
+                     entry.Description.Contains("support review"));
+    }
+
+    [Fact]
     public void InteractiveHelpEntries_IncludeWorkbenchReceipts()
     {
         Assert.Contains(

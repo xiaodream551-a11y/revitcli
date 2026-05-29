@@ -88,14 +88,6 @@ internal static partial class ReleaseVerifier
         "database-backed",
     };
 
-    private static readonly string[] V60ProductionSupportReviewPhrases =
-    {
-        "Production support review",
-        "private support review approved",
-        "office rollout completion",
-        "production support claim",
-    };
-
     public static ReleaseVerifyReport Verify(ReleaseVerifyOptions options)
     {
         var root = Path.GetFullPath(string.IsNullOrWhiteSpace(options.Root)
@@ -1090,6 +1082,16 @@ internal static partial class ReleaseVerifier
             "v6.0 contract exposes local office pilot rollout status reporting.", "docs/v6-local-bimops-contract.md");
         AddContains(report, "v6.0:release-pilot-claim-doc", contract, "release pilot claim",
             "v6.0 contract exposes an explicit local office rollout completion claim command.", "docs/v6-local-bimops-contract.md");
+        AddContains(report, "v6.0:release-pilot-support-review-scaffold-doc", contract, "release pilot support-review scaffold",
+            "v6.0 contract exposes a public-safe production support review scaffold command.", "docs/v6-local-bimops-contract.md");
+        AddContains(report, "v6.0:release-pilot-support-review-scaffold-schema-doc", contract, "release-pilot-support-review-scaffold.v1",
+            "v6.0 contract documents the support review scaffold output schema.", "docs/v6-local-bimops-contract.md");
+        AddContains(report, "v6.0:release-pilot-support-review-validate-doc", contract, "release pilot support-review validate",
+            "v6.0 contract exposes a public-safe production support review validation command.", "docs/v6-local-bimops-contract.md");
+        AddContains(report, "v6.0:release-pilot-support-review-validate-schema-doc", contract, "release-pilot-support-review-validate.v1",
+            "v6.0 contract documents the support review validation output schema.", "docs/v6-local-bimops-contract.md");
+        AddContains(report, "v6.0:release-pilot-support-review-claim-next-actions-doc", contract, "complete private support review summary",
+            "v6.0 contract documents support review claim repair nextActions.", "docs/v6-local-bimops-contract.md");
         AddContains(report, "v6.0:release-pilot-support-review-doc", contract, "productionSupportReviewPath",
             "v6.0 contract exposes the production support review summary path.", "docs/v6-local-bimops-contract.md");
         AddGuardedContains(report, "v6.0:no-saas-doc", contract, "SaaS",
@@ -1136,6 +1138,16 @@ internal static partial class ReleaseVerifier
             "v6.0 gap report documents staged add-in path evidence.", "docs/smoke/v6.0/gap-report.md");
         AddContains(report, "v6.0:pilot-support-review-gap-doc", gap, "--support-review",
             "v6.0 gap report documents support review evidence for production support claims.", "docs/smoke/v6.0/gap-report.md");
+        AddContains(report, "v6.0:pilot-support-review-scaffold-gap-doc", gap, "release pilot support-review scaffold",
+            "v6.0 gap report documents the support review scaffold command.", "docs/smoke/v6.0/gap-report.md");
+        AddContains(report, "v6.0:pilot-support-review-scaffold-schema-gap-doc", gap, "release-pilot-support-review-scaffold.v1",
+            "v6.0 gap report documents the support review scaffold output schema.", "docs/smoke/v6.0/gap-report.md");
+        AddContains(report, "v6.0:pilot-support-review-validate-gap-doc", gap, "release pilot support-review validate",
+            "v6.0 gap report documents the support review validation command.", "docs/smoke/v6.0/gap-report.md");
+        AddContains(report, "v6.0:pilot-support-review-validate-schema-gap-doc", gap, "release-pilot-support-review-validate.v1",
+            "v6.0 gap report documents the support review validation output schema.", "docs/smoke/v6.0/gap-report.md");
+        AddContains(report, "v6.0:pilot-support-review-claim-next-actions-gap-doc", gap, "complete private support review summary",
+            "v6.0 gap report documents support review claim repair nextActions.", "docs/smoke/v6.0/gap-report.md");
         AddContains(report, "v6.0:pilot-support-review-status-gap-doc", gap, "productionSupportReviewPath",
             "v6.0 gap report documents the production support review summary path.", "docs/smoke/v6.0/gap-report.md");
         AddContains(report, "v6.0:local-controlled-pilot-gap-doc", gap, "local controlled pilot packet",
@@ -1219,6 +1231,8 @@ internal static partial class ReleaseVerifier
             "v6.0 pilot register duplicate failures route back to status and a new public-id intake path.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-safe-intake-next-actions", pilotEvidence, "invalid register identifiers and paths route back to a public-safe intake path",
             "v6.0 pilot register unsafe input failures route back to public-safe intake next actions.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-non-office-rejection", pilotEvidence, "reject synthetic or local controlled evidence",
+            "v6.0 pilot register/status gates reject synthetic or local controlled packets as completed office rollout evidence.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-before-after-counts", pilotEvidence, "completedOfficePilotCountBefore",
             "v6.0 pilot register reports the completed pilot count before a dry-run or write.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-register-after-count", pilotEvidence, "completedOfficePilotCountAfter",
@@ -1273,6 +1287,18 @@ internal static partial class ReleaseVerifier
             "v6.0 pilot evidence template requires support ticket review.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-support-review-path", pilotEvidence, "--support-review",
             "v6.0 pilot evidence template requires a support review path for production support claims.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-scaffold-command", pilotEvidence, "release pilot support-review scaffold",
+            "v6.0 pilot evidence template exposes the production support review scaffold command.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-scaffold-schema", pilotEvidence, "release-pilot-support-review-scaffold.v1",
+            "v6.0 pilot evidence template documents the support review scaffold output schema.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-validate-command", pilotEvidence, "release pilot support-review validate",
+            "v6.0 pilot evidence template exposes the production support review validation command.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-validate-schema", pilotEvidence, "release-pilot-support-review-validate.v1",
+            "v6.0 pilot evidence template documents the support review validation output schema.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-claim-next-actions", pilotEvidence, "complete private support review summary",
+            "v6.0 pilot evidence template documents support review claim repair nextActions.", "docs/smoke/v6.0/pilot-evidence-template.md");
+        AddContains(report, "v6.0:pilot-evidence-support-review-no-status-mutation", pilotEvidence, "rolloutStatusMutated=false",
+            "v6.0 pilot evidence template documents that support review scaffolding does not mutate rollout status.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-support-review-status-path", pilotEvidence, "productionSupportReviewPath",
             "v6.0 pilot evidence template records the production support review summary path.", "docs/smoke/v6.0/pilot-evidence-template.md");
         AddContains(report, "v6.0:pilot-evidence-support-review-deferred", pilotEvidence, "Support review creation is deferred until the completed pilot threshold",
@@ -1289,6 +1315,38 @@ internal static partial class ReleaseVerifier
             "v6.0 pilot evidence template excludes dashboard-central.", "docs/smoke/v6.0/pilot-evidence-template.md", V60DashboardCentralContradictions);
         AddGuardedContains(report, "v6.0:pilot-evidence-no-database", pilotEvidence, "database",
             "v6.0 pilot evidence template excludes database runtime.", "docs/smoke/v6.0/pilot-evidence-template.md", V60DatabaseContradictions);
+
+        var supportReviewTemplatePath = Path.Combine(root, ToNativePath("docs/smoke/v6.0/production-support-review-template.md"));
+        if (!File.Exists(supportReviewTemplatePath))
+        {
+            report.Add("v6.0:production-support-review-template", ReleaseVerifyStatus.Error,
+                "Missing docs/smoke/v6.0/production-support-review-template.md; v6.0 production support review summary scaffolding is not documented.",
+                "docs/smoke/v6.0/production-support-review-template.md");
+        }
+        else
+        {
+            var supportReviewTemplate = ReadText(supportReviewTemplatePath, report, "v6.0:production-support-review-template-readable");
+            if (supportReviewTemplate is not null)
+            {
+                AddContains(report, "v6.0:production-support-review-template", supportReviewTemplate, "Production Support Review Summary",
+                    "v6.0 production support review template is documented.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-review-field", supportReviewTemplate, "Production support review",
+                    "v6.0 production support review template includes the production support review field.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-private-approval-field", supportReviewTemplate, "private support review approved",
+                    "v6.0 production support review template includes the private approval field.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-rollout-field", supportReviewTemplate, "office rollout completion",
+                    "v6.0 production support review template includes the office rollout completion field.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-claim-field", supportReviewTemplate, "production support claim",
+                    "v6.0 production support review template includes the production support claim field.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-blank-fields", supportReviewTemplate, "Blank fields are not claim-ready",
+                    "v6.0 production support review template keeps blank summaries claim-blocking.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-validate-command", supportReviewTemplate, "release pilot support-review validate",
+                    "v6.0 production support review template documents the validation command.", "docs/smoke/v6.0/production-support-review-template.md");
+                AddContains(report, "v6.0:production-support-review-template-claim-command", supportReviewTemplate, "release pilot claim --production-support --support-review",
+                    "v6.0 production support review template documents the production support claim dry-run command.", "docs/smoke/v6.0/production-support-review-template.md");
+            }
+        }
+
         AddV60ReleasePilotSpine(root, report);
         AddV60OfficeRolloutStatus(root, report);
 
@@ -1879,6 +1937,12 @@ internal static partial class ReleaseVerifier
             "v6.0 release pilot spine records status schema evidence.", path);
         AddContains(report, "v6.0:release-pilot-spine-claim-schema", text, "release-pilot-claim.v1",
             "v6.0 release pilot spine records claim schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-support-review-scaffold-schema", text, "release-pilot-support-review-scaffold.v1",
+            "v6.0 release pilot spine records support review scaffold schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-support-review-validate-schema", text, "release-pilot-support-review-validate.v1",
+            "v6.0 release pilot spine records support review validation schema evidence.", path);
+        AddContains(report, "v6.0:release-pilot-spine-support-review-no-status-mutation", text, "rolloutStatusMutated=false",
+            "v6.0 release pilot spine records that support review scaffolding does not mutate rollout status.", path);
         AddContains(report, "v6.0:release-pilot-spine-register-dry-run", text, "dry-run register",
             "v6.0 release pilot register evidence stays dry-run first.", path);
         AddContains(report, "v6.0:release-pilot-spine-before-after-counts", text, "completedOfficePilotCountBefore",
@@ -2035,7 +2099,8 @@ internal static partial class ReleaseVerifier
             return false;
         }
 
-        return ContainsPilotIdentifier(text, expectedPilotId) &&
+        return IsOfficePilotEvidenceCandidate(expectedPilotId, relativePath, text) &&
+            ContainsPilotIdentifier(text, expectedPilotId) &&
             ContainsAll(text,
             "Pilot identifier",
             "Required Commands",
@@ -2057,6 +2122,9 @@ internal static partial class ReleaseVerifier
             "Multi-user rollout postmortem",
             "Boundary summary");
     }
+
+    private static bool IsOfficePilotEvidenceCandidate(string pilotId, string? relativePath, string text) =>
+        OfficePilotEvidenceGuard.IsOfficePilotEvidenceCandidate(pilotId, relativePath, text);
 
     private static bool ProductionSupportReviewComplete(string root, string? relativePath)
     {
@@ -2082,8 +2150,7 @@ internal static partial class ReleaseVerifier
         try
         {
             var text = File.ReadAllText(fullPath);
-            return V60ProductionSupportReviewPhrases.All(phrase =>
-                text.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+            return ProductionSupportReviewGuard.IsComplete(text);
         }
         catch (IOException)
         {

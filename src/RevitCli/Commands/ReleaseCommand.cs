@@ -17,10 +17,16 @@ public static class ReleaseCommand
     private const string PilotRegisterSchemaVersion = "release-pilot-register.v1";
     private const string PilotStatusSchemaVersion = "release-pilot-status.v1";
     private const string PilotClaimSchemaVersion = "release-pilot-claim.v1";
+    private const string PilotSupportReviewScaffoldSchemaVersion = "release-pilot-support-review-scaffold.v1";
+    private const string PilotSupportReviewValidateSchemaVersion = "release-pilot-support-review-validate.v1";
     private const string OfficeRolloutStatusSchemaVersion = "v6-office-rollout-status.v1";
     private const string OfficeRolloutStatusPath = "docs/smoke/v6.0/office-rollout-status.json";
+    private const string ProductionSupportReviewTemplatePath = "docs/smoke/v6.0/production-support-review-template.md";
+    private const string ProductionSupportReviewDefaultPath = "docs/smoke/v6.0/v6-production-support-review.md";
     private const string PilotScaffoldRolloutStatusHint =
         "Do not add this pilot to office-rollout-status.json until every required command, live-operation, review, signoff, support-review, and postmortem item is complete.";
+    private const string SupportReviewScaffoldRolloutStatusHint =
+        "This scaffold does not mutate office-rollout-status.json or mark production support complete; fill it only after private support review is approved.";
     private static readonly string[] RequiredPilotEvidencePacketPhrases =
     {
         "Pilot identifier",
@@ -42,13 +48,6 @@ public static class ReleaseCommand
         "Support ticket review",
         "Multi-user rollout postmortem",
         "Boundary summary",
-    };
-    private static readonly string[] RequiredProductionSupportReviewPhrases =
-    {
-        "Production support review",
-        "private support review approved",
-        "office rollout completion",
-        "production support claim",
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -74,6 +73,7 @@ public static class ReleaseCommand
         command.AddCommand(CreatePilotRegisterCommand());
         command.AddCommand(CreatePilotStatusCommand());
         command.AddCommand(CreatePilotClaimCommand());
+        command.AddCommand(CreatePilotSupportReviewCommand());
         return command;
     }
 
@@ -108,6 +108,69 @@ public static class ReleaseCommand
         {
             Environment.ExitCode = await ExecutePilotScaffoldAsync(root, pilotId, path, force, output, Console.Out);
         }, rootOpt, pilotIdOpt, pathOpt, forceOpt, outputOpt);
+
+        return command;
+    }
+
+    private static Command CreatePilotSupportReviewCommand()
+    {
+        var command = new Command("support-review", "Production support review helpers");
+        command.AddCommand(CreatePilotSupportReviewScaffoldCommand());
+        command.AddCommand(CreatePilotSupportReviewValidateCommand());
+        return command;
+    }
+
+    private static Command CreatePilotSupportReviewScaffoldCommand()
+    {
+        var rootOpt = new Option<string>(
+            "--root",
+            () => Directory.GetCurrentDirectory(),
+            "Repository root");
+        var pathOpt = new Option<string?>(
+            "--path",
+            "Repo-relative production support review summary path under docs/smoke/v6.0/");
+        var forceOpt = new Option<bool>(
+            "--force",
+            "Overwrite an existing production support review summary");
+        var outputOpt = new Option<string>(
+            "--output",
+            () => "table",
+            "Output format: table, json, markdown");
+
+        var command = new Command("scaffold", "Create a public-safe v6.0 production support review summary")
+        {
+            rootOpt, pathOpt, forceOpt, outputOpt
+        };
+        command.SetHandler(async (root, path, force, output) =>
+        {
+            Environment.ExitCode = await ExecutePilotSupportReviewScaffoldAsync(root, path, force, output, Console.Out);
+        }, rootOpt, pathOpt, forceOpt, outputOpt);
+
+        return command;
+    }
+
+    private static Command CreatePilotSupportReviewValidateCommand()
+    {
+        var rootOpt = new Option<string>(
+            "--root",
+            () => Directory.GetCurrentDirectory(),
+            "Repository root");
+        var pathOpt = new Option<string?>(
+            "--path",
+            "Repo-relative production support review summary path under docs/smoke/v6.0/");
+        var outputOpt = new Option<string>(
+            "--output",
+            () => "table",
+            "Output format: table, json, markdown");
+
+        var command = new Command("validate", "Validate a public-safe v6.0 production support review summary")
+        {
+            rootOpt, pathOpt, outputOpt
+        };
+        command.SetHandler(async (root, path, output) =>
+        {
+            Environment.ExitCode = await ExecutePilotSupportReviewValidateAsync(root, path, output, Console.Out);
+        }, rootOpt, pathOpt, outputOpt);
 
         return command;
     }
@@ -364,6 +427,129 @@ public static class ReleaseCommand
             $"release pilot register --pilot-id {pilotId} --path {evidencePacketPath} --output json",
         };
 
+    public static async Task<int> ExecutePilotSupportReviewScaffoldAsync(
+        string root,
+        string? supportReviewPath,
+        bool force,
+        string outputFormat,
+        TextWriter output)
+    {
+        if (!TerminalOutputFormat.TryNormalize(outputFormat, out var normalizedOutput, "table", "json", "markdown"))
+        {
+            await output.WriteLineAsync("Error: unknown output format. Use one of: table, json, markdown.");
+            return 1;
+        }
+
+        var normalizedRoot = Path.GetFullPath(root);
+        var path = string.IsNullOrWhiteSpace(supportReviewPath)
+            ? ProductionSupportReviewDefaultPath
+            : supportReviewPath.Trim();
+        ReleasePilotSupportReviewScaffoldResult result;
+        if (!IsPublicSafePilotEvidencePath(path))
+        {
+            result = ReleasePilotSupportReviewScaffoldResult.Failed(
+                path,
+                "Production support review path must be repo-relative under docs/smoke/v6.0/ and end with .md.");
+            await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+            return 1;
+        }
+
+        if (IsProductionSupportReviewTemplatePath(path))
+        {
+            result = ReleasePilotSupportReviewScaffoldResult.Failed(
+                path,
+                $"Production support review summary path must not be the template path; use {ProductionSupportReviewDefaultPath} or another docs/smoke/v6.0/*.md summary.");
+            await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+            return 1;
+        }
+
+        var templatePath = Path.Combine(normalizedRoot, ProductionSupportReviewTemplatePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(templatePath))
+        {
+            result = ReleasePilotSupportReviewScaffoldResult.Failed(
+                path,
+                $"Production support review template is missing at {ProductionSupportReviewTemplatePath}.");
+            await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+            return 1;
+        }
+
+        var fullPath = Path.Combine(normalizedRoot, path.Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(fullPath) && !force)
+        {
+            result = ReleasePilotSupportReviewScaffoldResult.Failed(
+                path,
+                "Production support review summary already exists; use --force to overwrite it.");
+            await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+            return 1;
+        }
+
+        string template;
+        try
+        {
+            template = await File.ReadAllTextAsync(templatePath);
+        }
+        catch (IOException ex)
+        {
+            result = ReleasePilotSupportReviewScaffoldResult.Failed(
+                path,
+                $"Production support review template could not be read: {ex.Message}");
+            await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+            return 1;
+        }
+
+        var content = template.Replace(
+            "docs/smoke/v6.0/<support-review>.md",
+            path,
+            StringComparison.Ordinal);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        await File.WriteAllTextAsync(fullPath, content);
+        result = new ReleasePilotSupportReviewScaffoldResult(
+            PilotSupportReviewScaffoldSchemaVersion,
+            true,
+            path,
+            ProductionSupportReviewTemplatePath,
+            true,
+            force,
+            false,
+            "Created v6.0 production support review summary scaffold.",
+            SupportReviewScaffoldRolloutStatusHint,
+            BuildPilotSupportReviewScaffoldNextActions(path));
+        await WritePilotSupportReviewScaffoldResultAsync(output, normalizedOutput, result);
+        return 0;
+    }
+
+    private static string[] BuildPilotSupportReviewScaffoldNextActions(string supportReviewPath) =>
+        new[]
+        {
+            $"complete private support review summary in {supportReviewPath}",
+            $"release pilot support-review validate --path {supportReviewPath} --output json",
+            "release pilot status --output json",
+            $"release pilot claim --production-support --support-review {supportReviewPath} --output json",
+            $"release pilot claim --yes --production-support --support-review {supportReviewPath} --output json",
+        };
+
+    public static async Task<int> ExecutePilotSupportReviewValidateAsync(
+        string root,
+        string? supportReviewPath,
+        string outputFormat,
+        TextWriter output)
+    {
+        if (!TerminalOutputFormat.TryNormalize(outputFormat, out var normalizedOutput, "table", "json", "markdown"))
+        {
+            await output.WriteLineAsync("Error: unknown output format. Use one of: table, json, markdown.");
+            return 1;
+        }
+
+        var normalizedRoot = Path.GetFullPath(root);
+        var path = string.IsNullOrWhiteSpace(supportReviewPath)
+            ? ProductionSupportReviewDefaultPath
+            : supportReviewPath.Trim();
+        var issues = await ValidateProductionSupportReviewAsync(normalizedRoot, path);
+        var result = ReleasePilotSupportReviewValidateResult.FromIssues(path, issues);
+        await WritePilotSupportReviewValidateResultAsync(output, normalizedOutput, result);
+        return result.Success ? 0 : 1;
+    }
+
     public static async Task<int> ExecutePilotValidateAsync(
         string root,
         string evidencePacketPath,
@@ -514,10 +700,20 @@ public static class ReleaseCommand
         var officeRolloutCompletionAfter = officeRolloutCompletionBefore;
         var productionSupportClaimAfter = productionSupportClaimBefore;
         var wrote = false;
-        var shouldValidateProductionSupportReview = productionSupport && read.Result.CanClaimOfficeRollout;
-        var productionSupportReviewIssues = shouldValidateProductionSupportReview
-            ? await ValidateProductionSupportReviewAsync(normalizedRoot, supportReviewPath)
-            : new List<ReleasePilotValidateIssue>();
+        var productionSupportReviewIssues = new List<ReleasePilotValidateIssue>();
+        if (!productionSupport && !string.IsNullOrWhiteSpace(supportReviewPath))
+        {
+            productionSupportReviewIssues.Add(new ReleasePilotValidateIssue(
+                "production-support-flag-required",
+                "error",
+                "Passing --support-review requires --production-support so the review is validated and recorded.",
+                null,
+                supportReviewPath.Trim()));
+        }
+        else if (productionSupport && read.Result.CanClaimOfficeRollout)
+        {
+            productionSupportReviewIssues = await ValidateProductionSupportReviewAsync(normalizedRoot, supportReviewPath);
+        }
         var productionSupportReviewReady = productionSupportReviewIssues.All(issue => issue.Severity != "error");
 
         if (status is not null && read.Result.CanClaimOfficeRollout && productionSupportReviewReady)
@@ -604,6 +800,16 @@ public static class ReleaseCommand
             return ReleasePilotValidateResult.FromIssues(path, issues, pilotId: null);
         }
 
+        if (OfficePilotEvidenceGuard.TryDescribeNonOfficePilotEvidence(null, path, null, out var nonOfficePathReason))
+        {
+            issues.Add(new ReleasePilotValidateIssue(
+                "non-office-pilot-evidence",
+                "error",
+                nonOfficePathReason,
+                null,
+                path));
+        }
+
         var fullPath = Path.Combine(normalizedRoot, path.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(fullPath))
         {
@@ -621,7 +827,7 @@ public static class ReleaseCommand
         {
             var packet = await File.ReadAllTextAsync(fullPath);
             pilotId = FindPilotIdentifier(packet).Value;
-            AddPilotPacketContentIssues(packet, expectedPilotId, issues);
+            AddPilotPacketContentIssues(packet, path, expectedPilotId, issues);
         }
         catch (IOException ex)
         {
@@ -673,6 +879,17 @@ public static class ReleaseCommand
             return issues;
         }
 
+        if (IsProductionSupportReviewTemplatePath(path))
+        {
+            issues.Add(new ReleasePilotValidateIssue(
+                "production-support-review-template-path",
+                "error",
+                "Production support review path must point to a filled public-safe summary, not the scaffold template.",
+                null,
+                path));
+            return issues;
+        }
+
         var fullPath = Path.Combine(Path.GetFullPath(root), path.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(fullPath))
         {
@@ -701,17 +918,24 @@ public static class ReleaseCommand
             return issues;
         }
 
-        foreach (var phrase in RequiredProductionSupportReviewPhrases)
+        foreach (var phrase in ProductionSupportReviewGuard.MissingPhrases(text))
         {
-            if (!text.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-            {
-                issues.Add(new ReleasePilotValidateIssue(
-                    "production-support-review-content",
-                    "error",
-                    $"Production support review summary is missing required phrase '{phrase}'.",
-                    null,
-                    phrase));
-            }
+            issues.Add(new ReleasePilotValidateIssue(
+                "production-support-review-content",
+                "error",
+                $"Production support review summary is missing required phrase '{phrase}'.",
+                null,
+                phrase));
+        }
+
+        foreach (var label in ProductionSupportReviewGuard.IncompleteFields(text))
+        {
+            issues.Add(new ReleasePilotValidateIssue(
+                "production-support-review-incomplete",
+                "error",
+                $"Production support review summary must include a filled '{label}:' field.",
+                null,
+                label));
         }
 
         return issues;
@@ -733,6 +957,44 @@ public static class ReleaseCommand
         else
         {
             await output.WriteLineAsync(RenderPilotScaffoldTable(result));
+        }
+    }
+
+    private static async Task WritePilotSupportReviewScaffoldResultAsync(
+        TextWriter output,
+        string normalizedOutput,
+        ReleasePilotSupportReviewScaffoldResult result)
+    {
+        if (normalizedOutput == "json")
+        {
+            await output.WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions));
+        }
+        else if (normalizedOutput == "markdown")
+        {
+            await output.WriteLineAsync(RenderPilotSupportReviewScaffoldMarkdown(result));
+        }
+        else
+        {
+            await output.WriteLineAsync(RenderPilotSupportReviewScaffoldTable(result));
+        }
+    }
+
+    private static async Task WritePilotSupportReviewValidateResultAsync(
+        TextWriter output,
+        string normalizedOutput,
+        ReleasePilotSupportReviewValidateResult result)
+    {
+        if (normalizedOutput == "json")
+        {
+            await output.WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions));
+        }
+        else if (normalizedOutput == "markdown")
+        {
+            await output.WriteLineAsync(RenderPilotSupportReviewValidateMarkdown(result));
+        }
+        else
+        {
+            await output.WriteLineAsync(RenderPilotSupportReviewValidateTable(result));
         }
     }
 
@@ -814,6 +1076,7 @@ public static class ReleaseCommand
 
     private static void AddPilotPacketContentIssues(
         string packet,
+        string evidencePacketPath,
         string? expectedPilotId,
         List<ReleasePilotValidateIssue> issues)
     {
@@ -840,16 +1103,31 @@ public static class ReleaseCommand
                 label));
         }
 
+        var (actualPilotId, actualPilotIdLineNumber) = FindPilotIdentifier(packet);
+        if (!issues.Any(issue => issue.Id == "non-office-pilot-evidence") &&
+            OfficePilotEvidenceGuard.TryDescribeNonOfficePilotEvidence(
+                string.IsNullOrWhiteSpace(expectedPilotId) ? actualPilotId : expectedPilotId,
+                evidencePacketPath,
+                packet,
+                out var nonOfficeReason))
+        {
+            issues.Add(new ReleasePilotValidateIssue(
+                "non-office-pilot-evidence",
+                "error",
+                nonOfficeReason,
+                actualPilotIdLineNumber,
+                evidencePacketPath));
+        }
+
         if (!string.IsNullOrWhiteSpace(expectedPilotId))
         {
-            var (actualPilotId, lineNumber) = FindPilotIdentifier(packet);
             if (string.IsNullOrWhiteSpace(actualPilotId))
             {
                 issues.Add(new ReleasePilotValidateIssue(
                     "pilot-id-missing",
                     "error",
                     "Evidence packet must include a non-empty Pilot identifier field.",
-                    lineNumber,
+                    actualPilotIdLineNumber,
                     expectedPilotId));
             }
             else if (!string.Equals(actualPilotId.Trim(), expectedPilotId.Trim(), StringComparison.Ordinal))
@@ -858,7 +1136,7 @@ public static class ReleaseCommand
                     "pilot-id-mismatch",
                     "error",
                     "Evidence packet Pilot identifier does not match the registered pilot id.",
-                    lineNumber,
+                    actualPilotIdLineNumber,
                     actualPilotId.Trim()));
             }
         }
@@ -1001,6 +1279,17 @@ public static class ReleaseCommand
                 null,
                 evidencePacketPath));
         }
+
+        if (!issues.Any(issue => issue.Id == "non-office-pilot-evidence") &&
+            OfficePilotEvidenceGuard.TryDescribeNonOfficePilotEvidence(pilotId, evidencePacketPath, null, out var nonOfficeReason))
+        {
+            issues.Add(new ReleasePilotValidateIssue(
+                "non-office-pilot-evidence",
+                "error",
+                nonOfficeReason,
+                null,
+                evidencePacketPath));
+        }
     }
 
     private static void AddPilotStatusIssues(
@@ -1085,6 +1374,16 @@ public static class ReleaseCommand
                     null,
                     pilot.PilotId));
             }
+
+            if (OfficePilotEvidenceGuard.TryDescribeNonOfficePilotEvidence(pilot.PilotId, pilot.EvidencePacketPath, null, out var nonOfficeReason))
+            {
+                issues.Add(new ReleasePilotValidateIssue(
+                    "rollout-status-non-office-pilot",
+                    "error",
+                    nonOfficeReason,
+                    null,
+                    pilot.PilotId));
+            }
         }
 
         var thresholdReached = status.CompletedOfficePilotCount >= status.MinimumOfficePilotCount;
@@ -1130,6 +1429,8 @@ public static class ReleaseCommand
             yield return $"move completed pilot evidence packets under docs/smoke/v6.0/ and update {OfficeRolloutStatusPath} evidencePacketPath values";
         if (issues.Any(issue => issue.Id == "rollout-status-completed-pilot-evidence"))
             yield return $"complete required evidence flags for completedPilots in {OfficeRolloutStatusPath}";
+        if (issues.Any(issue => issue.Id == "rollout-status-non-office-pilot"))
+            yield return $"remove synthetic/local-controlled completed pilots from {OfficeRolloutStatusPath} and register only real controlled project-copy office evidence packets";
         if (issues.Any(issue => issue.Id == "rollout-status-overclaim"))
             yield return $"reset {OfficeRolloutStatusPath} officeRolloutCompletion and productionSupportClaim until pilot evidence is claim-ready";
         if (issues.Any(issue => issue.Id == "rollout-status-production-support-review"))
@@ -1239,6 +1540,9 @@ public static class ReleaseCommand
             trimmed.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsProductionSupportReviewTemplatePath(string path) =>
+        string.Equals(path.Trim(), ProductionSupportReviewTemplatePath, StringComparison.OrdinalIgnoreCase);
+
     private static bool ProductionSupportReviewComplete(string root, string? relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath) || !IsPublicSafePilotEvidencePath(relativePath))
@@ -1251,8 +1555,7 @@ public static class ReleaseCommand
         try
         {
             var text = File.ReadAllText(fullPath);
-            return RequiredProductionSupportReviewPhrases.All(phrase =>
-                text.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+            return ProductionSupportReviewGuard.IsComplete(text);
         }
         catch (IOException)
         {
@@ -1436,6 +1739,125 @@ public static class ReleaseCommand
             foreach (var action in result.NextActions)
                 writer.WriteLine($"- `{EscapeInlineCode(action)}`");
         }
+
+        return writer.ToString().TrimEnd();
+    }
+
+    private static string RenderPilotSupportReviewScaffoldTable(ReleasePilotSupportReviewScaffoldResult result)
+    {
+        var writer = new StringWriter();
+        writer.WriteLine("Release pilot support review scaffold");
+        writer.WriteLine($"Result:   {(result.Success ? "PASS" : "FAIL")}");
+        writer.WriteLine($"Path:     {result.SupportReviewPath}");
+        writer.WriteLine($"Template: {result.TemplatePath}");
+        writer.WriteLine($"Wrote:    {result.Wrote.ToString().ToLowerInvariant()}");
+        writer.WriteLine($"Force:    {result.Force.ToString().ToLowerInvariant()}");
+        writer.WriteLine($"Mutated rollout status: {result.RolloutStatusMutated.ToString().ToLowerInvariant()}");
+        writer.WriteLine($"Message:  {result.Message}");
+        writer.WriteLine($"Rollout:  {result.RolloutStatusHint}");
+        if (result.NextActions.Length > 0)
+        {
+            writer.WriteLine();
+            writer.WriteLine("Next actions:");
+            foreach (var action in result.NextActions)
+                writer.WriteLine($"- {action}");
+        }
+
+        return writer.ToString().TrimEnd();
+    }
+
+    private static string RenderPilotSupportReviewScaffoldMarkdown(ReleasePilotSupportReviewScaffoldResult result)
+    {
+        var writer = new StringWriter();
+        writer.WriteLine("# Release Pilot Support Review Scaffold");
+        writer.WriteLine();
+        writer.WriteLine($"- Status: `{(result.Success ? "PASS" : "FAIL")}`");
+        writer.WriteLine($"- Support review: `{EscapeInlineCode(result.SupportReviewPath)}`");
+        writer.WriteLine($"- Template: `{EscapeInlineCode(result.TemplatePath)}`");
+        writer.WriteLine($"- Wrote: `{result.Wrote.ToString().ToLowerInvariant()}`");
+        writer.WriteLine($"- Force: `{result.Force.ToString().ToLowerInvariant()}`");
+        writer.WriteLine($"- Rollout status mutated: `{result.RolloutStatusMutated.ToString().ToLowerInvariant()}`");
+        writer.WriteLine($"- Message: {result.Message}");
+        writer.WriteLine($"- Rollout status: {result.RolloutStatusHint}");
+        writer.WriteLine();
+        writer.WriteLine("## Next Actions");
+        if (result.NextActions.Length == 0)
+        {
+            writer.WriteLine("- None.");
+        }
+        else
+        {
+            foreach (var action in result.NextActions)
+                writer.WriteLine($"- `{EscapeInlineCode(action)}`");
+        }
+
+        return writer.ToString().TrimEnd();
+    }
+
+    private static string RenderPilotSupportReviewValidateTable(ReleasePilotSupportReviewValidateResult result)
+    {
+        var writer = new StringWriter();
+        writer.WriteLine("Release pilot support review validate");
+        writer.WriteLine($"Result:   {(result.Success ? "PASS" : "FAIL")}");
+        writer.WriteLine($"Path:     {result.SupportReviewPath}");
+        writer.WriteLine($"Errors:   {result.ErrorCount}");
+        writer.WriteLine($"Warnings: {result.WarningCount}");
+        writer.WriteLine($"Message:  {result.Message}");
+        if (result.NextActions.Length > 0)
+        {
+            writer.WriteLine();
+            writer.WriteLine("Next actions:");
+            foreach (var action in result.NextActions)
+                writer.WriteLine($"- {action}");
+        }
+
+        if (result.Issues.Length > 0)
+        {
+            writer.WriteLine();
+            writer.WriteLine($"{"Severity",-8} {"Issue",-36} Message");
+            writer.WriteLine(new string('-', 100));
+            foreach (var issue in result.Issues)
+                writer.WriteLine($"{issue.Severity,-8} {Truncate(issue.Id, 36),-36} {issue.Message}");
+        }
+
+        return writer.ToString().TrimEnd();
+    }
+
+    private static string RenderPilotSupportReviewValidateMarkdown(ReleasePilotSupportReviewValidateResult result)
+    {
+        var writer = new StringWriter();
+        writer.WriteLine("# Release Pilot Support Review Validate");
+        writer.WriteLine();
+        writer.WriteLine($"- Status: `{(result.Success ? "PASS" : "FAIL")}`");
+        writer.WriteLine($"- Support review: `{EscapeInlineCode(result.SupportReviewPath)}`");
+        writer.WriteLine($"- Errors: `{result.ErrorCount}`");
+        writer.WriteLine($"- Warnings: `{result.WarningCount}`");
+        writer.WriteLine($"- Message: {result.Message}");
+        writer.WriteLine();
+        writer.WriteLine("## Next Actions");
+        if (result.NextActions.Length == 0)
+        {
+            writer.WriteLine("- None.");
+        }
+        else
+        {
+            foreach (var action in result.NextActions)
+                writer.WriteLine($"- `{EscapeInlineCode(action)}`");
+        }
+
+        writer.WriteLine();
+        writer.WriteLine("## Issues");
+        if (result.Issues.Length == 0)
+        {
+            writer.WriteLine("- None.");
+            return writer.ToString().TrimEnd();
+        }
+
+        writer.WriteLine();
+        writer.WriteLine("| Severity | Issue | Message |");
+        writer.WriteLine("|---|---|---|");
+        foreach (var issue in result.Issues)
+            writer.WriteLine($"| {EscapeTableCell(issue.Severity)} | {EscapeTableCell(issue.Id)} | {EscapeTableCell(issue.Message)} |");
 
         return writer.ToString().TrimEnd();
     }
@@ -1854,6 +2276,87 @@ public static class ReleaseCommand
                 Array.Empty<string>());
     }
 
+    private sealed record ReleasePilotSupportReviewScaffoldResult(
+        string SchemaVersion,
+        bool Success,
+        string SupportReviewPath,
+        string TemplatePath,
+        bool Wrote,
+        bool Force,
+        bool RolloutStatusMutated,
+        string Message,
+        string RolloutStatusHint,
+        string[] NextActions)
+    {
+        public static ReleasePilotSupportReviewScaffoldResult Failed(string supportReviewPath, string message) =>
+            new(
+                PilotSupportReviewScaffoldSchemaVersion,
+                false,
+                supportReviewPath,
+                ProductionSupportReviewTemplatePath,
+                false,
+                false,
+                false,
+                message,
+                SupportReviewScaffoldRolloutStatusHint,
+                Array.Empty<string>());
+    }
+
+    private sealed record ReleasePilotSupportReviewValidateResult(
+        string SchemaVersion,
+        bool Success,
+        string SupportReviewPath,
+        int ErrorCount,
+        int WarningCount,
+        string Message,
+        string[] NextActions,
+        ReleasePilotValidateIssue[] Issues)
+    {
+        public static ReleasePilotSupportReviewValidateResult FromIssues(
+            string supportReviewPath,
+            List<ReleasePilotValidateIssue> issues)
+        {
+            var errorCount = issues.Count(issue => issue.Severity == "error");
+            var warningCount = issues.Count(issue => issue.Severity == "warning");
+            return new ReleasePilotSupportReviewValidateResult(
+                PilotSupportReviewValidateSchemaVersion,
+                errorCount == 0,
+                supportReviewPath,
+                errorCount,
+                warningCount,
+                errorCount == 0
+                    ? "Production support review summary is claim-ready."
+                    : "Production support review summary is not claim-ready.",
+                BuildNextActions(supportReviewPath, errorCount, issues),
+                issues.ToArray());
+        }
+
+        private static string[] BuildNextActions(
+            string supportReviewPath,
+            int errorCount,
+            List<ReleasePilotValidateIssue> issues)
+        {
+            if (errorCount == 0)
+            {
+                return new[]
+                {
+                    "release pilot status --output json",
+                    $"release pilot claim --production-support --support-review {supportReviewPath} --output json",
+                };
+            }
+
+            var repairPath = issues.Any(issue => issue.Id is "production-support-review-path-safety" or "production-support-review-template-path")
+                ? ProductionSupportReviewDefaultPath
+                : supportReviewPath;
+            return new[]
+            {
+                $"release pilot support-review scaffold --path {repairPath} --output json",
+                $"complete private support review summary in {repairPath}",
+                $"release pilot support-review validate --path {repairPath} --output json",
+            };
+        }
+    }
+
     private sealed record ReleasePilotValidateResult(
         string SchemaVersion,
         bool Success,
@@ -1901,6 +2404,16 @@ public static class ReleaseCommand
                 {
                     "release pilot scaffold --pilot-id <public-id> --output json",
                     "release pilot validate --path docs/smoke/v6.0/<public-id>.md --output json",
+                };
+            }
+
+            if (issues.Any(issue => issue.Id == "non-office-pilot-evidence"))
+            {
+                return new[]
+                {
+                    "release pilot scaffold --pilot-id <public-id> --output json",
+                    "release pilot validate --path docs/smoke/v6.0/<public-id>.md --output json",
+                    "release pilot register --pilot-id <public-id> --path docs/smoke/v6.0/<public-id>.md --output json",
                 };
             }
 
@@ -2036,6 +2549,15 @@ public static class ReleaseCommand
                 if (issues.Any(issue => issue.Id is "pilot-id-safety" or "path-safety"))
                 {
                     actions.AddRange(BuildSafeIntakeRepairActions(pilotId, evidencePacketPath));
+                    return actions.Distinct(StringComparer.Ordinal).ToArray();
+                }
+
+                if (issues.Any(issue => issue.Id == "non-office-pilot-evidence"))
+                {
+                    actions.Add("release pilot scaffold --pilot-id <public-id> --output json");
+                    actions.Add("release pilot validate --path docs/smoke/v6.0/<public-id>.md --output json");
+                    actions.Add("release pilot register --pilot-id <public-id> --path docs/smoke/v6.0/<public-id>.md --output json");
+                    actions.Add("release pilot status --output json");
                     return actions.Distinct(StringComparer.Ordinal).ToArray();
                 }
 
@@ -2287,6 +2809,7 @@ public static class ReleaseCommand
                 yes,
                 requestedProductionSupportClaim,
                 productionSupportReviewPath,
+                productionSupportReviewIssues,
                 reviewErrorCount);
             var message = success
                 ? yes
@@ -2330,13 +2853,17 @@ public static class ReleaseCommand
             bool yes,
             bool requestedProductionSupportClaim,
             string? productionSupportReviewPath,
+            List<ReleasePilotValidateIssue> productionSupportReviewIssues,
             int productionSupportReviewErrorCount)
         {
             var actions = new List<string>(status.NextActions);
             if (status.CanClaimOfficeRollout && productionSupportReviewErrorCount > 0)
             {
-                actions.Add("create docs/smoke/v6.0/<support-review>.md from docs/smoke/v6.0/production-support-review-template.md");
-                actions.Add("release pilot claim --production-support --support-review docs/smoke/v6.0/<support-review>.md --output json");
+                var reviewPath = BuildSupportReviewRepairPath(productionSupportReviewPath, productionSupportReviewIssues);
+                actions.Add($"release pilot support-review scaffold --path {reviewPath} --output json");
+                actions.Add($"complete private support review summary in {reviewPath}");
+                actions.Add($"release pilot support-review validate --path {reviewPath} --output json");
+                actions.Add($"release pilot claim --production-support --support-review {reviewPath} --output json");
                 return actions.Distinct(StringComparer.Ordinal).ToArray();
             }
 
@@ -2349,6 +2876,23 @@ public static class ReleaseCommand
             }
 
             return actions.Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        private static string BuildSupportReviewRepairPath(
+            string? productionSupportReviewPath,
+            List<ReleasePilotValidateIssue> productionSupportReviewIssues)
+        {
+            if (productionSupportReviewIssues.Any(issue => issue.Id is "production-support-review-path-safety" or "production-support-review-template-path"))
+            {
+                return ProductionSupportReviewDefaultPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(productionSupportReviewPath))
+            {
+                return "docs/smoke/v6.0/<support-review>.md";
+            }
+
+            return productionSupportReviewPath.Trim();
         }
 
         private static string[] BuildClaimBlockers(ReleasePilotStatusResult status, int productionSupportReviewErrorCount)

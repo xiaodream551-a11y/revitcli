@@ -541,6 +541,213 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotSupportReviewScaffold_Json_WritesPublicSafeSummary()
+    {
+        WriteHealthyTree(_root);
+        var path = "docs/smoke/v6.0/v6-production-support-review.md";
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewScaffoldAsync(
+            _root,
+            path,
+            force: false,
+            outputFormat: "json",
+            output);
+
+        Assert.True(exitCode == 0, output.ToString());
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Equal("release-pilot-support-review-scaffold.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.True(root.GetProperty("wrote").GetBoolean());
+        Assert.False(root.GetProperty("force").GetBoolean());
+        Assert.False(root.GetProperty("rolloutStatusMutated").GetBoolean());
+        Assert.Equal(path, root.GetProperty("supportReviewPath").GetString());
+        Assert.Equal("docs/smoke/v6.0/production-support-review-template.md", root.GetProperty("templatePath").GetString());
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.Contains($"release pilot claim --production-support --support-review {path} --output json", nextActions);
+
+        var fullPath = Path.Combine(_root, "docs", "smoke", "v6.0", "v6-production-support-review.md");
+        Assert.True(File.Exists(fullPath));
+        var review = File.ReadAllText(fullPath);
+        Assert.Contains("- Production support review:", review);
+        Assert.Contains("- private support review approved:", review);
+        Assert.Contains($"--support-review {path} --output json", review);
+    }
+
+    [Fact]
+    public async Task PilotSupportReviewValidate_Json_AcceptsCompletedSummary()
+    {
+        WriteHealthyTree(_root);
+        WriteProductionSupportReview("v6-production-support-review.md");
+        var path = "docs/smoke/v6.0/v6-production-support-review.md";
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewValidateAsync(
+            _root,
+            path,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(0, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Equal("release-pilot-support-review-validate.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.Equal(path, root.GetProperty("supportReviewPath").GetString());
+        Assert.Equal(0, root.GetProperty("errorCount").GetInt32());
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == $"release pilot claim --production-support --support-review {path} --output json");
+        Assert.Empty(root.GetProperty("issues").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task PilotSupportReviewValidate_BlankScaffoldReportsIncompleteFields()
+    {
+        WriteHealthyTree(_root);
+        var path = "docs/smoke/v6.0/v6-production-support-review.md";
+        Assert.Equal(0, await ReleaseCommand.ExecutePilotSupportReviewScaffoldAsync(
+            _root,
+            path,
+            force: false,
+            outputFormat: "json",
+            new StringWriter()));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewValidateAsync(
+            _root,
+            path,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "production-support-review-incomplete");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains($"complete private support review summary in {path}", nextActions);
+        Assert.Contains($"release pilot support-review validate --path {path} --output json", nextActions);
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == $"release pilot support-review validate --path {path} --output json");
+    }
+
+    [Theory]
+    [InlineData("../support-review.md")]
+    [InlineData("C:/temp/support-review.md")]
+    [InlineData("docs/smoke/v6.0/support-review.txt")]
+    public async Task PilotSupportReviewScaffold_RejectsUnsafePath(string path)
+    {
+        WriteHealthyTree(_root);
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewScaffoldAsync(
+            _root,
+            path,
+            force: false,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("wrote").GetBoolean());
+    }
+
+    [Fact]
+    public async Task PilotSupportReviewScaffold_RejectsTemplatePathEvenWithForce()
+    {
+        WriteHealthyTree(_root);
+        var path = "docs/smoke/v6.0/production-support-review-template.md";
+        var fullPath = Path.Combine(_root, "docs", "smoke", "v6.0", "production-support-review-template.md");
+        var before = File.ReadAllText(fullPath);
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewScaffoldAsync(
+            _root,
+            path,
+            force: true,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains("template path", root.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(before, File.ReadAllText(fullPath));
+    }
+
+    [Fact]
+    public async Task PilotSupportReviewValidate_TemplatePathRoutesRepairToDefaultSummary()
+    {
+        WriteHealthyTree(_root);
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotSupportReviewValidateAsync(
+            _root,
+            "docs/smoke/v6.0/production-support-review-template.md",
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "production-support-review-template-path");
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == "release pilot support-review scaffold --path docs/smoke/v6.0/v6-production-support-review.md --output json");
+    }
+
+    [Fact]
+    public async Task PilotSupportReviewScaffold_BlankSummaryCannotClaimProductionSupport()
+    {
+        WriteHealthyTree(_root);
+        await RegisterCompletedPilotAsync("pilot-01");
+        await RegisterCompletedPilotAsync("pilot-02");
+        var path = "docs/smoke/v6.0/v6-production-support-review.md";
+        var scaffoldOutput = new StringWriter();
+        Assert.Equal(0, await ReleaseCommand.ExecutePilotSupportReviewScaffoldAsync(
+            _root,
+            path,
+            force: false,
+            outputFormat: "json",
+            scaffoldOutput));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotClaimAsync(
+            _root,
+            yes: true,
+            productionSupport: true,
+            supportReviewPath: path,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains(root.GetProperty("claimBlockers").EnumerateArray(), item =>
+            item.GetString() == "productionSupportReview");
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "production-support-review-incomplete");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains($"complete private support review summary in {path}", nextActions);
+        Assert.Contains($"release pilot support-review validate --path {path} --output json", nextActions);
+        Assert.Contains($"release pilot claim --production-support --support-review {path} --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotValidate_Json_AcceptsCompletedPublicSafePacket()
     {
         WriteFile(
@@ -988,6 +1195,65 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotRegister_RejectsSyntheticPilotEvidenceWithoutWritingStatus()
+    {
+        WriteHealthyTree(_root);
+        WriteFile("docs/smoke/v6.0/v6-synthetic-pilot-spine-01.md", CompletedPilotEvidencePacketContent("v6-synthetic-pilot-spine-01"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "v6-synthetic-pilot-spine-01",
+            "docs/smoke/v6.0/v6-synthetic-pilot-spine-01.md",
+            yes: true,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "non-office-pilot-evidence");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(action => action.GetString())
+            .ToArray();
+        Assert.Contains("release pilot scaffold --pilot-id <public-id> --output json", nextActions);
+        Assert.Contains("release pilot register --pilot-id <public-id> --path docs/smoke/v6.0/<public-id>.md --output json", nextActions);
+        using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "docs", "smoke", "v6.0", "office-rollout-status.json")));
+        Assert.Equal(0, status.RootElement.GetProperty("completedOfficePilotCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task PilotRegister_RejectsNonOfficeCompletionAndSupportDisclaimerWithoutWritingStatus()
+    {
+        WriteHealthyTree(_root);
+        WriteFile(
+            "docs/smoke/v6.0/pilot-01.md",
+            CompletedPilotEvidencePacketContent("pilot-01") + "\nThis packet is not office rollout completion and not a production support claim.\n");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotRegisterAsync(
+            _root,
+            "pilot-01",
+            "docs/smoke/v6.0/pilot-01.md",
+            yes: true,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "non-office-pilot-evidence");
+        using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "docs", "smoke", "v6.0", "office-rollout-status.json")));
+        Assert.Equal(0, status.RootElement.GetProperty("completedOfficePilotCount").GetInt32());
+    }
+
+    [Fact]
     public async Task PilotStatus_Json_ReportsRemainingPilots()
     {
         WriteHealthyTree(_root);
@@ -1354,6 +1620,61 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotStatus_RegisteredSyntheticPilotEvidence_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        WriteFile(
+            "docs/smoke/v6.0/v6-synthetic-pilot-spine-01.md",
+            CompletedPilotEvidencePacketContent("v6-synthetic-pilot-spine-01"));
+        WriteFile("docs/smoke/v6.0/office-rollout-status.json", $$"""
+{
+  "schemaVersion": "v6-office-rollout-status.v1",
+  "minimumOfficePilotCount": 2,
+  "completedOfficePilotCount": 1,
+  "completedPilotIds": ["v6-synthetic-pilot-spine-01"],
+  "completedPilots": [{{CompletedPilotEvidenceJson("v6-synthetic-pilot-spine-01")}}],
+  "officeRolloutCompletion": false,
+  "productionSupportClaim": false,
+  "requiredEvidence": {
+    "doctor": true,
+    "status": true,
+    "workbench": true,
+    "release": true,
+    "ledgerQuery": true,
+    "ledgerValidate": true,
+    "ledgerStatsAnalyticsSnapshot": true,
+    "ledgerTimelineAnalyticsSnapshot": true,
+    "journalVerify": true,
+    "rollbackResult": true,
+    "userReview": true,
+    "bimManagerSignoff": true,
+    "projectCopyOwnerSignoff": true,
+    "supportTicketReview": true,
+    "multiUserRolloutPostmortem": true
+  }
+}
+""");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotStatusAsync(
+            _root,
+            "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.Equal(0, root.GetProperty("evidenceCompleteOfficePilotCount").GetInt32());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "rollout-status-non-office-pilot");
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), issue =>
+            issue.GetProperty("id").GetString() == "non-office-pilot-evidence");
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), action =>
+            action.GetString() == "remove synthetic/local-controlled completed pilots from docs/smoke/v6.0/office-rollout-status.json and register only real controlled project-copy office evidence packets");
+    }
+
+    [Fact]
     public async Task PilotClaim_InsufficientPilots_ReturnsFailureWithoutWriting()
     {
         WriteHealthyTree(_root);
@@ -1418,7 +1739,7 @@ jobs:
             .ToArray();
         Assert.Contains("release pilot scaffold --pilot-id <public-id> --output json", nextActions);
         Assert.DoesNotContain(
-            "create docs/smoke/v6.0/<support-review>.md from docs/smoke/v6.0/production-support-review-template.md",
+            "release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json",
             nextActions);
         Assert.DoesNotContain(root.GetProperty("issues").EnumerateArray(), item =>
             item.GetProperty("id").GetString() == "production-support-review-required");
@@ -1610,6 +1931,71 @@ jobs:
     }
 
     [Fact]
+    public async Task PilotClaim_SupportReviewWithoutProductionSupport_ReturnsFailureWithoutWriting()
+    {
+        WriteHealthyTree(_root);
+        await RegisterCompletedPilotAsync("pilot-01");
+        await RegisterCompletedPilotAsync("pilot-02");
+        WriteProductionSupportReview("v6-production-support-review.md");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotClaimAsync(
+            _root,
+            yes: true,
+            productionSupport: false,
+            supportReviewPath: "docs/smoke/v6.0/v6-production-support-review.md",
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains(root.GetProperty("claimBlockers").EnumerateArray(), item =>
+            item.GetString() == "productionSupportReview");
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "production-support-flag-required");
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == "release pilot claim --production-support --support-review docs/smoke/v6.0/v6-production-support-review.md --output json");
+        using var status = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "docs", "smoke", "v6.0", "office-rollout-status.json")));
+        Assert.False(status.RootElement.GetProperty("officeRolloutCompletion").GetBoolean());
+        Assert.False(status.RootElement.GetProperty("productionSupportClaim").GetBoolean());
+        Assert.Equal("", status.RootElement.GetProperty("productionSupportReviewPath").GetString());
+    }
+
+    [Fact]
+    public async Task PilotClaim_ProductionSupportWithTemplatePath_RoutesRepairToDefaultSummary()
+    {
+        WriteHealthyTree(_root);
+        await RegisterCompletedPilotAsync("pilot-01");
+        await RegisterCompletedPilotAsync("pilot-02");
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecutePilotClaimAsync(
+            _root,
+            yes: true,
+            productionSupport: true,
+            supportReviewPath: "docs/smoke/v6.0/production-support-review-template.md",
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.False(root.GetProperty("wrote").GetBoolean());
+        Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == "production-support-review-template-path");
+        var nextActions = root.GetProperty("nextActions").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        Assert.Contains("release pilot support-review scaffold --path docs/smoke/v6.0/v6-production-support-review.md --output json", nextActions);
+        Assert.Contains("complete private support review summary in docs/smoke/v6.0/v6-production-support-review.md", nextActions);
+        Assert.Contains("release pilot support-review validate --path docs/smoke/v6.0/v6-production-support-review.md --output json", nextActions);
+    }
+
+    [Fact]
     public async Task PilotClaim_ProductionSupportWithoutReview_ReturnsFailureWithoutWriting()
     {
         WriteHealthyTree(_root);
@@ -1632,7 +2018,11 @@ jobs:
         Assert.Contains(root.GetProperty("claimBlockers").EnumerateArray(), item =>
             item.GetString() == "productionSupportReview");
         Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
-            item.GetString() == "create docs/smoke/v6.0/<support-review>.md from docs/smoke/v6.0/production-support-review-template.md");
+            item.GetString() == "release pilot support-review scaffold --path docs/smoke/v6.0/<support-review>.md --output json");
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == "complete private support review summary in docs/smoke/v6.0/<support-review>.md");
+        Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
+            item.GetString() == "release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json");
         Assert.Contains(root.GetProperty("nextActions").EnumerateArray(), item =>
             item.GetString() == "release pilot claim --production-support --support-review docs/smoke/v6.0/<support-review>.md --output json");
         Assert.Contains(root.GetProperty("issues").EnumerateArray(), item =>
@@ -1923,6 +2313,11 @@ Run `release verify --strict`.
     [InlineData("v6.0:release-pilot-register-doc", "release pilot register", "release pilot record")]
     [InlineData("v6.0:release-pilot-status-doc", "release pilot status", "release pilot progress")]
     [InlineData("v6.0:release-pilot-claim-doc", "release pilot claim", "release pilot approve")]
+    [InlineData("v6.0:release-pilot-support-review-scaffold-doc", "release pilot support-review scaffold", "release pilot support-review create")]
+    [InlineData("v6.0:release-pilot-support-review-scaffold-schema-doc", "release-pilot-support-review-scaffold.v1", "release-pilot-support-review-create.v1")]
+    [InlineData("v6.0:release-pilot-support-review-validate-doc", "release pilot support-review validate", "release pilot support-review check")]
+    [InlineData("v6.0:release-pilot-support-review-validate-schema-doc", "release-pilot-support-review-validate.v1", "release-pilot-support-review-check.v1")]
+    [InlineData("v6.0:release-pilot-support-review-claim-next-actions-doc", "complete private support review summary", "finish support review summary")]
     public async Task Verify_MissingV60ContractLedgerFieldPhrase_ReturnsFailure(
         string checkId,
         string requiredPhrase,
@@ -2006,6 +2401,37 @@ Run `release verify --strict`.
             check.GetProperty("message").GetString()!.Contains("stagedAddinCommit", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("v6.0:pilot-support-review-gap-doc", "--support-review", "--review")]
+    [InlineData("v6.0:pilot-support-review-scaffold-gap-doc", "release pilot support-review scaffold", "release pilot support-review create")]
+    [InlineData("v6.0:pilot-support-review-scaffold-schema-gap-doc", "release-pilot-support-review-scaffold.v1", "release-pilot-support-review-create.v1")]
+    [InlineData("v6.0:pilot-support-review-validate-gap-doc", "release pilot support-review validate", "release pilot support-review check")]
+    [InlineData("v6.0:pilot-support-review-validate-schema-gap-doc", "release-pilot-support-review-validate.v1", "release-pilot-support-review-check.v1")]
+    [InlineData("v6.0:pilot-support-review-claim-next-actions-gap-doc", "complete private support review summary", "finish support review summary")]
+    [InlineData("v6.0:pilot-support-review-status-gap-doc", "productionSupportReviewPath", "production support review path")]
+    public async Task Verify_MissingV60GapReportSupportReviewPhrase_ReturnsFailure(
+        string checkId,
+        string requiredPhrase,
+        string replacement)
+    {
+        WriteHealthyTree(_root);
+        var gapPath = Path.Combine(_root, "docs", "smoke", "v6.0", "gap-report.md");
+        var text = File.ReadAllText(gapPath);
+        Assert.Contains(requiredPhrase, text, StringComparison.Ordinal);
+        File.WriteAllText(gapPath, text.Replace(requiredPhrase, replacement, StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == checkId &&
+            check.GetProperty("status").GetString() == "error" &&
+            check.GetProperty("message").GetString()!.Contains(requiredPhrase, StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task Verify_MissingV60PilotEvidenceTemplate_ReturnsFailure()
     {
@@ -2043,6 +2469,44 @@ Run `release verify --strict`.
             check.GetProperty("id").GetString() == "v6.0:pilot-evidence-template" &&
             check.GetProperty("status").GetString() == "error" &&
             check.GetProperty("message").GetString()!.Contains("office rollout pilot evidence packet", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Verify_MissingV60ProductionSupportReviewTemplate_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        File.Delete(Path.Combine(_root, "docs", "smoke", "v6.0", "production-support-review-template.md"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:production-support-review-template" &&
+            check.GetProperty("status").GetString() == "error" &&
+            check.GetProperty("message").GetString()!.Contains("production-support-review-template.md", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Verify_IncompleteV60ProductionSupportReviewTemplate_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        var templatePath = Path.Combine(_root, "docs", "smoke", "v6.0", "production-support-review-template.md");
+        File.WriteAllText(
+            templatePath,
+            File.ReadAllText(templatePath).Replace("release pilot support-review validate", "release pilot support-review check", StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:production-support-review-template-validate-command" &&
+            check.GetProperty("status").GetString() == "error");
     }
 
     [Fact]
@@ -2543,6 +3007,42 @@ Run `release verify --strict`.
             check.GetProperty("status").GetString() == "error");
     }
 
+    [Theory]
+    [InlineData("v6.0:pilot-evidence-non-office-rejection", "reject synthetic or local controlled evidence", "accept synthetic or local controlled evidence")]
+    [InlineData("v6.0:pilot-evidence-owner-signoff", "Project-copy owner signoff", "Project owner approval")]
+    [InlineData("v6.0:pilot-evidence-support-review", "Support ticket review", "Support queue review")]
+    [InlineData("v6.0:pilot-evidence-support-review-scaffold-command", "release pilot support-review scaffold", "release pilot support-review create")]
+    [InlineData("v6.0:pilot-evidence-support-review-scaffold-schema", "release-pilot-support-review-scaffold.v1", "release-pilot-support-review-create.v1")]
+    [InlineData("v6.0:pilot-evidence-support-review-validate-command", "release pilot support-review validate", "release pilot support-review check")]
+    [InlineData("v6.0:pilot-evidence-support-review-validate-schema", "release-pilot-support-review-validate.v1", "release-pilot-support-review-check.v1")]
+    [InlineData("v6.0:pilot-evidence-support-review-claim-next-actions", "complete private support review summary", "finish support review summary")]
+    [InlineData("v6.0:pilot-evidence-support-review-no-status-mutation", "rolloutStatusMutated=false", "rolloutStatusMutated=true")]
+    [InlineData("v6.0:pilot-evidence-support-review-status-path", "productionSupportReviewPath", "production support review path")]
+    [InlineData("v6.0:pilot-evidence-support-review-deferred", "Support review creation is deferred until the completed pilot threshold", "Support review creation happens before the completed pilot threshold")]
+    [InlineData("v6.0:pilot-evidence-postmortem", "Multi-user rollout postmortem", "Multi-user rollout notes")]
+    public async Task Verify_MissingV60PilotEvidenceSupportReviewPhrase_ReturnsFailure(
+        string checkId,
+        string requiredPhrase,
+        string replacement)
+    {
+        WriteHealthyTree(_root);
+        var templatePath = Path.Combine(_root, "docs", "smoke", "v6.0", "pilot-evidence-template.md");
+        var text = File.ReadAllText(templatePath);
+        Assert.Contains(requiredPhrase, text, StringComparison.Ordinal);
+        File.WriteAllText(templatePath, text.Replace(requiredPhrase, replacement, StringComparison.Ordinal));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == checkId &&
+            check.GetProperty("status").GetString() == "error" &&
+            check.GetProperty("message").GetString()!.Contains(requiredPhrase, StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task Verify_V60OfficeRolloutStatusOverclaim_ReturnsFailure()
     {
@@ -2631,6 +3131,32 @@ Run `release verify --strict`.
                 .Replace("\"productionSupportClaim\": false", "\"productionSupportClaim\": true", StringComparison.Ordinal));
         WriteCompletedPilotEvidencePackets(_root, "pilot-01");
         WriteFile("docs/smoke/v6.0/pilot-02.md", CompletedPilotEvidencePacketContent("pilot-03"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6.0:office-rollout-status-completed-pilots-json" &&
+            check.GetProperty("status").GetString() == "error");
+    }
+
+    [Fact]
+    public async Task Verify_V60OfficeRolloutStatusSyntheticPilotEvidence_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        var statusPath = Path.Combine(_root, "docs", "smoke", "v6.0", "office-rollout-status.json");
+        File.WriteAllText(
+            statusPath,
+            File.ReadAllText(statusPath)
+                .Replace("\"completedOfficePilotCount\": 0", "\"completedOfficePilotCount\": 2", StringComparison.Ordinal)
+                .Replace("\"completedPilotIds\": []", "\"completedPilotIds\": [\"v6-synthetic-pilot-spine-01\", \"pilot-02\"]", StringComparison.Ordinal)
+                .Replace("\"completedPilots\": []", "\"completedPilots\": [" + CompletedPilotEvidenceJson("v6-synthetic-pilot-spine-01") + ", " + CompletedPilotEvidenceJson("pilot-02") + "]", StringComparison.Ordinal)
+                .Replace("\"officeRolloutCompletion\": false", "\"officeRolloutCompletion\": true", StringComparison.Ordinal)
+                .Replace("\"productionSupportClaim\": false", "\"productionSupportClaim\": true", StringComparison.Ordinal));
+        WriteCompletedPilotEvidencePackets(_root, "v6-synthetic-pilot-spine-01", "pilot-02");
         var output = new StringWriter();
 
         var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: false, output);
@@ -4368,7 +4894,7 @@ No SaaS, no MCP, no dashboard-central, and no built-in LLM runtime is introduced
 The product phrase is BIM Release OS and the technical kernel is the Revit Model Operations Ledger.
 The contract is terminal-first, local-first, deterministic, dry-run first, and requires explicit approval.
 
-Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, completedOfficePilotCountBefore, completedOfficePilotCountAfter, register nextActions, duplicate register attempts, invalid register identifiers and paths route back to a public-safe intake path, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, status structural repair nextActions, release pilot claim, claimBlockers, nextActions, --support-review, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
+Required local behavior includes planHash, receiptHash, journalPath, rollbackPointer, checks, artifacts, deterministic receipt rules, rollback preconditions, current-value conflict checks, audit trail invariants, journal verify, standards runtime, project memory, workflow registry, workflow registry --output json, workflow-registry.v1, ledger append, ledger replay, ledger query, ledger validate, ledger stats, ledger timeline, ledger analytics, release pilot validate, release pilot register, completedOfficePilotCountBefore, completedOfficePilotCountAfter, register nextActions, duplicate register attempts, invalid register identifiers and paths route back to a public-safe intake path, reject synthetic or local controlled evidence, release pilot status, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, status structural repair nextActions, release pilot claim, claimBlockers, nextActions, --support-review, release pilot support-review scaffold, release-pilot-support-review-scaffold.v1, release pilot support-review validate, release-pilot-support-review-validate.v1, complete private support review summary, productionSupportReviewPath, ledger-append.v1, ledger-replay.v1, ledger-query.v1, ledger-validate.v1, ledger-stats.v1, ledger-timeline.v1, and ledger-analytics-bundle.v1.
 
 No SaaS, no MCP, no built-in LLM, no dashboard-central workflow state, and no database runtime are introduced.
 """);
@@ -4377,10 +4903,10 @@ No SaaS, no MCP, no built-in LLM, no dashboard-central workflow state, and no da
 
 This is a contract baseline for operations ledger behavior. It is not live verified.
 
-The Revit Model Operations Ledger has read-only standards validate, dry-run issue package, read-only deliverables verify, append-only ledger runtime, ledger replay preview, read-only ledger query, read-only ledger validate, read-only ledger stats, read-only ledger timeline, local ledger analytics bundle, read-only workflow registry, a pilot evidence packet, and a local controlled pilot packet. Live ledger apply, live Revit ledger integration, real Revit pilots, and office rollout pilots remain future evidence. Supported command-spine paths document table summary and Markdown detail parity, including history list` JSON/table outputs.
+The Revit Model Operations Ledger has read-only standards validate, dry-run issue package, read-only deliverables verify, append-only ledger runtime, ledger replay preview, read-only ledger query, read-only ledger validate, read-only ledger stats, read-only ledger timeline, local ledger analytics bundle, read-only workflow registry, a pilot evidence packet, and a local controlled pilot packet. Live ledger apply, live Revit ledger integration, real Revit pilots, and office rollout pilots remain future evidence. Supported command-spine paths document table summary and Markdown detail parity, including history list` JSON/table outputs. Synthetic or local controlled evidence is rejected for office rollout completion.
 Local audit spine docs include journal verify JSON/table validity/root-hash parity and history-list.v1 JSON count consistency and table row-order parity.
 Current-source Revit proof uses scripts\install-current-source-revit2026.ps1 and scripts/smoke-revit-wsl.sh --require-current-source before claiming live add-in/source alignment. It records currentSourceDriftKind, install-required, restart-required, stagedAddinCommit, and stagedAddinPath.
-Production support claims require --support-review and productionSupportReviewPath evidence.
+Production support claims require --support-review, productionSupportReviewPath evidence, release pilot support-review scaffold, release-pilot-support-review-scaffold.v1, release pilot support-review validate, release-pilot-support-review-validate.v1, and complete private support review summary nextActions.
 
 No SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, and no database runtime are introduced.
 """);
@@ -4395,9 +4921,11 @@ Validate nextActions ensure unsafe paths route back to a public-safe scaffold pa
 Dry-run release pilot register --pilot-id v6-pilot-2026-office-copy-01 --path docs/smoke/v6.0/v6-pilot-2026-office-copy-01.md --output json before using --yes and inspect completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions.
 Duplicate register attempts route to status plus a new public pilot id intake path.
 Invalid register identifiers and paths route back to a public-safe intake path.
+Register and status gates reject synthetic or local controlled evidence.
 Check release pilot status --output json after registration to report remaining office pilots, missingEvidence, missingEvidenceSummary, evidenceCompleteOfficePilotCount, remainingEvidenceCompleteOfficePilotCount, status structural repair nextActions, and nextActions.
 Run release pilot claim --output json as a dry-run and inspect claimBlockers and nextActions before using --yes for an office rollout completion claim.
 Use release pilot claim --production-support --support-review docs/smoke/v6.0/v6-production-support-review.md --output json only after private support review, and record productionSupportReviewPath in office-rollout-status.json.
+Create the public-safe summary with release pilot support-review scaffold --path docs/smoke/v6.0/v6-production-support-review.md --output json; it emits release-pilot-support-review-scaffold.v1 and rolloutStatusMutated=false. Validate the filled summary with release pilot support-review validate --path docs/smoke/v6.0/v6-production-support-review.md --output json; it emits release-pilot-support-review-validate.v1. Claim repair nextActions include complete private support review summary before rerunning claim.
 Support review creation is deferred until the completed pilot threshold is satisfied.
 Each packet records a Pilot identifier that must match the registered pilot id.
 
@@ -4408,6 +4936,24 @@ Minimum office pilots: 2-3 completed office pilots before any v6.0 office rollou
 
 Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime, no central production model mutation, and no production support claim without completed office rollout pilots.
 """);
+        WriteFile(root, "docs/smoke/v6.0/production-support-review-template.md", """
+# RevitCli v6.0 Production Support Review Summary
+
+Use this public-safe summary only after private support review is complete.
+Blank fields are not claim-ready.
+
+- Production support review:
+- private support review approved:
+- office rollout completion:
+- production support claim:
+
+## Boundary Summary
+
+- Public-safe evidence only.
+- The private support review remains outside the repository.
+- `release pilot support-review validate --path docs/smoke/v6.0/<support-review>.md --output json` must pass before any production support claim dry-run.
+- `release pilot claim --production-support --support-review docs/smoke/v6.0/<support-review>.md --output json` must dry-run before any `--yes` write.
+""");
         WriteFile(root, "docs/smoke/v6.0/release-pilot-spine.md", """
 # RevitCli v6.0 Release Pilot Spine Portable Smoke
 
@@ -4415,9 +4961,11 @@ This document records a synthetic CLI fixture. It is not office rollout completi
 
 release pilot scaffold emits release-pilot-scaffold.v1 and scaffold nextActions.
 release pilot validate emits release-pilot-validate.v1.
-release pilot register is a dry-run register path that emits release-pilot-register.v1 and reports completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions.
+release pilot register is a rejected dry-run register path that emits release-pilot-register.v1, reports completedOfficePilotCountBefore, completedOfficePilotCountAfter, and register nextActions, and proves gates reject synthetic or local controlled evidence.
 release pilot status emits release-pilot-status.v1 and reports remainingEvidenceCompleteOfficePilotCount plus status structural repair nextActions.
 release pilot claim emits release-pilot-claim.v1 and reports claimBlockers plus machine-readable nextActions.
+release pilot support-review scaffold emits release-pilot-support-review-scaffold.v1 and reports rolloutStatusMutated=false.
+release pilot support-review validate emits release-pilot-support-review-validate.v1.
 """);
         WriteFile(root, "docs/smoke/v6.0/office-rollout-status.json", """
 {
@@ -4904,6 +5452,7 @@ Run `release verify --strict`.
         WriteFile($"docs/smoke/v6.0/{fileName}", """
 # Production support review
 
+- Production support review: complete
 - private support review approved: yes
 - office rollout completion: reviewed
 - production support claim: approved
@@ -4972,7 +5521,7 @@ Run `release verify --strict`.
         - Support ticket review: reviewed
         - Multi-user rollout postmortem: complete
 
-        Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime.
+        Boundary summary: no SaaS, no MCP, no dashboard-central workflow, no built-in LLM parser, no database runtime. This single packet is not office rollout completion by itself; threshold and claim gates still decide rollout completion.
         """;
 
     private static void WriteFile(string root, string relativePath, string content)
