@@ -119,6 +119,13 @@ public sealed class ReleaseCommandTests : IDisposable
             check.GetProperty("id").GetString() == "v6.0:contract-doc" &&
             check.GetProperty("status").GetString() == "ok");
         Assert.Contains(root.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6-rc:status" &&
+            check.GetProperty("status").GetString() == "ok" &&
+            check.GetProperty("message").GetString()!.Contains("office rollout", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(root.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6-rc:current-source-drift" &&
+            check.GetProperty("status").GetString() == "ok");
+        Assert.Contains(root.GetProperty("checks").EnumerateArray(), check =>
             check.GetProperty("id").GetString() == "v6.0:standards-spine-smoke-doc" &&
             check.GetProperty("status").GetString() == "ok");
         Assert.Contains(root.GetProperty("checks").EnumerateArray(), check =>
@@ -249,6 +256,22 @@ jobs:
         using var json = JsonDocument.Parse(output.ToString());
         Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
             check.GetProperty("id").GetString() == "installer-current-source-handoff:verify" &&
+            check.GetProperty("status").GetString() == "error");
+    }
+
+    [Fact]
+    public async Task Verify_MissingV60RcReadiness_ReturnsFailure()
+    {
+        WriteHealthyTree(_root);
+        File.Delete(Path.Combine(_root, "docs", "v6-rc-readiness.md"));
+        var output = new StringWriter();
+
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", null, strict: true, output);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(output.ToString());
+        Assert.Contains(json.RootElement.GetProperty("checks").EnumerateArray(), check =>
+            check.GetProperty("id").GetString() == "v6-rc:readiness-doc" &&
             check.GetProperty("status").GetString() == "error");
     }
 
@@ -4811,6 +4834,22 @@ not live verified gaps remain documented in smoke reports.
 Views, links, model map, dashboard, MCP, SaaS, or built-in LLM parser remain outside the v5.0 RC production claim.
 
 Run `release verify --strict`.
+""");
+        WriteFile(root, "docs/v6-rc-readiness.md", """
+# RevitCli v6.0 RC Readiness
+
+> Current status: GO for v6.0 Local BIMOps contract baseline RC.
+> Office rollout status: NO-GO for office rollout completion.
+> Production support status: NO-GO for production support claim.
+
+`workbench verify --contract workbench-contract.v2 --dir . --output json` must pass with v60LocalBimOpsContractGate.
+`release verify --strict --output json` must pass.
+`scripts/smoke-revit-wsl.sh --require-current-source` must pass with currentSourceDriftKind=none.
+`release pilot status --output json` keeps completedOfficePilotCount=0 and remainingEvidenceCompleteOfficePilotCount=2 machine-readable.
+`release pilot claim --output json` stays dry-run first.
+Production support requires productionSupportReviewPath after support-review validation.
+
+The RC baseline has no SaaS, no MCP, no built-in LLM, no dashboard-central, and no database runtime.
 """);
         WriteFile(root, "docs/smoke/v5.0/revit-2024-issue-closure.md", "# Revit 2024 issue closure smoke");
         WriteFile(root, "docs/smoke/v5.0/revit-2025-issue-closure.md", "# Revit 2025 issue closure smoke");

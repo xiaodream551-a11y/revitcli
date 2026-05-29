@@ -1003,6 +1003,8 @@ internal static partial class ReleaseVerifier
         ReleaseVerifyReport report,
         Lazy<WorkbenchVerifyRun> workbenchVerify)
     {
+        CheckV60RcReadinessGate(root, report);
+
         var contractPath = Path.Combine(root, ToNativePath("docs/v6-local-bimops-contract.md"));
         if (!File.Exists(contractPath))
         {
@@ -1901,6 +1903,71 @@ internal static partial class ReleaseVerifier
             "v6.0 workflow registry smoke doc avoids a centralized workflow database claim.", "docs/smoke/v6.0/workflow-registry.md", V60DatabaseContradictions);
 
         AddV60WorkbenchGate(root, report, workbenchVerify);
+    }
+
+    private static void CheckV60RcReadinessGate(string root, ReleaseVerifyReport report)
+    {
+        var readinessPath = Path.Combine(root, ToNativePath("docs/v6-rc-readiness.md"));
+        if (!File.Exists(readinessPath))
+        {
+            report.Add("v6-rc:readiness-doc", ReleaseVerifyStatus.Error,
+                "Missing docs/v6-rc-readiness.md; v6.0 RC boundaries are not disclosed.",
+                "docs/v6-rc-readiness.md");
+            return;
+        }
+
+        var readiness = ReadText(readinessPath, report, "v6-rc:readiness-readable");
+        if (readiness is null)
+            return;
+
+        var baselineGo = readiness.Contains(
+            "GO for v6.0 Local BIMOps contract baseline RC",
+            StringComparison.OrdinalIgnoreCase);
+        var rolloutNoGo = readiness.Contains(
+            "NO-GO for office rollout completion",
+            StringComparison.OrdinalIgnoreCase);
+        var supportNoGo = readiness.Contains(
+            "NO-GO for production support claim",
+            StringComparison.OrdinalIgnoreCase);
+
+        report.Add(
+            "v6-rc:status",
+            baselineGo && rolloutNoGo && supportNoGo ? ReleaseVerifyStatus.Ok : ReleaseVerifyStatus.Error,
+            baselineGo && rolloutNoGo && supportNoGo
+                ? "v6.0 readiness declares GO for the Local BIMOps contract baseline while keeping office rollout and production support claims NO-GO."
+                : "docs/v6-rc-readiness.md must declare GO for the v6.0 Local BIMOps contract baseline and NO-GO for office rollout completion plus production support.",
+            "docs/v6-rc-readiness.md");
+
+        AddContains(report, "v6-rc:workbench-gate", readiness, "v60LocalBimOpsContractGate",
+            "v6.0 readiness references the scoped workbench contract gate.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:workbench-command", readiness, "workbench verify --contract workbench-contract.v2",
+            "v6.0 readiness requires the workbench v2 contract gate.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:strict-release-command", readiness, "release verify --strict",
+            "v6.0 readiness requires strict release verification.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:current-source-smoke", readiness, "scripts/smoke-revit-wsl.sh --require-current-source",
+            "v6.0 readiness requires current-source live smoke before live add-in/source claims.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:current-source-drift", readiness, "currentSourceDriftKind=none",
+            "v6.0 readiness records the current-source drift-free live smoke condition.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:office-status-zero", readiness, "completedOfficePilotCount=0",
+            "v6.0 readiness records that no office rollout pilots are completed yet.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:pilot-status-command", readiness, "release pilot status --output json",
+            "v6.0 readiness keeps office rollout state machine-readable.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:pilot-claim-command", readiness, "release pilot claim --output json",
+            "v6.0 readiness keeps office rollout claims dry-run first.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:production-support-review-path", readiness, "productionSupportReviewPath",
+            "v6.0 readiness keeps production support summary evidence explicit.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:office-pilot-next-actions", readiness, "remainingEvidenceCompleteOfficePilotCount=2",
+            "v6.0 readiness records remaining evidence-complete office pilots.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:no-saas", readiness, "no SaaS",
+            "v6.0 readiness keeps SaaS outside the RC baseline.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:no-mcp", readiness, "no MCP",
+            "v6.0 readiness keeps MCP outside the RC baseline.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:no-llm", readiness, "no built-in LLM",
+            "v6.0 readiness keeps built-in LLM behavior outside the RC baseline.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:no-dashboard-central", readiness, "no dashboard-central",
+            "v6.0 readiness keeps dashboard-central outside the RC baseline.", "docs/v6-rc-readiness.md");
+        AddContains(report, "v6-rc:no-database", readiness, "no database",
+            "v6.0 readiness keeps database runtime outside the RC baseline.", "docs/v6-rc-readiness.md");
     }
 
     private static void AddV60ReleasePilotSpine(string root, ReleaseVerifyReport report)

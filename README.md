@@ -6,17 +6,17 @@ sheets and schedules, diagnose publish failures, snapshot/diff model state,
 and make reviewed parameter changes without clicking through repetitive
 Revit UI.
 
-> **Status: Unreleased v5.0 planning - Issue Closure Workbench Quality Release**
+> **Status: Unreleased v6.0 RC - Local BIMOps Workbench contract baseline**
 > Windows/Revit-first BIMOps runner with source-level support for Revit
 > 2024/2025/2026; the latest tagged release ZIP packages the Revit 2026 add-in.
 > Current focus:
-> hardening the existing v4/v4.1 command surface into a real issue-day closure
-> loop: dry-run plans, explicit approval, receipts, rollback, package
-> traceability, signed journals, and Windows/Revit smoke evidence. The current
-> v5.0 RC boundary is Revit 2026-only: controlled issue-closure smoke is
-> recorded for Revit 2026, while Revit 2024/2025 remain source-build targets
-> without live v5.0 issue-closure claims; see
-> [v5-rc-readiness.md](docs/v5-rc-readiness.md).
+> shipping the local, deterministic v6.0 contract baseline: operations ledger,
+> standards runtime, project memory from local artifacts, governed workflow
+> registry, release pilot intake, receipts, rollback checks, and strict
+> release/workbench gates. The v6.0 RC is GO for the Local BIMOps contract
+> baseline and NO-GO for office rollout completion or production support until
+> real office pilot evidence is registered; see
+> [v6-rc-readiness.md](docs/v6-rc-readiness.md).
 
 ```bash
 revitcli status --output json                                # connection check
@@ -70,7 +70,7 @@ revitcli standards install profiles/office-standard              # bootstrap a n
 revitcli standards validate --output markdown                # check local office standards
 revitcli family purge --dry-run --report .revitcli/reports/family-purge.json # review cleanup candidates
 revitcli release verify --tag v2.3.0 --output markdown       # local release preflight handoff
-revitcli release verify --strict --output markdown           # v5.0 RC no-go gate
+revitcli release verify --strict --output markdown           # v5/v6 RC no-go gate
 revitcli publish --since baseline.json                       # incremental re-export
 revitcli import doors.csv --category doors --match-by Mark   # CSV → params
 ```
@@ -574,13 +574,15 @@ docs/superpowers/          # Design specs and implementation plans
 - [x] v4.1 issue closure automation surface: sheet, numbering, schedule, view, link, model-map, issue, and workbench v2 command contracts
 - [x] v5.0 issue closure quality release: harden issue-day dry-run/apply/receipt/rollback/package/journal behavior on a controlled Revit 2026 RVT
 - [ ] v5.x production domains: sheet release control, schedule/deliverable closure, numbering apply, standards runtime, coordination hygiene, and local team pilot packaging
-- [ ] v6.0 Local BIMOps Workbench: standards runtime, operations ledger, local project memory, and governed workflow registry; current baseline includes append-only `ledger append`, preview-only `ledger replay`, read-only `ledger query` / `ledger validate` / `ledger stats` / `ledger timeline`, and `workflow registry` contracts with no SaaS, MCP, built-in LLM, or dashboard-central runtime
+- [x] v6.0 Local BIMOps Workbench contract baseline: standards runtime, operations ledger, local project memory, governed workflow registry, local analytics bundle, current-source Revit 2026 smoke, and release pilot intake gates with no SaaS, MCP, built-in LLM, dashboard-central, or database runtime
+- [ ] v6.0 office rollout completion: real office project-copy pilots and production support remain blocked until `release pilot status` reports enough evidence-complete office pilots
 
 See [docs/roadmap-2026q4-v4.md](docs/roadmap-2026q4-v4.md) for the Q4 → v4 terminal-first blueprint.
 See [docs/roadmap-v5-v6.md](docs/roadmap-v5-v6.md) for the v5.0 → v6.0 executable plan and
 [docs/v5-demo-and-pilot-playbook.md](docs/v5-demo-and-pilot-playbook.md) for the issue-day demo and pilot checklist.
 The v6.0 contract baseline is in
-[docs/v6-local-bimops-contract.md](docs/v6-local-bimops-contract.md).
+[docs/v6-local-bimops-contract.md](docs/v6-local-bimops-contract.md), with RC
+boundaries in [docs/v6-rc-readiness.md](docs/v6-rc-readiness.md).
 The v5.0 demo starts from `profiles/v5-issue.yml` and
 `scripts/v5-issue-day-demo.ps1`.
 

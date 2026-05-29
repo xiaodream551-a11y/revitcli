@@ -70,6 +70,17 @@ the no-write WSL helper. It proves the checked-out hot-reload/Core split source
 was installed and loaded for Revit 2026 at the time of the smoke; it is not an
 office rollout pilot or production support claim.
 
+On 2026-05-29, after the v6.0 rollout support-review gate hardening, the
+current-source helper passed again with `success=true`; `sourceHead`,
+`cliCommit`, `installedAddinCommit`, `liveAddinCommit`, and
+`statusAddinCommit` all matched, with `currentSourceInstalled=true`,
+`currentSourceDriftKind=none`, and `mutatesModel=false`. That run followed a
+controlled Revit close, `scripts\install-current-source-revit2026.ps1
+-TrustLocalDevelopmentCertificate`, Revit restart on the controlled model, and
+the no-write WSL helper. It proves the checked-out source was installed and
+loaded for Revit 2026 at the time of the smoke; it is not an office rollout
+pilot or production support claim.
+
 Environment:
 
 - Revit process: `D:\revit2026\Revit 2026\Revit.exe`
