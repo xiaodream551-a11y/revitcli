@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-05-29
+
 ### Added — v2.4 safe batch plans
 
 - `plan-receipt.v1` now records explicit rollback actions for set/import plan

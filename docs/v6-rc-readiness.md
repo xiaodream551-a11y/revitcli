@@ -1,7 +1,7 @@
-# RevitCli v6.0 RC Readiness
+# RevitCli v6.0 Release Readiness
 
 > Created: 2026-05-29.
-> Current status: GO for v6.0 Local BIMOps contract baseline RC.
+> Current status: GO for v6.0.0 formal Local BIMOps contract baseline release.
 > Office rollout status: NO-GO for office rollout completion.
 > Production support status: NO-GO for production support claim.
 
@@ -10,9 +10,9 @@ contract baseline as ready while preventing local smoke, synthetic fixtures, or
 the controlled `revit_cli.rvt` packet from being treated as office rollout
 completion.
 
-## Stable RC Baseline
+## Stable Release Baseline
 
-| Area | Commands | RC expectation |
+| Area | Commands | Release expectation |
 | --- | --- | --- |
 | Contract gate | `workbench verify --contract workbench-contract.v2 --dir . --output json` | Must pass with `v60LocalBimOpsContractGate` and structured runtime evidence. |
 | Release gate | `release verify --strict --output json` | Must pass and check the v6.0 contract, smoke docs, rollout status, local controlled packet, and this readiness boundary. |
@@ -24,7 +24,8 @@ completion.
 
 ## Current Boundaries
 
-- The v6.0 Local BIMOps contract baseline is ready for RC handoff.
+- The v6.0 Local BIMOps contract baseline is ready for v6.0.0 formal release
+  handoff.
 - The Revit 2026 current-source no-write smoke passed on the controlled
   `revit_cli.rvt` model with `currentSourceDriftKind=none`; it proves source
   and loaded add-in alignment, not office rollout completion.
@@ -38,15 +39,16 @@ completion.
   `productionSupportReviewPath` after private support review; blank scaffolds
   and template files are not claim-ready.
 - Revit 2024 and Revit 2025 do not have v6.0 live add-in smoke evidence in this
-  RC boundary.
+  release boundary.
 
 ## Non-Goals
 
-The v6.0 RC baseline introduces no SaaS, no MCP, no built-in LLM parser, no dashboard-central workflow state, and no database runtime. External operators
-may call visible shell commands, but they do not bypass dry-run, explicit
-approval, receipts, rollback checks, or local audit trails.
+The v6.0.0 release baseline introduces no SaaS, no MCP, no built-in LLM parser,
+no dashboard-central workflow state, and no database runtime. External
+operators may call visible shell commands, but they do not bypass dry-run,
+explicit approval, receipts, rollback checks, or local audit trails.
 
-## RC Command Sequence
+## Release Command Sequence
 
 ```powershell
 dotnet test tests/RevitCli.Tests/
@@ -57,6 +59,6 @@ revitcli release pilot claim --output json
 scripts/smoke-revit-wsl.sh --require-current-source
 ```
 
-`release verify --strict` is the blocking local release check for this RC. The
+`release verify --strict` is the blocking local release check for v6.0.0. The
 pilot status and claim commands are proof that rollout completion remains
 blocked until real office pilot evidence is registered.

@@ -34,15 +34,15 @@ public sealed class ReleaseCommandTests : IDisposable
         WriteHealthyTree(_root);
         var output = new StringWriter();
 
-        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", "v2.3.0", strict: false, output);
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "json", "v6.0.0", strict: false, output);
 
         Assert.True(exitCode == 0, output.ToString());
         using var json = JsonDocument.Parse(output.ToString());
         var root = json.RootElement;
         Assert.Equal("release-verify.v1", root.GetProperty("schemaVersion").GetString());
         Assert.True(root.GetProperty("success").GetBoolean());
-        Assert.Equal("2.3.0", root.GetProperty("version").GetString());
-        Assert.Equal("v2.3.0", root.GetProperty("tag").GetString());
+        Assert.Equal("6.0.0", root.GetProperty("version").GetString());
+        Assert.Equal("v6.0.0", root.GetProperty("tag").GetString());
         Assert.Equal(0, root.GetProperty("errorCount").GetInt32());
         Assert.Contains(root.GetProperty("checks").EnumerateArray(), check =>
             check.GetProperty("id").GetString() == "ci:no-addin-build" &&
@@ -417,13 +417,13 @@ jobs:
         WriteHealthyTree(_root);
         var output = new StringWriter();
 
-        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "markdown", "v2.3.0", strict: false, output);
+        var exitCode = await ReleaseCommand.ExecuteVerifyAsync(_root, "markdown", "v6.0.0", strict: false, output);
 
         var text = output.ToString();
         Assert.True(exitCode == 0, output.ToString());
         Assert.Contains("# Release Verification", text);
         Assert.Contains("- Status: `PASS`", text);
-        Assert.Contains("- Tag: `v2.3.0`", text);
+        Assert.Contains("- Tag: `v6.0.0`", text);
         Assert.Contains("## Errors", text);
         Assert.Contains("- None.", text);
         Assert.Contains("## Passing Checks", text);
@@ -4781,7 +4781,7 @@ Run `release verify --strict`.
         WriteFile(root, "Directory.Build.props", """
 <Project>
   <PropertyGroup>
-    <RevitCliVersion>2.3.0</RevitCliVersion>
+    <RevitCliVersion>6.0.0</RevitCliVersion>
   </PropertyGroup>
 </Project>
 """);
@@ -4790,7 +4790,9 @@ Run `release verify --strict`.
 
 ## [Unreleased]
 
-### Added - v2.3 inspect/discover
+## [6.0.0] - 2026-05-29
+
+### Added - v6.0 release
 
 - Release integrity work.
 """);
@@ -4836,9 +4838,9 @@ Views, links, model map, dashboard, MCP, SaaS, or built-in LLM parser remain out
 Run `release verify --strict`.
 """);
         WriteFile(root, "docs/v6-rc-readiness.md", """
-# RevitCli v6.0 RC Readiness
+# RevitCli v6.0 Release Readiness
 
-> Current status: GO for v6.0 Local BIMOps contract baseline RC.
+> Current status: GO for v6.0.0 formal Local BIMOps contract baseline release.
 > Office rollout status: NO-GO for office rollout completion.
 > Production support status: NO-GO for production support claim.
 
@@ -4849,7 +4851,7 @@ Run `release verify --strict`.
 `release pilot claim --output json` stays dry-run first.
 Production support requires productionSupportReviewPath after support-review validation.
 
-The RC baseline has no SaaS, no MCP, no built-in LLM, no dashboard-central, and no database runtime.
+The v6.0.0 release baseline has no SaaS, no MCP, no built-in LLM, no dashboard-central, and no database runtime.
 """);
         WriteFile(root, "docs/smoke/v5.0/revit-2024-issue-closure.md", "# Revit 2024 issue closure smoke");
         WriteFile(root, "docs/smoke/v5.0/revit-2025-issue-closure.md", "# Revit 2025 issue closure smoke");

@@ -1911,7 +1911,7 @@ internal static partial class ReleaseVerifier
         if (!File.Exists(readinessPath))
         {
             report.Add("v6-rc:readiness-doc", ReleaseVerifyStatus.Error,
-                "Missing docs/v6-rc-readiness.md; v6.0 RC boundaries are not disclosed.",
+                "Missing docs/v6-rc-readiness.md; v6.0 release boundaries are not disclosed.",
                 "docs/v6-rc-readiness.md");
             return;
         }
@@ -1921,7 +1921,7 @@ internal static partial class ReleaseVerifier
             return;
 
         var baselineGo = readiness.Contains(
-            "GO for v6.0 Local BIMOps contract baseline RC",
+            "GO for v6.0.0 formal Local BIMOps contract baseline release",
             StringComparison.OrdinalIgnoreCase);
         var rolloutNoGo = readiness.Contains(
             "NO-GO for office rollout completion",
@@ -1934,8 +1934,8 @@ internal static partial class ReleaseVerifier
             "v6-rc:status",
             baselineGo && rolloutNoGo && supportNoGo ? ReleaseVerifyStatus.Ok : ReleaseVerifyStatus.Error,
             baselineGo && rolloutNoGo && supportNoGo
-                ? "v6.0 readiness declares GO for the Local BIMOps contract baseline while keeping office rollout and production support claims NO-GO."
-                : "docs/v6-rc-readiness.md must declare GO for the v6.0 Local BIMOps contract baseline and NO-GO for office rollout completion plus production support.",
+                ? "v6.0 readiness declares GO for the formal Local BIMOps contract baseline while keeping office rollout and production support claims NO-GO."
+                : "docs/v6-rc-readiness.md must declare GO for the v6.0 formal Local BIMOps contract baseline and NO-GO for office rollout completion plus production support.",
             "docs/v6-rc-readiness.md");
 
         AddContains(report, "v6-rc:workbench-gate", readiness, "v60LocalBimOpsContractGate",

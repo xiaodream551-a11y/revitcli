@@ -12,14 +12,15 @@ dotnet build
 dotnet test tests/RevitCli.Tests/
 revitcli release verify --tag vX.Y.Z
 revitcli release verify --tag vX.Y.Z --output markdown
-revitcli release verify --tag vX.Y.Z --strict --output markdown # required for v5.0 RC handoff
+revitcli release verify --tag vX.Y.Z --strict --output markdown # required for v5.0 RC and v6.0 release handoff
 ```
 
 `release verify` checks local release files, `RevitCliVersion`, changelog and
 README release notes, Ubuntu CLI/Shared CI guardrails, portable workbench
 verification in CI, installer hardening markers, release packaging workflow
-markers, v5.0 RC boundary docs, v6 portable workbench runtime evidence, and
-smoke documentation. Markdown output is intended for maintainer handoff notes.
+markers, v5.0 RC boundary docs, v6.0 release boundary docs, v6 portable
+workbench runtime evidence, and smoke documentation. Markdown output is
+intended for maintainer handoff notes.
 It does not run live Revit smoke. The v6.0 `workbench-gate` check emits and
 consumes structured `runtimeEvidence` booleans for command-spine output parity,
 command-spine no-write proof, workflow registry, ledger query/validate,
@@ -29,10 +30,10 @@ alone. Ubuntu CI also runs `release verify --output json` and
 the portable CLI/Shared build so release and workbench guardrails fail before
 merge.
 
-For a v5.0 RC handoff, `release verify --strict` is required. A disclosed
-`NO-GO` status or missing controlled issue-closure smoke for any claimed live
-Revit year remains a warning in normal CI, but becomes a blocking failure under
-`--strict`.
+For a v5.0 RC or v6.0 release handoff, `release verify --strict` is required.
+A disclosed `NO-GO` status or missing controlled issue-closure smoke for any
+claimed live Revit year remains a warning in normal CI, but becomes a blocking
+failure under `--strict`.
 
 If the dashboard changed:
 
@@ -50,7 +51,7 @@ Close all Revit processes before final release verification when possible. If
 Revit is running, the installer updates CLI files immediately and stages add-in
 files under `%LOCALAPPDATA%\RevitCli\staged` for the next Revit restart.
 
-For the v2.3.0 release package, validate the packaged Revit 2026 add-in. If
+For the v6.0.0 release package, validate the packaged Revit 2026 add-in. If
 Revit 2026 is installed outside `%ProgramFiles%`, pass the local path:
 
 ```powershell
