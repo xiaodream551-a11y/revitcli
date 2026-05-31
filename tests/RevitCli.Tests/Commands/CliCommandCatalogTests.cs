@@ -42,6 +42,7 @@ public class CliCommandCatalogTests
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
         Assert.Contains("rvt", names);
+        Assert.Contains("library", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -86,6 +87,7 @@ public class CliCommandCatalogTests
         Assert.Contains("deliverables", names);
         Assert.Contains("release", names);
         Assert.Contains("rvt", names);
+        Assert.Contains("library", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -110,6 +112,7 @@ public class CliCommandCatalogTests
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
         Assert.Contains("rvt", names);
+        Assert.Contains("library", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -138,6 +141,19 @@ public class CliCommandCatalogTests
             CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "rvt clean-backups" &&
                      entry.Description.Contains("dry-run review"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeLibraryContent()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "library check" &&
+                     entry.Description.Contains("Libraries"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "library install" &&
+                     entry.Description.Contains("--apply --yes"));
     }
 
     [Fact]

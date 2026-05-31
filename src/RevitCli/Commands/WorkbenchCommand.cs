@@ -146,6 +146,16 @@ public static class WorkbenchCommand
             "revitcli rvt clean-backups . --dry-run --output markdown",
             "0 when scans or cleanups complete; 1 for invalid paths/options/refused cleanup; 2 for partial delete failures."),
         new(
+            "library",
+            "Check local Autodesk Revit content libraries and fetch official content installers.",
+            "local-write",
+            SupportsJson: true,
+            SupportsMarkdown: true,
+            "required before installer launch",
+            "revit-library-check.v1, revit-library-download.v1, and revit-library-install.v1",
+            "revitcli library check --year 2026 --output markdown",
+            "0 when content exists or sources render; 1 for missing content, invalid URLs, refused install, or failed download/start."),
+        new(
             "check",
             "Run profile-driven model checks as a gate before issue work.",
             "read-only",
@@ -595,6 +605,27 @@ public static class WorkbenchCommand
             SupportsMarkdown: true,
             "Dry-run-first cleanup report for numbered Revit backup files."),
         new(
+            "revit-library-check",
+            "library check",
+            SupportsTable: true,
+            "revit-library-check.v1",
+            SupportsMarkdown: true,
+            "Local Revit Libraries and Family Templates inventory with Revit.ini path evidence."),
+        new(
+            "revit-library-download",
+            "library download",
+            SupportsTable: true,
+            "revit-library-download.v1",
+            SupportsMarkdown: true,
+            "Official Autodesk content package download result or manual Autodesk Account fallback."),
+        new(
+            "revit-library-install",
+            "library install",
+            SupportsTable: true,
+            "revit-library-install.v1",
+            SupportsMarkdown: true,
+            "Dry-run and confirmed installer launch envelope for downloaded Autodesk content packages."),
+        new(
             "schedule-create",
             "schedule create",
             SupportsTable: true,
@@ -958,6 +989,15 @@ public static class WorkbenchCommand
             "rvt-backup-cleanup-report.v1 when --report is used",
             "revitcli rvt scan . --output markdown",
             "RVT backup cleanup defaults to dry-run and deletes only numbered backups with explicit approval."),
+        new(
+            "library-install",
+            "library install",
+            "local-write",
+            "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --dry-run --output markdown",
+            "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes",
+            "revit-library-install.v1",
+            "revitcli library check --year 2026 --output markdown",
+            "Content installers are only started from an existing .exe/.msi package after --apply --yes."),
         new(
             "history-prune",
             "history prune",
@@ -2171,6 +2211,10 @@ public static class WorkbenchCommand
             "release pilot support-review validate",
             "rvt scan",
             "rvt clean-backups",
+            "library check",
+            "library sources",
+            "library download",
+            "library install",
             "examples workbench",
             "examples workflow",
             "score --history",
@@ -2826,7 +2870,7 @@ public static class WorkbenchCommand
         var safeguardIndex = CreateSafeguardIndex();
         var requiredSafeguards = new[]
         {
-            "export", "publish", "plan-apply", "rollback", "workflow-run", "deliverables-bundle", "issue-package", "schedule-create", "schedules-ensure", "views-template-apply", "views-clone-set", "links-repair", "model-map-fix", "sheet-issue-meta", "sheet-renumber", "rooms-renumber", "marks-assign", "rvt-clean-backups"
+            "export", "publish", "plan-apply", "rollback", "workflow-run", "deliverables-bundle", "issue-package", "schedule-create", "schedules-ensure", "views-template-apply", "views-clone-set", "links-repair", "model-map-fix", "sheet-issue-meta", "sheet-renumber", "rooms-renumber", "marks-assign", "rvt-clean-backups", "library-install"
         };
         var safeguardNames = safeguardIndex.Safeguards
             .Select(safeguard => safeguard.Name)
@@ -9828,6 +9872,7 @@ schedules:
                 "release pilot support-review validate",
             },
             "rvt" => new[] { "rvt scan", "rvt clean-backups" },
+            "library" => new[] { "library check", "library sources", "library download", "library install" },
             "check" => new[] { "check" },
             "score" => new[] { "score", "score --history" },
             "sheets" => new[] { "sheets verify", "sheets issue-meta", "sheets renumber", "sheets index init", "sheets index show" },

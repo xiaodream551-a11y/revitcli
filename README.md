@@ -71,6 +71,8 @@ revitcli standards validate --output markdown                # check local offic
 revitcli family purge --dry-run --report .revitcli/reports/family-purge.json # review cleanup candidates
 revitcli rvt scan /mnt/d/revit --output markdown             # find RVT files and numbered backups
 revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown # preview .0001.rvt backup cleanup
+revitcli library check --year 2026 --output markdown         # detect missing Revit content libraries
+revitcli library sources --year 2026 --locale ENU            # show official Autodesk content sources
 revitcli release verify --tag v6.0.0 --output markdown       # local release preflight handoff
 revitcli release verify --strict --output markdown           # v5 RC / v6 release no-go gate
 revitcli publish --since baseline.json                       # incremental re-export
@@ -136,6 +138,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli deliverables list` / `stats` / `verify` / `plan` / `bundle` | Review delivery plans, manifest entries, receipt traceability, and package handoff zips |
 | `revitcli standards install` / `validate` | Install and validate required profiles, workflows, outputs, schedules, and family rules |
 | `revitcli rvt scan` / `clean-backups` | Find local `.rvt` files, classify `model.0001.rvt` backups, and delete numbered backups only after dry-run review plus `--apply --yes` |
+| `revitcli library check` / `sources` / `download` / `install` | Detect missing Autodesk Revit content libraries, show official sources, download official Autodesk package URLs, and start installers only after `--apply --yes` |
 | `revitcli release verify` | Check local release files, version/tag consistency, CI guardrails, v5.0 RC and v6.0 release boundary docs, and smoke documentation; use `--strict` for no-go blocking and `--output markdown` for handoff notes |
 | `revitcli snapshot` | Capture model semantic state as JSON |
 | `revitcli diff <from> <to>` | Diff two snapshots, or add `--review` for anomaly/notable/routine triage |
@@ -313,6 +316,13 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 - `rvt clean-backups <root> --apply --yes` deletes only matched numbered backups. By default it requires the same-directory main file, skips orphan backups, and leaves ordinary names such as `project.2026.rvt` untouched.
 - Add `--include-orphans` only when orphaned numbered backups should also be deleted, and `--older-than 7d` to require an age threshold.
 - The built-in `family-cleanup` workflow uses the same purge report path so Codex CLI can show review evidence before destructive cleanup.
+
+### Revit Content Libraries
+
+- `library check --year 2026 --locale ENU --output json|markdown` checks the local Revit content root, detected `Revit.ini`, `Libraries`, and `Family Templates` paths without requiring Revit.
+- `library sources` prints official Autodesk source paths, including Autodesk Account `Available downloads > Libraries` and the in-product `Load Autodesk Family` cloud workflow.
+- `library download --download-dir /mnt/d/temp/revit-content` refuses to invent unofficial links when no stable direct Autodesk package URL is bundled. Pass `--url <official Autodesk HTTPS package URL>` only after obtaining it from Autodesk.
+- `library install --package <installer.exe> --dry-run` previews installer launch. Starting an installer requires `--apply --yes` and an existing `.exe` or `.msi` package.
 
 Example manifest:
 

@@ -313,6 +313,19 @@ public static class ExamplesCommand
             },
             "Find Revit backup files such as model.0001.rvt, summarize the dry-run cleanup, and wait for approval before deleting."),
         new(
+            "library",
+            "Check local Autodesk Revit content libraries and fetch official content installers.",
+            new[]
+            {
+                "revitcli library check --year 2026 --locale ENU --output markdown",
+                "revitcli library sources --year 2026 --locale ENU --output markdown",
+                "revitcli library download --year 2026 --locale ENU --download-dir /mnt/d/temp/revit-content --output json",
+                "revitcli library download --year 2026 --locale ENU --open-account --download-dir /mnt/d/temp/revit-content --output markdown",
+                "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --dry-run --output markdown",
+                "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes"
+            },
+            "Detect missing local Revit family content, use Autodesk Account when no direct package URL is available, and start installers only after explicit approval."),
+        new(
             "recipes",
             "Open documented Codex CLI prompt-to-command recipes.",
             new[]

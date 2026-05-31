@@ -228,6 +228,22 @@ public sealed class ExamplesCommandTests
     }
 
     [Fact]
+    public async Task Execute_LibraryTopic_PrintsContentLibraryWorkflow()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await ExamplesCommand.ExecuteAsync(output, "library");
+
+        var text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("# library", text);
+        Assert.Contains("revitcli library check --year 2026 --locale ENU --output markdown", text);
+        Assert.Contains("revitcli library sources --year 2026 --locale ENU --output markdown", text);
+        Assert.Contains("revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes", text);
+        Assert.Contains("Autodesk Account", text);
+    }
+
+    [Fact]
     public async Task Execute_JournalTopic_PrintsReviewAndIntegrityCommands()
     {
         var output = new StringWriter();

@@ -60,6 +60,13 @@ public sealed class WorkbenchCommandTests
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt scan") &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt clean-backups"));
         Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "library" &&
+            command.GetProperty("risk").GetString() == "local-write" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library check") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library install"));
+        Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "inspect" &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "inspect plans"));
         Assert.Contains(commands, command =>
@@ -2905,6 +2912,15 @@ journal verify
             path.GetProperty("command").GetString() == "release" &&
             path.GetProperty("supportsJson").GetBoolean());
         Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "library check" &&
+            path.GetProperty("command").GetString() == "library" &&
+            path.GetProperty("supportsJson").GetBoolean() &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "library install" &&
+            path.GetProperty("command").GetString() == "library" &&
+            path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, path =>
             path.GetProperty("path").GetString() == "plan apply" &&
             path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase) &&
             path.GetProperty("exitCodeNotes").GetString()!.Contains("validation", StringComparison.OrdinalIgnoreCase));
@@ -3165,6 +3181,14 @@ journal verify
             contract.GetProperty("jsonSchema").GetString() == "rvt-backup-cleanup-report.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "library check" &&
+            contract.GetProperty("jsonSchema").GetString() == "revit-library-check.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "library install" &&
+            contract.GetProperty("jsonSchema").GetString() == "revit-library-install.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "schedule create" &&
             contract.GetProperty("jsonSchema").GetString() == "schedule-create.v1");
         Assert.Contains(outputs, contract =>
@@ -3319,6 +3343,12 @@ journal verify
             safeguard.GetProperty("dryRunCommand").GetString()!.Contains("--dry-run", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("approvalCommand").GetString()!.Contains("--apply --yes", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("reviewCommand").GetString()!.Contains("rvt scan", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(safeguards, safeguard =>
+            safeguard.GetProperty("name").GetString() == "library-install" &&
+            safeguard.GetProperty("dryRunCommand").GetString()!.Contains("library install", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("dryRunCommand").GetString()!.Contains("--dry-run", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("approvalCommand").GetString()!.Contains("--apply --yes", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("reviewCommand").GetString()!.Contains("library check", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

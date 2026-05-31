@@ -82,6 +82,10 @@ public static class CompletionsCommand
     private static readonly string[] RvtOptions =
         { "--output", "--dry-run", "--apply", "--yes", "--include-orphans", "--non-recursive", "--older-than", "--report" };
     private static readonly string[] RvtOutputFormats = { "table", "json", "markdown" };
+    private static readonly string[] LibrarySubcommands = { "check", "sources", "download", "install" };
+    private static readonly string[] LibraryOptions =
+        { "--year", "--locale", "--content-root", "--revit-ini", "--download-dir", "--url", "--open-account", "--package", "--dry-run", "--apply", "--yes", "--output" };
+    private static readonly string[] LibraryOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] SheetsSubcommands = { "verify", "issue-meta", "renumber", "index", "init", "show" };
     private static readonly string[] SheetsOptions =
     {
@@ -328,6 +332,9 @@ public static class CompletionsCommand
         var rvtWords = JoinWords(RvtSubcommands.Concat(RvtOptions));
         var rvtOptions = JoinWords(RvtOptions);
         var rvtOutputFormats = JoinWords(RvtOutputFormats);
+        var libraryWords = JoinWords(LibrarySubcommands.Concat(LibraryOptions));
+        var libraryOptions = JoinWords(LibraryOptions);
+        var libraryOutputFormats = JoinWords(LibraryOutputFormats);
         var sheetsWords = JoinWords(SheetsSubcommands.Concat(SheetsOptions));
         var sheetsOptions = JoinWords(SheetsOptions);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
@@ -842,6 +849,27 @@ public static class CompletionsCommand
             "            fi",
             $"            COMPREPLY=($(compgen -W \"{rvtOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        library)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{libraryOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --year)",
+            $"                    COMPREPLY=($(compgen -W \"{revitYears}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --content-root|--revit-ini|--download-dir|--package)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{libraryWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{libraryOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        sheets)",
             "            case \"$prev\" in",
             "                --output)",
@@ -1116,6 +1144,8 @@ public static class CompletionsCommand
         var releaseOutputFormats = JoinWords(ReleaseOutputFormats);
         var rvtSubcommands = JoinWords(RvtSubcommands);
         var rvtOutputFormats = JoinWords(RvtOutputFormats);
+        var librarySubcommands = JoinWords(LibrarySubcommands);
+        var libraryOutputFormats = JoinWords(LibraryOutputFormats);
         var sheetsSubcommands = JoinWords(SheetsSubcommands);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
         var roomsSubcommands = JoinWords(RoomsSubcommands);
@@ -1683,6 +1713,25 @@ public static class CompletionsCommand
                 "                            '--report[Write RVT cleanup JSON report]:file:_files'",
                 "                    fi",
                 "                    ;;",
+                "                library)",
+                "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {librarySubcommands}",
+                "                    else",
+                "                        _arguments \\",
+                "                            '--year[Target Revit year]:year:(2024 2025 2026)' \\",
+                "                            '--locale[Autodesk content locale]:locale:' \\",
+                "                            '--content-root[Override content root]:dir:_directories' \\",
+                "                            '--revit-ini[Override Revit.ini path]:file:_files' \\",
+                "                            '--download-dir[Installer download directory]:dir:_directories' \\",
+                "                            '--url[Official Autodesk package URL]:url:' \\",
+                "                            '--open-account[Open Autodesk Account when direct URL is unavailable]' \\",
+                "                            '--package[Official content installer package]:file:_files' \\",
+                "                            '--dry-run[Preview installer launch]' \\",
+                "                            '--apply[Start the official installer]' \\",
+                "                            '--yes[Confirm installer launch]' \\",
+            $"                            '--output[Output format]:format:({libraryOutputFormats})'",
+                "                    fi",
+                "                    ;;",
                 "                journal)",
                 "                    _arguments \\",
                 $"                        '1:subcommand:({journalSubcommands})' \\",
@@ -1753,6 +1802,8 @@ public static class CompletionsCommand
         var releasePilotSupportReviewSubcommands = FormatPowerShellArray(ReleasePilotSupportReviewSubcommands);
         var rvtOptions = FormatPowerShellArray(RvtSubcommands.Concat(RvtOptions));
         var rvtSubcommands = FormatPowerShellArray(RvtSubcommands);
+        var libraryOptions = FormatPowerShellArray(LibrarySubcommands.Concat(LibraryOptions));
+        var librarySubcommands = FormatPowerShellArray(LibrarySubcommands);
         var sheetsOptions = FormatPowerShellArray(SheetsSubcommands.Concat(SheetsOptions));
         var roomsOptions = FormatPowerShellArray(RoomsSubcommands.Concat(RoomsOptions));
         var marksOptions = FormatPowerShellArray(MarksSubcommands.Concat(MarksOptions));
@@ -1800,6 +1851,7 @@ public static class CompletionsCommand
         var standardsOutputFormats = FormatPowerShellArray(StandardsOutputFormats);
         var releaseOutputFormats = FormatPowerShellArray(ReleaseOutputFormats);
         var rvtOutputFormats = FormatPowerShellArray(RvtOutputFormats);
+        var libraryOutputFormats = FormatPowerShellArray(LibraryOutputFormats);
         var sheetsOutputFormats = FormatPowerShellArray(SheetsOutputFormats);
         var roomsOutputFormats = FormatPowerShellArray(RoomsOutputFormats);
         var marksOutputFormats = FormatPowerShellArray(MarksOutputFormats);
@@ -1861,6 +1913,7 @@ public static class CompletionsCommand
             $"        'standards' = @({standardsOptions})",
             $"        'release' = @({releaseOptions})",
             $"        'rvt' = @({rvtOptions})",
+            $"        'library' = @({libraryOptions})",
             $"        'sheets' = @({sheetsOptions})",
             $"        'rooms' = @({roomsOptions})",
             $"        'marks' = @({marksOptions})",
@@ -1915,6 +1968,8 @@ public static class CompletionsCommand
             $"    $releasePilotSupportReviewSubcommands = @({releasePilotSupportReviewSubcommands})",
             $"    $rvtSubcommands = @({rvtSubcommands})",
             $"    $rvtOutputFormats = @({rvtOutputFormats})",
+            $"    $librarySubcommands = @({librarySubcommands})",
+            $"    $libraryOutputFormats = @({libraryOutputFormats})",
             $"    $sheetsOutputFormats = @({sheetsOutputFormats})",
             $"    $roomsOutputFormats = @({roomsOutputFormats})",
             $"    $marksOutputFormats = @({marksOutputFormats})",
@@ -2387,6 +2442,27 @@ public static class CompletionsCommand
             "            }",
             "",
             "            New-RevitCliCompletionResults -Values $commandOptions['rvt'] -ToolTip 'RVT option'",
+            "            return",
+            "        }",
+            "        'library' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $libraryOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--year') {",
+            "                New-RevitCliCompletionResults -Values $revitYears -ToolTip 'Revit year'",
+            "                return",
+            "            }",
+            "            if ($previous -in @('--content-root', '--revit-ini', '--download-dir', '--package')) {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $librarySubcommands -ToolTip 'Library subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['library'] -ToolTip 'Library option'",
             "            return",
             "        }",
             "        'sheets' {",

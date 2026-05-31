@@ -13,6 +13,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   cleanup candidates with JSON/Markdown reports, and delete only after
   explicit `--apply --yes` confirmation.
 
+### Added — Revit content library detection
+
+- Added `revitcli library check`, `sources`, `download`, and `install` to
+  detect missing Autodesk Revit local content libraries, show official
+  Autodesk Account / Load Autodesk Family sources, download only official
+  Autodesk HTTPS package URLs, and start installers only after `--apply --yes`.
+
 ## [6.0.0] - 2026-05-29
 
 ### Added — v2.4 safe batch plans

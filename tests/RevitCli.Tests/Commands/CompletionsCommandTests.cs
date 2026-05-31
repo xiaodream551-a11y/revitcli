@@ -61,6 +61,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("release", script);
         Assert.Contains("rvt", script);
         Assert.Contains("rvt)", script);
+        Assert.Contains("library", script);
+        Assert.Contains("library)", script);
         Assert.Contains("sheets", script);
         Assert.Contains("rooms", script);
         Assert.Contains("marks", script);
@@ -129,10 +131,17 @@ public class CompletionsCommandTests : IDisposable
         var rvtBlock = ExtractBlock(
             script,
             "        rvt)",
-            "        sheets)");
+            "        library)");
         Assert.Contains("compgen -W \"scan clean-backups --output --dry-run --apply --yes --include-orphans --non-recursive --older-than --report\" -- \"$cur\"", rvtBlock);
         Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", rvtBlock);
         Assert.Contains("compgen -f -- \"$cur\"", rvtBlock);
+        var libraryBlock = ExtractBlock(
+            script,
+            "        library)",
+            "        sheets)");
+        Assert.Contains("compgen -W \"check sources download install --year --locale --content-root --revit-ini --download-dir --url --open-account --package --dry-run --apply --yes --output\" -- \"$cur\"", libraryBlock);
+        Assert.Contains("compgen -W \"2024 2025 2026\" -- \"$cur\"", libraryBlock);
+        Assert.Contains("compgen -f -- \"$cur\"", libraryBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "        rollback)",
@@ -164,6 +173,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'standards:Install and validate local office standards requirements'", script);
         Assert.Contains("'release:Verify local release readiness and CI guardrails'", script);
         Assert.Contains("'rvt:Find RVT files and clean numbered Revit backups'", script);
+        Assert.Contains("'library:Find and fetch Autodesk Revit content libraries'", script);
         Assert.Contains("'sheets:Verify sheet numbering and local sheet-frame expectations'", script);
         Assert.Contains("'rooms:Plan and review room numbering workflows'", script);
         Assert.Contains("'marks:Plan and verify door/window Mark numbering workflows'", script);
@@ -230,10 +240,17 @@ public class CompletionsCommandTests : IDisposable
         var rvtBlock = ExtractBlock(
             script,
             "                rvt)",
-            "                journal)");
+            "                library)");
         Assert.Contains("_values 'subcommand' scan clean-backups", rvtBlock);
         Assert.Contains("--include-orphans[Also delete backups without a main RVT]", rvtBlock);
         Assert.Contains("--older-than[Only delete backups older than duration]:duration:", rvtBlock);
+        var libraryBlock = ExtractBlock(
+            script,
+            "                library)",
+            "                journal)");
+        Assert.Contains("_values 'subcommand' check sources download install", libraryBlock);
+        Assert.Contains("--year[Target Revit year]:year:(2024 2025 2026)", libraryBlock);
+        Assert.Contains("--package[Official content installer package]:file:_files", libraryBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "                rollback)",
@@ -273,6 +290,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'deliverables' = 'Review local delivery plans, manifests, and receipts'", script);
         Assert.Contains("'standards' = 'Install and validate local office standards requirements'", script);
         Assert.Contains("'release' = 'Verify local release readiness and CI guardrails'", script);
+        Assert.Contains("'library' = 'Find and fetch Autodesk Revit content libraries'", script);
         Assert.Contains("'sheets' = 'Verify sheet numbering and local sheet-frame expectations'", script);
         Assert.Contains("'rooms' = 'Plan and review room numbering workflows'", script);
         Assert.Contains("'marks' = 'Plan and verify door/window Mark numbering workflows'", script);
@@ -315,6 +333,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'rvt' = @('scan', 'clean-backups', '--output', '--dry-run', '--apply', '--yes', '--include-orphans', '--non-recursive', '--older-than', '--report')", script);
         Assert.Contains("$rvtSubcommands = @('scan', 'clean-backups')", script);
         Assert.Contains("$rvtOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("'library' = @('check', 'sources', 'download', 'install', '--year', '--locale', '--content-root', '--revit-ini', '--download-dir', '--url', '--open-account', '--package', '--dry-run', '--apply', '--yes', '--output')", script);
+        Assert.Contains("$librarySubcommands = @('check', 'sources', 'download', 'install')", script);
+        Assert.Contains("$libraryOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$previous -eq '--root' -or $previous -eq '--path' -or $previous -eq '--support-review'", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $releasePilotSupportReviewSubcommands -ToolTip 'Release pilot support-review subcommand'", script);
         Assert.Contains("'sheets' = @('verify', 'issue-meta', 'renumber', 'index', 'init', 'show', '--against', '--rule', '--issues-only', '--output', '--path', '--force', '--selector', '--issue-code', '--issue-date', '--plan-output', '--param-map', '--dry-run', '--max-changes')", script);
