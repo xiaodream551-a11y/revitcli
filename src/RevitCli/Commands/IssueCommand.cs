@@ -39,17 +39,19 @@ public static class IssueCommand
         var profileOpt = new Option<string>("--profile", "Issue profile YAML") { IsRequired = true };
         var outputOpt = new Option<string>("--output", () => "markdown", "Output format: table|json|markdown");
         var failOnOpt = new Option<string>("--fail-on", () => "error", "Fail on: warning|error");
+        var findingsOpt = new Option<bool>("--findings", "Emit a bimops-finding.v1 JSON envelope instead of the legacy issue preflight report");
         var command = new Command("preflight", "Review issue readiness before export/package work")
         {
             profileOpt,
             outputOpt,
-            failOnOpt
+            failOnOpt,
+            findingsOpt
         };
 
-        command.SetHandler(async (string profile, string output, string failOn) =>
+        command.SetHandler(async (string profile, string output, string failOn, bool findings) =>
         {
-            Environment.ExitCode = await ExecutePreflightAsync(profile, output, failOn, Console.Out);
-        }, profileOpt, outputOpt, failOnOpt);
+            Environment.ExitCode = await ExecutePreflightAsync(profile, output, failOn, Console.Out, findings);
+        }, profileOpt, outputOpt, failOnOpt, findingsOpt);
         return command;
     }
 
@@ -134,12 +136,18 @@ public static class IssueCommand
         string profilePath,
         string outputFormat,
         string failOn,
-        TextWriter output)
+        TextWriter output,
+        bool findings = false)
     {
         if (!TryNormalizeOutput(outputFormat, output, out var normalizedOutput))
             return 1;
         if (!TryNormalizeFailOn(failOn, output, out var normalizedFailOn))
             return 1;
+        if (findings && normalizedOutput != "json")
+        {
+            await output.WriteLineAsync("Error: --findings currently requires '--output json'.");
+            return 1;
+        }
 
         IssueProfile profile;
         string fullProfilePath;
@@ -154,6 +162,12 @@ public static class IssueCommand
         }
 
         var report = BuildPreflightReport(profile, fullProfilePath, normalizedFailOn);
+        if (findings)
+        {
+            await output.WriteLineAsync(JsonSerializer.Serialize(ToFindingEnvelope(report), TerminalJsonOptions.PrettyCamel));
+            return report.ShouldFail ? 2 : 0;
+        }
+
         await WriteRenderedAsync(output, report, normalizedOutput);
         return report.ShouldFail ? 2 : 0;
     }
@@ -963,6 +977,91 @@ public static class IssueCommand
     {
         var value = string.IsNullOrWhiteSpace(severity) ? fallback : severity.Trim().ToLowerInvariant();
         return value is "error" or "warning" or "info" ? value : fallback;
+    }
+
+    private static BimOpsFindingEnvelope ToFindingEnvelope(IssuePreflightReport report)
+    {
+        var envelope = new BimOpsFindingEnvelope
+        {
+            Source = "issue.preflight",
+            GeneratedAtUtc = report.GeneratedAtUtc,
+            RequiresRevit = false,
+            Summary = new BimOpsFindingSummary
+            {
+                Info = report.Issues.Count(issue => string.Equals(issue.Severity, "info", StringComparison.OrdinalIgnoreCase)),
+                Warnings = report.WarningCount,
+                Errors = report.ErrorCount,
+                Blockers = report.Issues.Count(issue => string.Equals(issue.Severity, "blocker", StringComparison.OrdinalIgnoreCase)),
+            },
+        };
+
+        var index = 1;
+        foreach (var issue in report.Issues)
+        {
+            var locator = issue.Path ?? issue.Command ?? report.ProfilePath;
+            envelope.Findings.Add(new BimOpsFinding
+            {
+                FindingId = $"ISS-{index++:D3}-{NormalizeFindingToken(issue.Code)}",
+                RuleId = $"issue.{issue.Code}",
+                Source = "issue.preflight",
+                Severity = NormalizeFindingSeverity(issue.Severity),
+                Category = issue.Category,
+                Message = issue.Message,
+                Confidence = 1.0,
+                RequiresRevit = false,
+                Fixability = BimOpsFindingSchema.FixabilityManual,
+                Target = new BimOpsFindingTarget
+                {
+                    ArtifactPath = issue.Path ?? report.ProfilePath,
+                    Category = issue.Category,
+                    Parameter = issue.Code,
+                },
+                Evidence =
+                {
+                    new BimOpsFindingEvidence
+                    {
+                        Kind = "issue-preflight",
+                        Source = report.SchemaVersion,
+                        Locator = locator,
+                        Value = issue.Code,
+                    },
+                },
+                Remediation = new BimOpsFindingRemediation
+                {
+                    Mode = BimOpsFindingSchema.FixabilityManual,
+                    VerifyCommand = $"revitcli issue preflight --profile {Quote(report.ProfilePath)} --findings --output json",
+                    NextAction = issue.Remediation,
+                },
+            });
+        }
+
+        return envelope;
+    }
+
+    private static string NormalizeFindingSeverity(string severity) =>
+        severity.ToLowerInvariant() switch
+        {
+            "info" => BimOpsFindingSchema.SeverityInfo,
+            "warning" => BimOpsFindingSchema.SeverityWarning,
+            "error" => BimOpsFindingSchema.SeverityError,
+            "blocker" => BimOpsFindingSchema.SeverityBlocker,
+            _ => BimOpsFindingSchema.SeverityWarning,
+        };
+
+    private static string NormalizeFindingToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        var chars = value
+            .Trim()
+            .Select(ch => char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '-')
+            .ToArray();
+        var token = new string(chars).Trim('-');
+        while (token.Contains("--", StringComparison.Ordinal))
+            token = token.Replace("--", "-", StringComparison.Ordinal);
+
+        return string.IsNullOrWhiteSpace(token) ? "unknown" : token;
     }
 
     private static bool TryNormalizeOutput(string outputFormat, TextWriter output, out string normalized)

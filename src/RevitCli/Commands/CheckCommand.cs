@@ -10,6 +10,7 @@ using RevitCli.Checks;
 using RevitCli.Client;
 using RevitCli.Output;
 using RevitCli.Reports;
+using RevitCli.Shared;
 using Spectre.Console;
 
 namespace RevitCli.Commands;
@@ -32,16 +33,17 @@ public static class CheckCommand
         var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, html, sarif, pr-comment");
         var reportOpt = new Option<string?>("--report", "Save report to file (format inferred from extension, or uses --output)");
         var noSaveOpt = new Option<bool>("--no-save", "Don't save results for diff comparison");
+        var findingsOpt = new Option<bool>("--findings", "Emit a bimops-finding.v1 JSON envelope instead of the legacy check report");
 
         var command = new Command("check", "Run project checks from .revitcli.yml profile")
         {
-            nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt
+            nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt, findingsOpt
         };
 
-        command.SetHandler(async (name, profilePath, outputFormat, reportPath, noSave) =>
+        command.SetHandler(async (name, profilePath, outputFormat, reportPath, noSave, findings) =>
         {
-            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, Console.Out);
-        }, nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt);
+            Environment.ExitCode = await ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, Console.Out, findings);
+        }, nameArg, profileOpt, outputOpt, reportOpt, noSaveOpt, findingsOpt);
 
         return command;
     }
@@ -50,8 +52,12 @@ public static class CheckCommand
         string outputFormat, string? reportPath, bool noSave, TextWriter output)
         => ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, true, output);
 
+    public static Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
+        string outputFormat, string? reportPath, bool noSave, TextWriter output, bool findings)
+        => ExecuteAsync(client, name, profilePath, outputFormat, reportPath, noSave, true, output, findings);
+
     internal static async Task<int> ExecuteAsync(RevitClient client, string? name, string? profilePath,
-        string outputFormat, string? reportPath, bool noSave, bool sendNotify, TextWriter output)
+        string outputFormat, string? reportPath, bool noSave, bool sendNotify, TextWriter output, bool findings = false)
     {
         if (!TryResolveFormat(outputFormat, reportPath, out var format))
         {
@@ -59,10 +65,23 @@ public static class CheckCommand
                 "Error: --output must be one of: table, json, html, sarif, pr-comment.");
             return 1;
         }
+        if (findings && format != "json")
+        {
+            await output.WriteLineAsync("Error: --findings currently requires '--output json'.");
+            return 1;
+        }
 
         var run = await CheckRunner.RunAsync(client, name, profilePath);
         if (!run.Success)
         {
+            if (findings)
+            {
+                await output.WriteLineAsync(JsonSerializer.Serialize(
+                    ToRunFailureFindingEnvelope(name ?? "default", profilePath, run.Error),
+                    TerminalJsonOptions.PrettyIgnoreNull));
+                return 1;
+            }
+
             await WriteRunFailureAsync(name ?? "default", format, run.Error, output);
             return 1;
         }
@@ -94,7 +113,11 @@ public static class CheckCommand
         }
         else
         {
-            rendered = format switch
+            rendered = findings
+                ? JsonSerializer.Serialize(
+                    ToFindingEnvelope(checkName, run.Data.ProfilePath, allIssues),
+                    TerminalJsonOptions.PrettyIgnoreNull)
+                : format switch
             {
                 "json" => CheckReportRenderer.RenderJson(
                     checkName,
@@ -208,6 +231,210 @@ public static class CheckCommand
         }
 
         return ValidOutputFormats.Contains(format);
+    }
+
+    private static BimOpsFindingEnvelope ToFindingEnvelope(
+        string checkName,
+        string? profilePath,
+        IReadOnlyList<AuditIssue> issues)
+    {
+        var envelope = new BimOpsFindingEnvelope
+        {
+            Source = "check",
+            GeneratedAtUtc = DateTime.UtcNow.ToString("o"),
+            RequiresRevit = true,
+            PolicyPack = string.IsNullOrWhiteSpace(profilePath)
+                ? null
+                : new BimOpsPolicyPackReference
+                {
+                    Name = checkName,
+                    Version = "",
+                    Path = profilePath,
+                },
+            Summary = new BimOpsFindingSummary
+            {
+                Info = issues.Count(issue => string.Equals(issue.Severity, "info", StringComparison.OrdinalIgnoreCase)),
+                Warnings = issues.Count(issue => string.Equals(issue.Severity, "warning", StringComparison.OrdinalIgnoreCase)),
+                Errors = issues.Count(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)),
+                Blockers = issues.Count(issue => string.Equals(issue.Severity, "blocker", StringComparison.OrdinalIgnoreCase)),
+            },
+        };
+
+        var index = 1;
+        foreach (var issue in issues)
+        {
+            var rule = string.IsNullOrWhiteSpace(issue.Rule) ? "unknown" : issue.Rule;
+            envelope.Findings.Add(new BimOpsFinding
+            {
+                FindingId = $"CHK-{index++:D3}-{NormalizeFindingToken(rule)}",
+                RuleId = $"check.{NormalizeRuleId(rule)}",
+                Source = "check",
+                Severity = NormalizeFindingSeverity(issue.Severity),
+                Category = string.IsNullOrWhiteSpace(issue.Category) ? "model-health" : issue.Category!,
+                Message = issue.Message,
+                Confidence = 1.0,
+                RequiresRevit = true,
+                Fixability = BimOpsFindingSchema.FixabilityManual,
+                Target = new BimOpsFindingTarget
+                {
+                    ElementIds = issue.ElementId.HasValue ? new List<long> { issue.ElementId.Value } : new List<long>(),
+                    Category = issue.Category,
+                    Parameter = issue.Parameter,
+                    ArtifactPath = profilePath,
+                },
+                Evidence =
+                {
+                    new BimOpsFindingEvidence
+                    {
+                        Kind = "check-audit",
+                        Source = issue.Source ?? checkName,
+                        Locator = issue.ElementId.HasValue
+                            ? $"element:{issue.ElementId.Value}"
+                            : issue.Target ?? profilePath,
+                        Value = FormatAuditValue(issue),
+                    },
+                },
+                Remediation = new BimOpsFindingRemediation
+                {
+                    Mode = BimOpsFindingSchema.FixabilityManual,
+                    VerifyCommand = BuildCheckVerifyCommand(checkName, profilePath),
+                    NextAction = "Review the model issue, update the model or policy waiver, then rerun check.",
+                },
+            });
+        }
+
+        return envelope;
+    }
+
+    private static BimOpsFindingEnvelope ToRunFailureFindingEnvelope(string checkName, string? profilePath, string error)
+    {
+        var connectionFailure = IsConnectionFailure(error);
+        var category = connectionFailure ? "connection" : "profile";
+        var nextAction = connectionFailure
+            ? "Run 'revitcli doctor' to diagnose connection issues, then rerun check."
+            : "Fix the check profile or check-set name, then rerun check.";
+        return new BimOpsFindingEnvelope
+        {
+            Source = "check",
+            GeneratedAtUtc = DateTime.UtcNow.ToString("o"),
+            RequiresRevit = connectionFailure,
+            Summary = new BimOpsFindingSummary { Errors = 1 },
+            Findings =
+            {
+                new BimOpsFinding
+                {
+                    FindingId = "CHK-001-RUN-FAILED",
+                    RuleId = "check.run-failed",
+                    Source = "check",
+                    Severity = BimOpsFindingSchema.SeverityError,
+                    Category = category,
+                    Message = error,
+                    Confidence = 1.0,
+                    RequiresRevit = connectionFailure,
+                    Fixability = BimOpsFindingSchema.FixabilityManual,
+                    Target = new BimOpsFindingTarget
+                    {
+                        ArtifactPath = profilePath,
+                        Category = category,
+                        Parameter = "run-failed",
+                    },
+                    Evidence =
+                    {
+                        new BimOpsFindingEvidence
+                        {
+                            Kind = "check-run",
+                            Source = "check.v1",
+                            Locator = profilePath,
+                            Value = "run-failed",
+                        },
+                    },
+                    Remediation = new BimOpsFindingRemediation
+                    {
+                        Mode = BimOpsFindingSchema.FixabilityManual,
+                        VerifyCommand = BuildCheckVerifyCommand(checkName, profilePath),
+                        NextAction = nextAction,
+                    },
+                },
+            },
+        };
+    }
+
+    private static bool IsConnectionFailure(string error) =>
+        error.Contains("not running", StringComparison.OrdinalIgnoreCase) ||
+        error.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+        error.Contains("refused", StringComparison.OrdinalIgnoreCase) ||
+        error.Contains("localhost", StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildCheckVerifyCommand(string checkName, string? profilePath)
+    {
+        var parts = new List<string> { "revitcli", "check", QuoteArgument(checkName) };
+        if (!string.IsNullOrWhiteSpace(profilePath))
+        {
+            parts.Add("--profile");
+            parts.Add(QuoteArgument(profilePath!));
+        }
+
+        parts.Add("--findings");
+        parts.Add("--output");
+        parts.Add("json");
+        return string.Join(" ", parts);
+    }
+
+    private static string FormatAuditValue(AuditIssue issue)
+    {
+        if (!string.IsNullOrWhiteSpace(issue.CurrentValue) || !string.IsNullOrWhiteSpace(issue.ExpectedValue))
+            return $"{issue.CurrentValue ?? ""} -> {issue.ExpectedValue ?? ""}";
+        return issue.Rule;
+    }
+
+    private static string NormalizeFindingSeverity(string severity) =>
+        severity.ToLowerInvariant() switch
+        {
+            "info" => BimOpsFindingSchema.SeverityInfo,
+            "warning" => BimOpsFindingSchema.SeverityWarning,
+            "error" => BimOpsFindingSchema.SeverityError,
+            "blocker" => BimOpsFindingSchema.SeverityBlocker,
+            _ => BimOpsFindingSchema.SeverityWarning,
+        };
+
+    private static string NormalizeRuleId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        var chars = value.Trim()
+            .Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '.')
+            .ToArray();
+        var ruleId = new string(chars).Trim('.');
+        while (ruleId.Contains("..", StringComparison.Ordinal))
+            ruleId = ruleId.Replace("..", ".", StringComparison.Ordinal);
+
+        return string.IsNullOrWhiteSpace(ruleId) ? "unknown" : ruleId;
+    }
+
+    private static string NormalizeFindingToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        var chars = value
+            .Trim()
+            .Select(ch => char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '-')
+            .ToArray();
+        var token = new string(chars).Trim('-');
+        while (token.Contains("--", StringComparison.Ordinal))
+            token = token.Replace("--", "-", StringComparison.Ordinal);
+
+        return string.IsNullOrWhiteSpace(token) ? "unknown" : token;
+    }
+
+    private static string QuoteArgument(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "\"\"";
+        return value.Any(char.IsWhiteSpace)
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
     }
 
     private static async Task WriteRunFailureAsync(

@@ -32,6 +32,7 @@ public class CliCommandCatalogTests
         Assert.Contains("batch", names);
         Assert.Contains("completions", names);
         Assert.Contains("doctor", names);
+        Assert.Contains("env", names);
         Assert.Contains("fix", names);
         Assert.Contains("inspect", names);
         Assert.Contains("examples", names);
@@ -41,8 +42,11 @@ public class CliCommandCatalogTests
         Assert.Contains("deliverables", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
+        Assert.Contains("env", names);
         Assert.Contains("rvt", names);
         Assert.Contains("library", names);
+        Assert.Contains("addins", names);
+        Assert.Contains("crash", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -86,8 +90,11 @@ public class CliCommandCatalogTests
         Assert.Contains("rollback", names);
         Assert.Contains("deliverables", names);
         Assert.Contains("release", names);
+        Assert.Contains("env", names);
         Assert.Contains("rvt", names);
         Assert.Contains("library", names);
+        Assert.Contains("addins", names);
+        Assert.Contains("crash", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -111,8 +118,11 @@ public class CliCommandCatalogTests
         Assert.Contains("deliverables", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
+        Assert.Contains("env", names);
         Assert.Contains("rvt", names);
         Assert.Contains("library", names);
+        Assert.Contains("addins", names);
+        Assert.Contains("crash", names);
         Assert.Contains("sheets", names);
         Assert.Contains("views", names);
         Assert.Contains("links", names);
@@ -154,6 +164,49 @@ public class CliCommandCatalogTests
             CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "library install" &&
                      entry.Description.Contains("--apply --yes"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "library repair-plan" &&
+                     entry.Description.Contains("without applying"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeEnvBaseline()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "env baseline" &&
+                     entry.Description.Contains("machine runtime evidence"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeAddinsAudit()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "addins audit" &&
+                     entry.Description.Contains("duplicate ids"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeCrashDiagnostics()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "crash analyze" &&
+                     entry.Description.Contains("Windows crash events"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "crash collect" &&
+                     entry.Description.Contains("evidence packet"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "crash repro" &&
+                     entry.Description.Contains("reproduction checklist"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "crash verify" &&
+                     entry.Description.Contains("packet manifest"));
     }
 
     [Fact]
@@ -489,6 +542,15 @@ public class CliCommandCatalogTests
             CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "standards validate" &&
                      entry.Description.Contains("workflows"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeStandardsPolicy()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "standards policy diff" &&
+                     entry.Description.Contains("requirement changes"));
     }
 
     [Fact]

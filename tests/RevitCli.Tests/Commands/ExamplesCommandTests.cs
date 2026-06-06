@@ -31,6 +31,7 @@ public sealed class ExamplesCommandTests
         Assert.Contains("standards", text);
         Assert.Contains("family", text);
         Assert.Contains("rvt", text);
+        Assert.Contains("addins", text);
         Assert.Contains("release", text);
         Assert.Contains("recipes", text);
         Assert.Contains("Run: revitcli examples <topic>", text);
@@ -239,8 +240,56 @@ public sealed class ExamplesCommandTests
         Assert.Contains("# library", text);
         Assert.Contains("revitcli library check --year 2026 --locale ENU --output markdown", text);
         Assert.Contains("revitcli library sources --year 2026 --locale ENU --output markdown", text);
-        Assert.Contains("revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes", text);
+        Assert.Contains("revitcli library repair-plan --year 2026 --locale ENU", text);
+        Assert.Contains("revitcli library install --year 2026 --locale ENU --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes --receipt-output .revitcli/receipts/library-install.receipt.json --env-baseline .revitcli/evidence/env-baseline.json --output json", text);
         Assert.Contains("Autodesk Account", text);
+    }
+
+    [Fact]
+    public async Task Execute_EnvTopic_PrintsBaselineWorkflow()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await ExamplesCommand.ExecuteAsync(output, "env");
+
+        var text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("# env", text);
+        Assert.Contains("revitcli env baseline --years 2024,2025,2026 --output markdown", text);
+        Assert.Contains("--out .revitcli/evidence/env-baseline.json", text);
+        Assert.Contains("without starting Revit", text);
+    }
+
+    [Fact]
+    public async Task Execute_AddinsTopic_PrintsAuditWorkflow()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await ExamplesCommand.ExecuteAsync(output, "addins");
+
+        var text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("# addins", text);
+        Assert.Contains("revitcli addins audit --versions 2024,2025,2026 --output markdown", text);
+        Assert.Contains("revitcli addins audit --versions 2026 --findings --output json", text);
+        Assert.Contains("revitcli addins plan-disable --versions 2026 --profile cloud-safe", text);
+        Assert.Contains("revitcli addins rollback --receipt .revitcli/receipts/addins-disable.receipt.json --dry-run", text);
+    }
+
+    [Fact]
+    public async Task Execute_CrashTopic_PrintsCrashDiagnosticsWorkflow()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await ExamplesCommand.ExecuteAsync(output, "crash");
+
+        var text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("# crash", text);
+        Assert.Contains("revitcli crash analyze --year 2026 --since 24h --output markdown", text);
+        Assert.Contains("revitcli crash repro --year 2026 --case family-saveas --output markdown", text);
+        Assert.Contains("revitcli crash collect --year 2026 --since 24h --output-dir .revitcli/crash/latest --output markdown", text);
+        Assert.Contains("revitcli crash verify --packet .revitcli/crash/latest --output json", text);
     }
 
     [Fact]
@@ -364,6 +413,7 @@ public sealed class ExamplesCommandTests
         var text = output.ToString();
         Assert.Equal(0, exitCode);
         Assert.Contains("revitcli standards install ../office-standards --dry-run", text);
+        Assert.Contains("revitcli standards policy diff", text);
         Assert.Contains("revitcli standards validate --output markdown", text);
         Assert.Contains("revitcli workflow validate", text);
         Assert.Contains("Codex prompt:", text);

@@ -144,6 +144,53 @@ required:
     }
 
     [Fact]
+    public async Task Validate_FindingsJson_EmitsBimOpsFindingEnvelope()
+    {
+        File.Delete(Path.Combine(_root, ".revitcli", "workflows", "pre-issue.yml"));
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecuteValidateAsync(
+            manifestPath: null,
+            projectDirectory: _root,
+            outputFormat: "json",
+            output,
+            findings: true);
+
+        Assert.Equal(1, exitCode);
+        using var document = JsonDocument.Parse(output.ToString());
+        var root = document.RootElement;
+        Assert.Equal("bimops-finding.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.Equal("standards.validate", root.GetProperty("source").GetString());
+        Assert.False(root.GetProperty("requiresRevit").GetBoolean());
+        Assert.Equal("office", root.GetProperty("policyPack").GetProperty("name").GetString());
+        Assert.Equal("2026.4.0", root.GetProperty("policyPack").GetProperty("version").GetString());
+        Assert.True(root.GetProperty("summary").GetProperty("errors").GetInt32() >= 1);
+
+        var findings = root.GetProperty("findings").EnumerateArray().ToArray();
+        Assert.Contains(findings, finding =>
+            finding.GetProperty("ruleId").GetString() == "standards.required.workflows.0" &&
+            finding.GetProperty("severity").GetString() == "error" &&
+            finding.GetProperty("target").GetProperty("parameter").GetString() == "required.workflows[0]" &&
+            finding.GetProperty("remediation").GetProperty("verifyCommand").GetString()!.Contains("--findings --output json"));
+    }
+
+    [Fact]
+    public async Task Validate_FindingsRequiresJsonOutput()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecuteValidateAsync(
+            manifestPath: null,
+            projectDirectory: _root,
+            outputFormat: "markdown",
+            output,
+            findings: true);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--findings currently requires '--output json'", output.ToString());
+    }
+
+    [Fact]
     public async Task Validate_ProfileOutsideProject_ReturnsFailure()
     {
         var externalDir = Path.Combine(Path.GetTempPath(), "revitcli-standards-external-" + Guid.NewGuid().ToString("N"));
@@ -736,6 +783,139 @@ required:
         Assert.Contains(issues, issue =>
             issue.GetProperty("path").GetString() == "required.numberingRules[0]" &&
             issue.GetProperty("message").GetString()!.Contains("numbering rule failed validation", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PolicyInit_DryRunJson_DoesNotWriteManifest()
+    {
+        var project = Path.Combine(_root, "policy-init-dry-run");
+        Directory.CreateDirectory(project);
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecutePolicyInitAsync(
+            project,
+            "my-office",
+            "2026.1.0",
+            dryRun: true,
+            force: false,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.False(File.Exists(Path.Combine(project, ".revitcli", "standards.yml")));
+        using var document = JsonDocument.Parse(output.ToString());
+        var root = document.RootElement;
+        Assert.Equal("standards-policy-init.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.True(root.GetProperty("dryRun").GetBoolean());
+        Assert.Equal("my-office", root.GetProperty("name").GetString());
+        Assert.Equal("2026.1.0", root.GetProperty("packVersion").GetString());
+    }
+
+    [Fact]
+    public async Task PolicyInit_ApplyWritesValidStarterManifest()
+    {
+        var project = Path.Combine(_root, "policy-init-apply");
+        Directory.CreateDirectory(project);
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecutePolicyInitAsync(
+            project,
+            "my-office",
+            "2026.1.0",
+            dryRun: false,
+            force: false,
+            outputFormat: "markdown",
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(Path.Combine(project, ".revitcli", "standards.yml")));
+        Assert.Contains("# Policy Pack Init", output.ToString());
+
+        var validateOutput = new StringWriter();
+        var validateExit = await StandardsCommand.ExecutePolicyValidateAsync(null, project, "json", findings: false, validateOutput);
+
+        Assert.Equal(0, validateExit);
+        using var validation = JsonDocument.Parse(validateOutput.ToString());
+        Assert.True(validation.RootElement.GetProperty("valid").GetBoolean());
+        Assert.Equal("my-office", validation.RootElement.GetProperty("name").GetString());
+        Assert.Equal("2026.1.0", validation.RootElement.GetProperty("packVersion").GetString());
+    }
+
+    [Fact]
+    public async Task PolicyInit_ExistingManifestRequiresForce()
+    {
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecutePolicyInitAsync(
+            _root,
+            "office",
+            "2026.5.0",
+            dryRun: false,
+            force: false,
+            outputFormat: "table",
+            output);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Use --force", output.ToString());
+        Assert.Contains("2026.4.0", File.ReadAllText(Path.Combine(_root, ".revitcli", "standards.yml")));
+    }
+
+    [Fact]
+    public async Task PolicyDiff_JsonReportsMetadataAndRequirementChanges()
+    {
+        var from = Path.Combine(_root, "policy-from.yml");
+        var to = Path.Combine(_root, "policy-to.yml");
+        File.WriteAllText(from, """
+version: 1
+name: office
+packVersion: 2026.4.0
+compatibility:
+  revitCli: ">=0.1.0"
+  revitYears: [2024, 2025]
+required:
+  profiles: [.revitcli.yml]
+  workflows: [pre-issue]
+  outputPaths: [deliverables]
+  scheduleTemplates: [doors]
+  familyRules: [name-non-empty]
+""");
+        File.WriteAllText(to, """
+version: 1
+name: office
+packVersion: 2026.5.0
+compatibility:
+  revitCli: ">=0.1.0"
+  revitYears: [2024, 2025, 2026]
+required:
+  profiles: [.revitcli.yml]
+  workflows: [pre-issue, weekly-health]
+  outputPaths: [deliverables]
+  scheduleTemplates: [doors]
+  familyRules: [name-non-empty, category-known]
+""");
+        var output = new StringWriter();
+
+        var exitCode = await StandardsCommand.ExecutePolicyDiffAsync(from, to, "json", output);
+
+        Assert.Equal(0, exitCode);
+        using var document = JsonDocument.Parse(output.ToString());
+        var root = document.RootElement;
+        Assert.Equal("standards-policy-diff.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.True(root.GetProperty("changeCount").GetInt32() >= 3);
+        var changes = root.GetProperty("changes").EnumerateArray().ToArray();
+        Assert.Contains(changes, change =>
+            change.GetProperty("path").GetString() == "packVersion" &&
+            change.GetProperty("changeType").GetString() == "changed" &&
+            change.GetProperty("to").GetString() == "2026.5.0");
+        Assert.Contains(changes, change =>
+            change.GetProperty("path").GetString() == "required.workflows[]" &&
+            change.GetProperty("changeType").GetString() == "added" &&
+            change.GetProperty("to").GetString() == "weekly-health");
+        Assert.Contains(changes, change =>
+            change.GetProperty("path").GetString() == "compatibility.revitYears[]" &&
+            change.GetProperty("to").GetString() == "2026");
     }
 
     private static void CreateValidProject(string root)

@@ -19,6 +19,7 @@ internal static class CliCommandCatalog
         ("completions", "Generate shell completion script"),
         ("batch", "Execute commands from a JSON batch file"),
         ("doctor", "Check RevitCli setup and diagnose issues"),
+        ("env", "Capture local Revit machine baseline evidence"),
         ("check", "Run project checks from .revitcli.yml profile"),
         ("fix", "Plan or apply profile-driven parameter fixes"),
         ("rollback", "Restore parameters from a fix baseline or plan receipt"),
@@ -38,6 +39,8 @@ internal static class CliCommandCatalog
         ("release", "Verify local release readiness and CI guardrails"),
         ("rvt", "Find RVT files and clean numbered Revit backups"),
         ("library", "Find and fetch Autodesk Revit content libraries"),
+        ("addins", "Audit and safely disable local Revit add-in manifests"),
+        ("crash", "Analyze Revit crash journals and collect local diagnostics"),
         ("sheets", "Verify sheet numbering and local sheet-frame expectations"),
         ("rooms", "Plan and review room numbering workflows"),
         ("marks", "Plan and verify door/window Mark numbering workflows"),
@@ -115,6 +118,9 @@ internal static class CliCommandCatalog
         ("issue package", "Package deliverables, receipts, hashes, and journal evidence"),
         ("standards install <path-or-git-url>", "Install approved standards files into the local project"),
         ("standards validate", "Validate required profiles, workflows, outputs, schedules, and family rules"),
+        ("standards policy init", "Create a starter versioned local BIMOps policy pack manifest"),
+        ("standards policy validate", "Validate a local policy pack and emit optional normalized findings"),
+        ("standards policy diff", "Compare policy pack metadata and requirement changes"),
         ("release verify", "Check release files, version, tag, and CI guardrails before tagging"),
         ("release pilot scaffold", "Create a public-safe v6 office pilot evidence packet scaffold"),
         ("release pilot validate", "Validate a public-safe v6 office pilot evidence packet"),
@@ -123,12 +129,24 @@ internal static class CliCommandCatalog
         ("release pilot claim", "Claim v6 office rollout completion after validated pilot evidence"),
         ("release pilot support-review scaffold", "Create a public-safe v6 production support review summary scaffold"),
         ("release pilot support-review validate", "Validate a public-safe v6 production support review summary"),
+        ("env baseline", "Capture Revit builds, add-ins, content paths, and machine runtime evidence"),
         ("rvt scan", "List RVT files and classify numbered Revit backups"),
         ("rvt clean-backups", "Delete numbered Revit backup files after dry-run review"),
         ("library check", "Check local Revit Libraries and Family Templates content"),
         ("library sources", "Show official Autodesk Revit content library sources"),
         ("library download", "Download official Autodesk content packages when a direct URL is available"),
         ("library install", "Start a downloaded Autodesk content installer after --apply --yes"),
+        ("library repair-plan", "Create a reversible Revit.ini template-path repair plan without applying it"),
+        ("library repair-apply", "Apply a reviewed Revit.ini template-path repair plan with receipt evidence"),
+        ("library repair-rollback", "Rollback a Revit.ini template-path repair receipt"),
+        ("addins audit", "Audit .addin manifests for missing assemblies, duplicate ids, shadowing, and dev paths"),
+        ("addins plan-disable", "Create a reviewable add-in manifest disable plan"),
+        ("addins apply", "Apply a reviewed add-in manifest disable plan with receipt evidence"),
+        ("addins rollback", "Rollback an add-in manifest disable receipt"),
+        ("crash analyze", "Analyze recent Revit journals and Windows crash events"),
+        ("crash collect", "Collect copied journals, analysis JSON, and redaction report into a local evidence packet"),
+        ("crash repro", "Generate a clean Revit crash reproduction checklist"),
+        ("crash verify", "Verify a local crash evidence packet manifest"),
         ("sheets verify", "Verify sheet numbering, required sheets, and placed-view counts"),
         ("sheets issue-meta", "Plan sheet issue metadata updates with frozen sheet ids"),
         ("sheets renumber", "Plan sheet number updates from numbering rules with frozen sheet ids"),
@@ -203,6 +221,7 @@ internal static class CliCommandCatalog
         root.AddCommand(AuditCommand.Create(client));
         root.AddCommand(CompletionsCommand.Create());
         root.AddCommand(DoctorCommand.Create(client, config));
+        root.AddCommand(EnvCommand.Create());
         root.AddCommand(CheckCommand.Create(client));
         root.AddCommand(FixCommand.Create(client));
         root.AddCommand(RollbackCommand.Create(client));
@@ -222,6 +241,8 @@ internal static class CliCommandCatalog
         root.AddCommand(ReleaseCommand.Create());
         root.AddCommand(RvtCommand.Create());
         root.AddCommand(LibraryCommand.Create());
+        root.AddCommand(AddinsCommand.Create());
+        root.AddCommand(CrashCommand.Create());
         root.AddCommand(SheetsCommand.Create(client));
         root.AddCommand(RoomsCommand.Create(client));
         root.AddCommand(MarksCommand.Create(client));

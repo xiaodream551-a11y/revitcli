@@ -95,6 +95,59 @@ checks:
             issue.GetProperty("code").GetString() == "hidden-model-mutation");
     }
 
+    [Fact]
+    public async Task Preflight_FindingsJson_EmitsBimOpsFindingEnvelope()
+    {
+        var profilePath = WriteIssueProfile("""
+schemaVersion: issue-profile.v1
+checks:
+  - name: unsafe set
+    command: revitcli set doors --param Mark --value A-101
+""");
+        var writer = new StringWriter();
+
+        var exitCode = await IssueCommand.ExecutePreflightAsync(
+            profilePath,
+            outputFormat: "json",
+            failOn: "error",
+            writer,
+            findings: true);
+
+        Assert.Equal(2, exitCode);
+        using var json = JsonDocument.Parse(writer.ToString());
+        var root = json.RootElement;
+        Assert.Equal(BimOpsFindingSchema.Version, root.GetProperty("schemaVersion").GetString());
+        Assert.Equal("issue.preflight", root.GetProperty("source").GetString());
+        Assert.False(root.GetProperty("requiresRevit").GetBoolean());
+        Assert.Equal(1, root.GetProperty("summary").GetProperty("errors").GetInt32());
+
+        var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+        Assert.Equal("issue.hidden-model-mutation", finding.GetProperty("ruleId").GetString());
+        Assert.Equal(BimOpsFindingSchema.SeverityError, finding.GetProperty("severity").GetString());
+        Assert.Equal("safety", finding.GetProperty("category").GetString());
+        Assert.Equal(BimOpsFindingSchema.FixabilityManual, finding.GetProperty("fixability").GetString());
+        Assert.Equal("hidden-model-mutation", finding.GetProperty("target").GetProperty("parameter").GetString());
+        Assert.Equal("revitcli set doors --param Mark --value A-101", finding.GetProperty("evidence")[0].GetProperty("locator").GetString());
+        Assert.Contains("--findings --output json", finding.GetProperty("remediation").GetProperty("verifyCommand").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Preflight_FindingsRequiresJsonOutput()
+    {
+        var profilePath = WriteIssueProfile("schemaVersion: issue-profile.v1");
+        var writer = new StringWriter();
+
+        var exitCode = await IssueCommand.ExecutePreflightAsync(
+            profilePath,
+            outputFormat: "markdown",
+            failOn: "error",
+            writer,
+            findings: true);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--findings currently requires '--output json'", writer.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("revitcli import doors.csv --category doors --match-by Mark")]
     [InlineData("revitcli schedule create --category Doors --fields Mark --name Door")]

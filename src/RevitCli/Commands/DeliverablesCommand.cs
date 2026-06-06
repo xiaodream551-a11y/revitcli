@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using RevitCli.Output;
+using RevitCli.Shared;
 
 namespace RevitCli.Commands;
 
@@ -122,16 +123,18 @@ public static class DeliverablesCommand
     {
         var dirOpt = new Option<string?>("--dir", "Project directory containing .revitcli (default: current directory)");
         var outputOpt = new Option<string>("--output", () => "table", "Output format: table|json|markdown");
+        var findingsOpt = new Option<bool>("--findings", "Emit a bimops-finding.v1 JSON envelope instead of the legacy deliverables report");
         var command = new Command("verify", "Verify delivery manifest entries point to readable receipts")
         {
             dirOpt,
             outputOpt,
+            findingsOpt,
         };
 
-        command.SetHandler(async (string? dir, string output) =>
+        command.SetHandler(async (string? dir, string output, bool findings) =>
         {
-            Environment.ExitCode = await ExecuteVerifyAsync(dir, output, Console.Out);
-        }, dirOpt, outputOpt);
+            Environment.ExitCode = await ExecuteVerifyAsync(dir, output, Console.Out, findings);
+        }, dirOpt, outputOpt, findingsOpt);
 
         return command;
     }
@@ -170,14 +173,23 @@ public static class DeliverablesCommand
         };
     }
 
-    internal static async Task<int> ExecuteVerifyAsync(string? dir, string outputFormat, TextWriter output)
+    internal static async Task<int> ExecuteVerifyAsync(string? dir, string outputFormat, TextWriter output, bool findings = false)
     {
         if (!TryParseOutput(outputFormat, out var normalizedOutput, out var outputError))
             return await WriteError(output, outputError);
+        if (findings && normalizedOutput != "json")
+        {
+            await output.WriteLineAsync("Error: --findings currently requires '--output json'.");
+            return 1;
+        }
 
         var report = ReadReport(dir, out var readError);
         if (report == null)
+        {
+            if (findings)
+                return await WriteJson(output, ToFailureFindingEnvelope(dir, readError!), 1);
             return await WriteError(output, normalizedOutput, readError!);
+        }
 
         if (!report.Exists)
         {
@@ -187,6 +199,9 @@ public static class DeliverablesCommand
                 "manifest-missing",
                 $"delivery manifest not found: {report.ManifestPath}"));
         }
+
+        if (findings)
+            return await WriteJson(output, ToFindingEnvelope(report), ExitCode(report));
 
         return normalizedOutput switch
         {
@@ -658,6 +673,181 @@ public static class DeliverablesCommand
         AppendCountsMarkdown(lines, "Outcomes", report.Stats.Outcomes);
         AppendIssuesMarkdown(lines, report.Issues);
         return lines;
+    }
+
+    private static BimOpsFindingEnvelope ToFindingEnvelope(DeliveryManifestReport report)
+    {
+        var projectDirectory = ResolveProjectDirectoryFromManifest(report.ManifestPath);
+        var envelope = new BimOpsFindingEnvelope
+        {
+            Source = "deliverables.verify",
+            GeneratedAtUtc = DateTime.UtcNow.ToString("o"),
+            RequiresRevit = false,
+            Summary = new BimOpsFindingSummary
+            {
+                Info = report.Issues.Count(issue => string.Equals(issue.Severity, "info", StringComparison.OrdinalIgnoreCase)),
+                Warnings = report.Issues.Count(issue => string.Equals(issue.Severity, "warning", StringComparison.OrdinalIgnoreCase)),
+                Errors = report.Issues.Count(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)),
+                Blockers = report.Issues.Count(issue => string.Equals(issue.Severity, "blocker", StringComparison.OrdinalIgnoreCase)),
+            },
+        };
+
+        var index = 1;
+        foreach (var issue in report.Issues)
+        {
+            var category = ResolveFindingCategory(issue.Code);
+            envelope.Findings.Add(new BimOpsFinding
+            {
+                FindingId = $"DEL-{index++:D3}-{NormalizeFindingToken(issue.Code)}",
+                RuleId = $"deliverables.{issue.Code}",
+                Source = "deliverables.verify",
+                Severity = NormalizeFindingSeverity(issue.Severity),
+                Category = category,
+                Message = issue.Message,
+                Confidence = 1.0,
+                RequiresRevit = false,
+                Fixability = BimOpsFindingSchema.FixabilityManual,
+                Target = new BimOpsFindingTarget
+                {
+                    ArtifactPath = report.ManifestPath,
+                    Category = category,
+                    Parameter = issue.Code,
+                },
+                Evidence =
+                {
+                    new BimOpsFindingEvidence
+                    {
+                        Kind = "deliverables-verify",
+                        Source = report.SchemaVersion,
+                        Locator = issue.LineNumber.HasValue ? $"line {issue.LineNumber.Value}" : report.ManifestPath,
+                        Value = issue.Code,
+                    },
+                },
+                Remediation = new BimOpsFindingRemediation
+                {
+                    Mode = BimOpsFindingSchema.FixabilityManual,
+                    VerifyCommand = $"revitcli deliverables verify --dir {QuoteArgument(projectDirectory)} --findings --output json",
+                    NextAction = ResolveFindingNextAction(issue.Code),
+                },
+            });
+        }
+
+        return envelope;
+    }
+
+    private static BimOpsFindingEnvelope ToFailureFindingEnvelope(string? dir, string error)
+    {
+        var projectDirectory = string.IsNullOrWhiteSpace(dir)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetFullPath(dir!);
+        var manifestPath = DeliveryManifestReader.ResolveManifestPath(projectDirectory);
+        return new BimOpsFindingEnvelope
+        {
+            Source = "deliverables.verify",
+            GeneratedAtUtc = DateTime.UtcNow.ToString("o"),
+            RequiresRevit = false,
+            Summary = new BimOpsFindingSummary { Errors = 1 },
+            Findings =
+            {
+                new BimOpsFinding
+                {
+                    FindingId = "DEL-001-READ-FAILED",
+                    RuleId = "deliverables.read-failed",
+                    Source = "deliverables.verify",
+                    Severity = BimOpsFindingSchema.SeverityError,
+                    Category = "deliverables",
+                    Message = error,
+                    Confidence = 1.0,
+                    RequiresRevit = false,
+                    Fixability = BimOpsFindingSchema.FixabilityManual,
+                    Target = new BimOpsFindingTarget
+                    {
+                        ArtifactPath = manifestPath,
+                        Category = "deliverables",
+                        Parameter = "read-failed",
+                    },
+                    Evidence =
+                    {
+                        new BimOpsFindingEvidence
+                        {
+                            Kind = "deliverables-verify",
+                            Source = "deliverables.v1",
+                            Locator = manifestPath,
+                            Value = "read-failed",
+                        },
+                    },
+                    Remediation = new BimOpsFindingRemediation
+                    {
+                        Mode = BimOpsFindingSchema.FixabilityManual,
+                        VerifyCommand = $"revitcli deliverables verify --dir {QuoteArgument(projectDirectory)} --findings --output json",
+                        NextAction = "Fix local manifest permissions or path problems, then rerun deliverables verify.",
+                    },
+                },
+            },
+        };
+    }
+
+    private static string ResolveProjectDirectoryFromManifest(string manifestPath)
+    {
+        var deliveriesDir = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
+        var revitCliDir = string.IsNullOrWhiteSpace(deliveriesDir) ? null : Path.GetDirectoryName(deliveriesDir);
+        return string.IsNullOrWhiteSpace(revitCliDir)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetDirectoryName(revitCliDir) ?? Directory.GetCurrentDirectory();
+    }
+
+    private static string ResolveFindingCategory(string code)
+    {
+        var value = code.ToLowerInvariant();
+        if (value.Contains("receipt", StringComparison.Ordinal))
+            return "receipt";
+        if (value.Contains("manifest", StringComparison.Ordinal))
+            return "manifest";
+        if (value.Contains("bundle", StringComparison.Ordinal))
+            return "bundle";
+        if (value.Contains("output", StringComparison.Ordinal))
+            return "output";
+        return "deliverables";
+    }
+
+    private static string ResolveFindingNextAction(string code)
+    {
+        var value = code.ToLowerInvariant();
+        if (value.Contains("receipt", StringComparison.Ordinal))
+            return "Regenerate or restore the referenced receipt, then rerun deliverables verify.";
+        if (value.Contains("manifest", StringComparison.Ordinal))
+            return "Regenerate or repair the delivery manifest, then rerun deliverables verify.";
+        if (value.Contains("bundle", StringComparison.Ordinal))
+            return "Fix bundle inputs or output path, then rerun deliverables bundle.";
+        if (value.Contains("output", StringComparison.Ordinal))
+            return "Restore the referenced deliverable output directory or rerun the export.";
+        return "Review the delivery evidence and rerun deliverables verify after correcting the local artifact.";
+    }
+
+    private static string NormalizeFindingSeverity(string severity) =>
+        severity.ToLowerInvariant() switch
+        {
+            "info" => BimOpsFindingSchema.SeverityInfo,
+            "warning" => BimOpsFindingSchema.SeverityWarning,
+            "error" => BimOpsFindingSchema.SeverityError,
+            "blocker" => BimOpsFindingSchema.SeverityBlocker,
+            _ => BimOpsFindingSchema.SeverityWarning,
+        };
+
+    private static string NormalizeFindingToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        var chars = value
+            .Trim()
+            .Select(ch => char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '-')
+            .ToArray();
+        var token = new string(chars).Trim('-');
+        while (token.Contains("--", StringComparison.Ordinal))
+            token = token.Replace("--", "-", StringComparison.Ordinal);
+
+        return string.IsNullOrWhiteSpace(token) ? "unknown" : token;
     }
 
     private static void AppendCounts(

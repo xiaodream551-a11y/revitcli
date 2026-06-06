@@ -226,6 +226,119 @@ checks:
     }
 
     [Fact]
+    public async Task Check_FindingsJson_EmitsBimOpsFindingEnvelope()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: room-bounds
+");
+        var auditResult = new AuditResult
+        {
+            Passed = 0,
+            Failed = 1,
+            Issues = new List<AuditIssue>
+            {
+                new()
+                {
+                    Rule = "room-bounds",
+                    Severity = "error",
+                    Message = "Room has zero area",
+                    ElementId = 100,
+                    Category = "rooms",
+                    Parameter = "Area",
+                    CurrentValue = "0",
+                    ExpectedValue = ">0",
+                    Source = "audit",
+                }
+            }
+        };
+        var response = ApiResponse<AuditResult>.Ok(auditResult);
+        var client = CreateClient(JsonSerializer.Serialize(response));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "json", null, true, writer, findings: true);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(writer.ToString());
+        var root = json.RootElement;
+        Assert.Equal(BimOpsFindingSchema.Version, root.GetProperty("schemaVersion").GetString());
+        Assert.Equal("check", root.GetProperty("source").GetString());
+        Assert.True(root.GetProperty("requiresRevit").GetBoolean());
+        Assert.Equal(1, root.GetProperty("summary").GetProperty("errors").GetInt32());
+
+        var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+        Assert.Equal("check.room.bounds", finding.GetProperty("ruleId").GetString());
+        Assert.Equal(BimOpsFindingSchema.SeverityError, finding.GetProperty("severity").GetString());
+        Assert.Equal("rooms", finding.GetProperty("category").GetString());
+        Assert.Equal(BimOpsFindingSchema.FixabilityManual, finding.GetProperty("fixability").GetString());
+        Assert.Equal(100, finding.GetProperty("target").GetProperty("elementIds")[0].GetInt64());
+        Assert.Equal("Area", finding.GetProperty("target").GetProperty("parameter").GetString());
+        Assert.Equal("element:100", finding.GetProperty("evidence")[0].GetProperty("locator").GetString());
+        Assert.Equal("0 -> >0", finding.GetProperty("evidence")[0].GetProperty("value").GetString());
+        Assert.Contains("--findings --output json", finding.GetProperty("remediation").GetProperty("verifyCommand").GetString(), StringComparison.Ordinal);
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_FindingsRequiresJsonOutput()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var auditResult = new AuditResult { Passed = 1, Failed = 0, Issues = new List<AuditIssue>() };
+        var client = CreateClient(JsonSerializer.Serialize(ApiResponse<AuditResult>.Ok(auditResult)));
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "table", null, true, writer, findings: true);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--findings currently requires '--output json'", writer.ToString(), StringComparison.Ordinal);
+        File.Delete(profilePath);
+    }
+
+    [Fact]
+    public async Task Check_FindingsJson_RunFailureEmitsRequiresRevitEnvelope()
+    {
+        var profilePath = CreateTempProfile(@"
+version: 1
+checks:
+  default:
+    failOn: error
+    auditRules:
+      - rule: naming
+");
+        var handler = new FakeHttpHandler(throwException: true);
+        var client = new RevitClient(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:17839") });
+        var writer = new StringWriter();
+
+        var exitCode = await CheckCommand.ExecuteAsync(
+            client, "default", profilePath, "json", null, true, writer, findings: true);
+
+        Assert.Equal(1, exitCode);
+        using var json = JsonDocument.Parse(writer.ToString());
+        var root = json.RootElement;
+        Assert.Equal(BimOpsFindingSchema.Version, root.GetProperty("schemaVersion").GetString());
+        Assert.Equal("check", root.GetProperty("source").GetString());
+        Assert.True(root.GetProperty("requiresRevit").GetBoolean());
+        var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+        Assert.Equal("check.run-failed", finding.GetProperty("ruleId").GetString());
+        Assert.Equal("connection", finding.GetProperty("category").GetString());
+        Assert.Contains("doctor", finding.GetProperty("remediation").GetProperty("nextAction").GetString(), StringComparison.OrdinalIgnoreCase);
+        File.Delete(profilePath);
+    }
+
+    [Fact]
     public async Task Check_JsonOutput_RunFailure_IsErrorObject()
     {
         var profilePath = CreateTempProfile(@"

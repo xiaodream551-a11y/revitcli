@@ -73,6 +73,9 @@ revitcli rvt scan /mnt/d/revit --output markdown             # find RVT files an
 revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown # preview .0001.rvt backup cleanup
 revitcli library check --year 2026 --output markdown         # detect missing Revit content libraries
 revitcli library sources --year 2026 --locale ENU            # show official Autodesk content sources
+revitcli crash analyze --year 2026 --since 24h --output markdown # explain recent Revit crashes
+revitcli crash collect --year 2026 --output-dir .revitcli/crash/latest # collect local crash evidence
+revitcli crash verify --packet .revitcli/crash/latest --output json # verify crash packet integrity
 revitcli release verify --tag v6.0.0 --output markdown       # local release preflight handoff
 revitcli release verify --strict --output markdown           # v5 RC / v6 release no-go gate
 revitcli publish --since baseline.json                       # incremental re-export
@@ -139,6 +142,8 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli standards install` / `validate` | Install and validate required profiles, workflows, outputs, schedules, and family rules |
 | `revitcli rvt scan` / `clean-backups` | Find local `.rvt` files, classify `model.0001.rvt` backups, and delete numbered backups only after dry-run review plus `--apply --yes` |
 | `revitcli library check` / `sources` / `download` / `install` | Detect missing Autodesk Revit content libraries, show official sources, download official Autodesk package URLs, and start installers only after `--apply --yes` |
+| `revitcli addins audit` / `plan-disable` / `apply` / `rollback` | Audit `.addin` manifests and disable risky add-ins only through reviewable plans, dry-run apply, receipts, and rollback |
+| `revitcli crash analyze` / `repro` / `collect` / `verify` | Analyze local Revit journals and Windows Application Event Log crash evidence, generate clean-repro checklists, then copy and verify local diagnostics packets |
 | `revitcli release verify` | Check local release files, version/tag consistency, CI guardrails, v5.0 RC and v6.0 release boundary docs, and smoke documentation; use `--strict` for no-go blocking and `--output markdown` for handoff notes |
 | `revitcli snapshot` | Capture model semantic state as JSON |
 | `revitcli diff <from> <to>` | Diff two snapshots, or add `--review` for anomaly/notable/routine triage |
@@ -297,6 +302,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 ### Standards — local office requirements
 
 - `.revitcli/standards.yml` records pack metadata, compatibility notes, required profiles, workflow files, output paths, schedule templates, sheet maps, numbering rules, and built-in family rule ids
+- `standards policy init/validate/diff` is the v7 policy-pack entrypoint for creating a starter manifest, validating it through the existing standards checker, and reviewing pack-to-pack requirement changes
 - `standards install <path-or-git-url>` copies governed files from an approved pack into the project, including every relative profile listed under `required.profiles`; use `--dry-run` to preview and `--force` to overwrite existing standards/profile/workflow files
 - `standards validate` checks those local files without contacting Revit; run `workflow validate --output markdown` for the installed workflows before issue work starts
 - `family validate --rules-from .revitcli/standards.yml` runs the reusable family rule set declared by the standards pack
@@ -317,12 +323,40 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 - Add `--include-orphans` only when orphaned numbered backups should also be deleted, and `--older-than 7d` to require an age threshold.
 - The built-in `family-cleanup` workflow uses the same purge report path so Codex CLI can show review evidence before destructive cleanup.
 
+### Revit Environment Baseline
+
+- `env baseline --years 2024,2025,2026 --output json|markdown` captures local Revit install/build evidence, API DLL presence, add-in manifest counts, content/library summary, Desktop Connector status, GPU/runtime hints, and running Revit process count without starting Revit.
+- Use `--content-root` and `--revit-ini` to pin the exact content root and `Revit.ini` inspected for a support case instead of relying on auto-discovery.
+- The JSON contract is `revit-env-baseline.v1`; it keeps `requiresRevit: false` and records unknown values with `status: "unknown"` plus a reason instead of failing the whole baseline.
+- `env baseline --out .revitcli/evidence/env-baseline.json --output markdown` writes the same baseline JSON to disk while rendering a readable terminal handoff.
+- Approved local-write receipts for `library install`, `library repair-apply`, and `addins apply` automatically link `.revitcli/evidence/env-baseline.json` by default, or another path passed with `--env-baseline`; missing baselines are recorded as receipt evidence instead of failing the write.
+- Missing Revit versions, missing content roots, and unavailable Windows-side evidence are reported as observations for support triage; they do not by themselves make the command fail.
+
 ### Revit Content Libraries
 
 - `library check --year 2026 --locale ENU --output json|markdown` checks the local Revit content root, detected `Revit.ini`, `Libraries`, and `Family Templates` paths without requiring Revit.
 - `library sources` prints official Autodesk source paths, including Autodesk Account `Available downloads > Libraries` and the in-product `Load Autodesk Family` cloud workflow.
 - `library download --download-dir /mnt/d/temp/revit-content` refuses to invent unofficial links when no stable direct Autodesk package URL is bundled. Pass `--url <official Autodesk HTTPS package URL>` only after obtaining it from Autodesk.
 - `library install --package <installer.exe> --dry-run` previews installer launch. Starting an installer requires `--apply --yes` and an existing `.exe` or `.msi` package.
+- `library install --year 2026 --locale ENU --package <installer.exe> --apply --yes --receipt-output .revitcli/receipts/library-install.receipt.json --env-baseline .revitcli/evidence/env-baseline.json` writes a `revit-library-install.v1` launch receipt with package bytes, SHA256, Windows path, process-start status, linked environment baseline evidence, and the post-install `library check` verify command.
+- `library repair-plan --revit-ini <path> --plan-output .revitcli/plans/library-repair.json` creates a reversible `revit-library-repair-plan.v1` for repairing `FamilyTemplatePath`; it does not edit `Revit.ini`.
+- `library repair-apply --plan .revitcli/plans/library-repair.json --dry-run` previews the Revit.ini edit; `--yes` writes a backup plus `revit-library-repair-receipt.v1` with linked environment baseline evidence, and `library repair-rollback --receipt <receipt> --dry-run` previews the rollback.
+
+### Revit Add-in Audit
+
+- `addins audit --versions 2024,2025,2026 --output json|markdown` scans all-users and per-user `.addin` manifests without requiring Revit or modifying files.
+- The audit reports missing assemblies, duplicate `AddInId` values, same-filename manifest shadowing, missing vendor ids, unreadable manifests, and development-path assemblies.
+- `addins audit --findings --output json` emits `bimops-finding.v1` so add-in risks can feed the same score/gate path as model, library, standards, and delivery findings.
+- `addins plan-disable --profile cloud-safe --plan-output .revitcli/plans/addins-disable.json` writes a reviewable `revit-addins-disable-plan.v1`; `addins apply --plan ... --dry-run` previews file moves, `--yes` writes a receipt with linked environment baseline evidence, and `addins rollback --receipt ... --dry-run` previews restoration.
+
+### Revit Crash Diagnostics
+
+- `crash analyze --year 2026 --since 24h --output json|markdown` reads local Revit journal files and, when available, Windows Application Event Log entries without requiring Revit to be running.
+- `crash analyze --journal <journal.txt> --include-event-log false` targets a specific journal and skips event-log lookup for offline review.
+- `crash repro --year 2026 --case family-saveas --output markdown` creates a clean-session checklist that tells support staff to close Revit, restart once, reproduce only the failing workflow, and collect the newest journal.
+- `crash collect --output-dir .revitcli/crash/latest` copies analyzed journals and writes `analysis.json`, `redaction.json`, `README.md`, and `manifest.json` into a local evidence packet.
+- `crash verify --packet .revitcli/crash/latest --output json` verifies the packet manifest, redaction-report presence, file sizes, and SHA-256 hashes offline.
+- Rules identify managed `.NET` exception code `0xe0434352`, add-in API/assembly failures, missing Extensible Storage schemas, cloud/worksharing sync context, memory pressure, graphics-driver hints, and lower-confidence fatal crash context.
 
 Example manifest:
 

@@ -315,6 +315,66 @@ public class DeliverablesCommandTests
     }
 
     [Fact]
+    public async Task Verify_FindingsJson_EmitsBimOpsFindingEnvelope()
+    {
+        var dir = TempDir();
+        try
+        {
+            WriteManifest(dir, new
+            {
+                schemaVersion = "delivery-manifest.v1",
+                kind = "export",
+                success = true,
+                dryRun = false,
+                receiptPath = Path.Combine(dir, ".revitcli", "receipts", "missing.json")
+            });
+            var writer = new StringWriter();
+
+            var exitCode = await DeliverablesCommand.ExecuteVerifyAsync(dir, "json", writer, findings: true);
+
+            Assert.Equal(1, exitCode);
+            using var json = JsonDocument.Parse(writer.ToString());
+            var root = json.RootElement;
+            Assert.Equal(BimOpsFindingSchema.Version, root.GetProperty("schemaVersion").GetString());
+            Assert.Equal("deliverables.verify", root.GetProperty("source").GetString());
+            Assert.False(root.GetProperty("requiresRevit").GetBoolean());
+            Assert.Equal(1, root.GetProperty("summary").GetProperty("errors").GetInt32());
+
+            var finding = Assert.Single(root.GetProperty("findings").EnumerateArray());
+            Assert.Equal("deliverables.receipt-missing", finding.GetProperty("ruleId").GetString());
+            Assert.Equal(BimOpsFindingSchema.SeverityError, finding.GetProperty("severity").GetString());
+            Assert.Equal("receipt", finding.GetProperty("category").GetString());
+            Assert.Equal(BimOpsFindingSchema.FixabilityManual, finding.GetProperty("fixability").GetString());
+            Assert.Equal("receipt-missing", finding.GetProperty("target").GetProperty("parameter").GetString());
+            Assert.Equal("line 1", finding.GetProperty("evidence")[0].GetProperty("locator").GetString());
+            Assert.Contains("deliverables verify", finding.GetProperty("remediation").GetProperty("verifyCommand").GetString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Verify_FindingsRequiresJsonOutput()
+    {
+        var dir = TempDir();
+        try
+        {
+            var writer = new StringWriter();
+
+            var exitCode = await DeliverablesCommand.ExecuteVerifyAsync(dir, "markdown", writer, findings: true);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("--findings currently requires '--output json'", writer.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Verify_MalformedManifestLine_ReturnsFailure()
     {
         var dir = TempDir();

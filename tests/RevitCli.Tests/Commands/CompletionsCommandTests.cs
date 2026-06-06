@@ -44,6 +44,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("completions", script);
         Assert.Contains("batch", script);
         Assert.Contains("doctor", script);
+        Assert.Contains("env", script);
+        Assert.Contains("env)", script);
         Assert.Contains("check", script);
         Assert.Contains("fix", script);
         Assert.Contains("rollback", script);
@@ -63,6 +65,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("rvt)", script);
         Assert.Contains("library", script);
         Assert.Contains("library)", script);
+        Assert.Contains("addins", script);
+        Assert.Contains("addins)", script);
         Assert.Contains("sheets", script);
         Assert.Contains("rooms", script);
         Assert.Contains("marks", script);
@@ -75,7 +79,14 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("interactive", script);
         Assert.Contains("compgen -W \"--check-version --output\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"2024 2025 2026\" -- \"$cur\"", script);
-        Assert.Contains("compgen -W \"--profile --output --report --no-save\" -- \"$cur\"", script);
+        var envBlock = ExtractBlock(
+            script,
+            "        env)",
+            "        check)");
+        Assert.Contains("compgen -W \"baseline --years --locale --content-root --revit-ini --all-users-root --per-user-root --out --output\" -- \"$cur\"", envBlock);
+        Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", envBlock);
+        Assert.Contains("compgen -f -- \"$cur\"", envBlock);
+        Assert.Contains("compgen -W \"--profile --output --report --no-save --findings\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"table json html sarif pr-comment\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"show set\"", script);
         Assert.Contains("compgen -W \"table json\" -- \"$cur\"", script);
@@ -112,8 +123,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("compgen -W \"all valid missing unreadable\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"error warning\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"day hour\" -- \"$cur\"", script);
-        Assert.Contains("list stats verify plan bundle --dir --profile --since --bundle-path --dry-run --force --output", script);
-        Assert.Contains("install validate --manifest --dir --output --ref --subpath --force --dry-run", script);
+        Assert.Contains("list stats verify plan bundle --dir --profile --since --bundle-path --dry-run --force --findings --output", script);
+        Assert.Contains("preflight diff package --profile --output --fail-on --findings --from --to --review --report --max-rows --bundle-path --dry-run --sign-journal --include-receipts", script);
+        Assert.Contains("install validate policy --manifest --dir --output --findings --ref --subpath --force --dry-run --name --pack-version", script);
         Assert.Contains("verify pilot --root --output --tag --strict --pilot-id --path --force --yes --production-support --support-review", script);
         Assert.Contains("--path|--support-review)", script);
         Assert.Contains("compgen -W \"scaffold validate register status claim support-review\" -- \"$cur\"", script);
@@ -138,10 +150,24 @@ public class CompletionsCommandTests : IDisposable
         var libraryBlock = ExtractBlock(
             script,
             "        library)",
-            "        sheets)");
-        Assert.Contains("compgen -W \"check sources download install --year --locale --content-root --revit-ini --download-dir --url --open-account --package --dry-run --apply --yes --output\" -- \"$cur\"", libraryBlock);
+            "        addins)");
+        Assert.Contains("compgen -W \"check sources download install repair-plan repair-apply repair-rollback --year --locale --content-root --revit-ini --download-dir --url --open-account --package --plan --plan-output --receipt --receipt-output --env-baseline --dry-run --apply --yes --findings --output\" -- \"$cur\"", libraryBlock);
         Assert.Contains("compgen -W \"2024 2025 2026\" -- \"$cur\"", libraryBlock);
         Assert.Contains("compgen -f -- \"$cur\"", libraryBlock);
+        var addinsBlock = ExtractBlock(
+            script,
+            "        addins)",
+            "        crash)");
+        Assert.Contains("compgen -W \"audit plan-disable apply rollback --versions --all-users-root --per-user-root --profile --plan-output --plan --receipt --receipt-output --env-baseline --dry-run --yes --findings --output\" -- \"$cur\"", addinsBlock);
+        Assert.Contains("compgen -f -- \"$cur\"", addinsBlock);
+        Assert.Contains("office-standard cloud-safe clean", addinsBlock);
+        var crashBlock = ExtractBlock(
+            script,
+            "        crash)",
+            "        sheets)");
+        Assert.Contains("compgen -W \"analyze collect repro verify --year --journal --since --include-event-log --context-lines --output-dir --case --packet --output\" -- \"$cur\"", crashBlock);
+        Assert.Contains("compgen -W \"true false\" -- \"$cur\"", crashBlock);
+        Assert.Contains("compgen -f -- \"$cur\"", crashBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "        rollback)",
@@ -161,7 +187,10 @@ public class CompletionsCommandTests : IDisposable
 
         Assert.Equal(0, exitCode);
         Assert.Contains("'doctor:Check RevitCli setup and diagnose issues'", script);
+        Assert.Contains("'env:Capture local Revit machine baseline evidence'", script);
         Assert.Contains("--check-version[Target Revit year]:year:(2024 2025 2026)", script);
+        Assert.Contains("_values 'subcommand' baseline", script);
+        Assert.Contains("--out[Write baseline JSON]:file:_files", script);
         Assert.Contains("--output[Output format]:format:(table json)", script);
         Assert.Contains("--output[Output format]:format:(table json html sarif pr-comment)", script);
         Assert.Contains("--report[Save report to file]:file:_files", script);
@@ -174,6 +203,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'release:Verify local release readiness and CI guardrails'", script);
         Assert.Contains("'rvt:Find RVT files and clean numbered Revit backups'", script);
         Assert.Contains("'library:Find and fetch Autodesk Revit content libraries'", script);
+        Assert.Contains("'addins:Audit and safely disable local Revit add-in manifests'", script);
         Assert.Contains("'sheets:Verify sheet numbering and local sheet-frame expectations'", script);
         Assert.Contains("'rooms:Plan and review room numbering workflows'", script);
         Assert.Contains("'marks:Plan and verify door/window Mark numbering workflows'", script);
@@ -204,8 +234,10 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("--status[Append status]:status:(planned succeeded failed blocked)", script);
         Assert.Contains("--receipt-status[Filter receipt status]:status:(all valid missing unreadable)", script);
         Assert.Contains("--fail-on[Failure threshold]:threshold:(error warning)", script);
+        Assert.Contains("--findings[Emit bimops-finding.v1 JSON]", script);
         Assert.Contains("list stats verify plan bundle", script);
-        Assert.Contains("install validate", script);
+        Assert.Contains("install validate policy", script);
+        Assert.Contains("_values 'subcommand' init validate diff", script);
         Assert.Contains("verify", script);
         Assert.Contains("_values 'subcommand' scaffold validate register status claim support-review", script);
         Assert.Contains("elif [[ ${words[3]} == pilot && ${words[4]} == support-review && CURRENT == 5 ]]; then", script);
@@ -247,10 +279,25 @@ public class CompletionsCommandTests : IDisposable
         var libraryBlock = ExtractBlock(
             script,
             "                library)",
-            "                journal)");
-        Assert.Contains("_values 'subcommand' check sources download install", libraryBlock);
+            "                addins)");
+        Assert.Contains("_values 'subcommand' check sources download install repair-plan", libraryBlock);
+        var addinsBlock = ExtractBlock(
+            script,
+            "                addins)",
+            "                crash)");
+        Assert.Contains("_values 'subcommand' audit plan-disable apply rollback", addinsBlock);
+        Assert.Contains("--all-users-root[All-users add-in root]", addinsBlock);
+        Assert.Contains("--profile[Disable profile]", addinsBlock);
         Assert.Contains("--year[Target Revit year]:year:(2024 2025 2026)", libraryBlock);
         Assert.Contains("--package[Official content installer package]:file:_files", libraryBlock);
+        var crashBlock = ExtractBlock(
+            script,
+            "                crash)",
+            "                journal)");
+        Assert.Contains("_values 'subcommand' analyze collect repro verify", crashBlock);
+        Assert.Contains("--journal[Specific Revit journal file]:file:_files", crashBlock);
+        Assert.Contains("--packet[Crash evidence packet directory]:dir:_directories", crashBlock);
+        Assert.Contains("--include-event-log[Include Windows Event Log]:bool:(true false)", crashBlock);
         var rollbackBlock = ExtractBlock(
             script,
             "                rollback)",
@@ -274,8 +321,12 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'doctor' = 'Check RevitCli setup and diagnose issues'", script);
         Assert.Contains("'doctor' = @('--check-version', '--output')", script);
         Assert.Contains("$doctorOutputFormats = @('table', 'json')", script);
+        Assert.Contains("'env' = 'Capture local Revit machine baseline evidence'", script);
+        Assert.Contains("'env' = @('baseline', '--years', '--locale', '--content-root', '--revit-ini', '--all-users-root', '--per-user-root', '--out', '--output')", script);
+        Assert.Contains("$envSubcommands = @('baseline')", script);
+        Assert.Contains("$envOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$revitYears = @('2024', '2025', '2026')", script);
-        Assert.Contains("'check' = @('--profile', '--output', '--report', '--no-save')", script);
+        Assert.Contains("'check' = @('--profile', '--output', '--report', '--no-save', '--findings')", script);
         Assert.Contains("'inspect' = @('categories', 'params', 'schedules', 'sheets', 'workflows', 'plans', '--output', '--dir', '--include-empty', '--category', '--name', '--writable-only', '--missing-only', '--ready-only', '--empty-only', '--sheets', '--issues-only')", script);
         Assert.Contains("$inspectOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$checkOutputFormats = @('table', 'json', 'html', 'sarif', 'pr-comment')", script);
@@ -315,6 +366,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'weekly', 'knowledge', '--window', '--dir', '--history-dir', '--journal', '--output', '--report'", script);
         Assert.Contains("$reportOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("'ledger' = @('append', 'replay', 'query', 'validate', 'stats', 'timeline', 'analytics', '--dir', '--project', '--source', '--since', '--until', '--window', '--action', '--category', '--operator', '--status', '--summary', '--timestamp', '--model', '--model-path', '--revit-version', '--plan-hash', '--artifact-path', '--receipt', '--receipt-hash', '--rollback-pointer', '--evidence', '--apply', '--yes', '--receipt-status', '--limit', '--fail-on', '--bucket', '--output-dir', '--output')", script);
+        Assert.Contains("'issue' = @('preflight', 'diff', 'package', '--profile', '--output', '--fail-on', '--findings', '--from', '--to', '--review', '--report', '--max-rows', '--bundle-path', '--dry-run', '--sign-journal', '--include-receipts')", script);
         Assert.Contains("New-RevitCliCompletionResults -Values @('append', 'replay', 'query', 'validate', 'stats', 'timeline', 'analytics') -ToolTip 'Ledger subcommand'", script);
         Assert.Contains("$ledgerOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$ledgerSources = @('all', 'ledger', 'journal', 'history', 'deliveries', 'workflows')", script);
@@ -322,10 +374,11 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("$ledgerReceiptStatuses = @('all', 'valid', 'missing', 'unreadable')", script);
         Assert.Contains("$ledgerFailOnValues = @('error', 'warning')", script);
         Assert.Contains("$ledgerBucketValues = @('day', 'hour')", script);
-        Assert.Contains("'list', 'stats', 'verify', 'plan', 'bundle', '--dir', '--profile', '--since', '--bundle-path', '--dry-run', '--force', '--output'", script);
+        Assert.Contains("'list', 'stats', 'verify', 'plan', 'bundle', '--dir', '--profile', '--since', '--bundle-path', '--dry-run', '--force', '--findings', '--output'", script);
         Assert.Contains("$deliverablesOutputFormats = @('table', 'json', 'markdown')", script);
-        Assert.Contains("'install', 'validate', '--manifest', '--dir', '--output', '--ref', '--subpath', '--force', '--dry-run'", script);
+        Assert.Contains("'install', 'validate', 'policy', '--manifest', '--dir', '--output', '--findings', '--ref', '--subpath', '--force', '--dry-run', '--name', '--pack-version'", script);
         Assert.Contains("$standardsOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("$standardsPolicySubcommands = @('init', 'validate', 'diff')", script);
         Assert.Contains("'release' = @('verify', 'pilot', '--root', '--output', '--tag', '--strict', '--pilot-id', '--path', '--force', '--yes', '--production-support', '--support-review')", script);
         Assert.Contains("$releaseOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$releasePilotSubcommands = @('scaffold', 'validate', 'register', 'status', 'claim', 'support-review')", script);
@@ -333,9 +386,15 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'rvt' = @('scan', 'clean-backups', '--output', '--dry-run', '--apply', '--yes', '--include-orphans', '--non-recursive', '--older-than', '--report')", script);
         Assert.Contains("$rvtSubcommands = @('scan', 'clean-backups')", script);
         Assert.Contains("$rvtOutputFormats = @('table', 'json', 'markdown')", script);
-        Assert.Contains("'library' = @('check', 'sources', 'download', 'install', '--year', '--locale', '--content-root', '--revit-ini', '--download-dir', '--url', '--open-account', '--package', '--dry-run', '--apply', '--yes', '--output')", script);
-        Assert.Contains("$librarySubcommands = @('check', 'sources', 'download', 'install')", script);
+        Assert.Contains("'library' = @('check', 'sources', 'download', 'install', 'repair-plan', 'repair-apply', 'repair-rollback', '--year', '--locale', '--content-root', '--revit-ini', '--download-dir', '--url', '--open-account', '--package', '--plan', '--plan-output', '--receipt', '--receipt-output', '--env-baseline', '--dry-run', '--apply', '--yes', '--findings', '--output')", script);
+        Assert.Contains("$librarySubcommands = @('check', 'sources', 'download', 'install', 'repair-plan', 'repair-apply', 'repair-rollback')", script);
         Assert.Contains("$libraryOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("'addins' = @('audit', 'plan-disable', 'apply', 'rollback', '--versions', '--all-users-root', '--per-user-root', '--profile', '--plan-output', '--plan', '--receipt', '--receipt-output', '--env-baseline', '--dry-run', '--yes', '--findings', '--output')", script);
+        Assert.Contains("$addinsSubcommands = @('audit', 'plan-disable', 'apply', 'rollback')", script);
+        Assert.Contains("$addinsOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("'crash' = @('analyze', 'collect', 'repro', 'verify', '--year', '--journal', '--since', '--include-event-log', '--context-lines', '--output-dir', '--case', '--packet', '--output')", script);
+        Assert.Contains("$crashSubcommands = @('analyze', 'collect', 'repro', 'verify')", script);
+        Assert.Contains("$crashOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$previous -eq '--root' -or $previous -eq '--path' -or $previous -eq '--support-review'", script);
         Assert.Contains("New-RevitCliCompletionResults -Values $releasePilotSupportReviewSubcommands -ToolTip 'Release pilot support-review subcommand'", script);
         Assert.Contains("'sheets' = @('verify', 'issue-meta', 'renumber', 'index', 'init', 'show', '--against', '--rule', '--issues-only', '--output', '--path', '--force', '--selector', '--issue-code', '--issue-date', '--plan-output', '--param-map', '--dry-run', '--max-changes')", script);
@@ -605,7 +664,9 @@ public class CompletionsCommandTests : IDisposable
 
         Assert.Equal(0, bashExitCode);
         var bashBlock = ExtractBlock(bash, "        score)", "        query)");
-        Assert.Contains("--history --dir --output", bashBlock);
+        Assert.Contains("--history --from-findings --waivers --fail-on --dir --output", bashBlock);
+        Assert.Contains("--from-findings|--waivers)", bashBlock);
+        Assert.Contains("compgen -W \"none warning error blocker\" -- \"$cur\"", bashBlock);
         Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", bashBlock);
 
         var zshOut = new StringWriter();
@@ -616,6 +677,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Equal(0, zshExitCode);
         var zshBlock = ExtractBlock(zsh, "                score)", "                query)");
         Assert.Contains("--history[History window", zshBlock);
+        Assert.Contains("--from-findings[BimOps findings JSON file]:file:_files", zshBlock);
+        Assert.Contains("--waivers[BimOps finding waivers JSON file]:file:_files", zshBlock);
+        Assert.Contains("--fail-on[Finding gate threshold]:threshold:(none warning error blocker)", zshBlock);
         Assert.Contains("--output[Output format]:format:(table json markdown)", zshBlock);
 
         var pwshOut = new StringWriter();
@@ -624,8 +688,11 @@ public class CompletionsCommandTests : IDisposable
         var pwsh = pwshOut.ToString();
 
         Assert.Equal(0, pwshExitCode);
-        Assert.Contains("'score' = @('--history', '--dir', '--output')", pwsh);
+        Assert.Contains("'score' = @('--history', '--from-findings', '--waivers', '--fail-on', '--dir', '--output')", pwsh);
+        Assert.Contains("$previous -eq '--dir' -or $previous -eq '--project' -or $previous -eq '--from-findings' -or $previous -eq '--waivers'", pwsh);
         Assert.Contains("$scoreOutputFormats = @('table', 'json', 'markdown')", pwsh);
+        Assert.Contains("$scoreFailOnValues = @('none', 'warning', 'error', 'blocker')", pwsh);
+        Assert.Contains("New-RevitCliCompletionResults -Values $scoreFailOnValues -ToolTip 'Finding gate threshold'", pwsh);
     }
 
     [Fact]

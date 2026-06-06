@@ -53,6 +53,12 @@ public sealed class WorkbenchCommandTests
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review scaffold") &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "release pilot support-review validate"));
         Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "env" &&
+            command.GetProperty("risk").GetString() == "read-only" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "env baseline"));
+        Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "rvt" &&
             command.GetProperty("risk").GetString() == "local-write" &&
             command.GetProperty("supportsJson").GetBoolean() &&
@@ -65,7 +71,25 @@ public sealed class WorkbenchCommandTests
             command.GetProperty("supportsJson").GetBoolean() &&
             command.GetProperty("supportsMarkdown").GetBoolean() &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library check") &&
-            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library install"));
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library install") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "library repair-plan"));
+        Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "addins" &&
+            command.GetProperty("risk").GetString() == "local-write" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "addins audit") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "addins plan-disable") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "addins rollback"));
+        Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "crash" &&
+            command.GetProperty("risk").GetString() == "local-write" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "crash analyze") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "crash collect") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "crash repro") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "crash verify"));
         Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "inspect" &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "inspect plans"));
@@ -2912,6 +2936,12 @@ journal verify
             path.GetProperty("command").GetString() == "release" &&
             path.GetProperty("supportsJson").GetBoolean());
         Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "env baseline" &&
+            path.GetProperty("command").GetString() == "env" &&
+            path.GetProperty("supportsJson").GetBoolean() &&
+            path.GetProperty("supportsMarkdown").GetBoolean() &&
+            path.GetProperty("receipt").GetString()!.Contains("revit-env-baseline.v1", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, path =>
             path.GetProperty("path").GetString() == "library check" &&
             path.GetProperty("command").GetString() == "library" &&
             path.GetProperty("supportsJson").GetBoolean() &&
@@ -2920,6 +2950,22 @@ journal verify
             path.GetProperty("path").GetString() == "library install" &&
             path.GetProperty("command").GetString() == "library" &&
             path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "library repair-plan" &&
+            path.GetProperty("command").GetString() == "library" &&
+            path.GetProperty("receipt").GetString()!.Contains("revit-library-repair-plan.v1", StringComparison.OrdinalIgnoreCase) &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "addins audit" &&
+            path.GetProperty("command").GetString() == "addins" &&
+            path.GetProperty("supportsJson").GetBoolean() &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "addins apply" &&
+            path.GetProperty("command").GetString() == "addins" &&
+            path.GetProperty("receipt").GetString()!.Contains("revit-addins-disable-receipt.v1", StringComparison.OrdinalIgnoreCase) &&
+            path.GetProperty("receipt").GetString()!.Contains("revit-env-baseline.v1", StringComparison.OrdinalIgnoreCase) &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(paths, path =>
             path.GetProperty("path").GetString() == "plan apply" &&
             path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase) &&
@@ -3181,13 +3227,19 @@ journal verify
             contract.GetProperty("jsonSchema").GetString() == "rvt-backup-cleanup-report.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "env baseline" &&
+            contract.GetProperty("jsonSchema").GetString() == "revit-env-baseline.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "library check" &&
             contract.GetProperty("jsonSchema").GetString() == "revit-library-check.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "library install" &&
             contract.GetProperty("jsonSchema").GetString() == "revit-library-install.v1" &&
-            contract.GetProperty("supportsMarkdown").GetBoolean());
+            contract.GetProperty("supportsMarkdown").GetBoolean() &&
+            contract.GetProperty("notes").GetString()!.Contains("environment baseline", StringComparison.OrdinalIgnoreCase) &&
+            contract.GetProperty("notes").GetString()!.Contains("verify command", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "schedule create" &&
             contract.GetProperty("jsonSchema").GetString() == "schedule-create.v1");
@@ -3348,6 +3400,10 @@ journal verify
             safeguard.GetProperty("dryRunCommand").GetString()!.Contains("library install", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("dryRunCommand").GetString()!.Contains("--dry-run", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("approvalCommand").GetString()!.Contains("--apply --yes", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("approvalCommand").GetString()!.Contains("--receipt-output .revitcli/receipts/library-install.receipt.json", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("approvalCommand").GetString()!.Contains("--env-baseline .revitcli/evidence/env-baseline.json", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("receipt").GetString()!.Contains("revit-library-install.v1", StringComparison.OrdinalIgnoreCase) &&
+            safeguard.GetProperty("receipt").GetString()!.Contains("revit-env-baseline.v1", StringComparison.OrdinalIgnoreCase) &&
             safeguard.GetProperty("reviewCommand").GetString()!.Contains("library check", StringComparison.OrdinalIgnoreCase));
     }
 

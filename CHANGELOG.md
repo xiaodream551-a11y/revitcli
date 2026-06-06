@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added — Revit environment baseline
+
+- Added `revitcli env baseline` to capture read-only Revit install/build
+  evidence, add-in counts, content/library summaries, Desktop Connector status,
+  GPU/runtime hints, and unknown-with-reason observations as
+  `revit-env-baseline.v1` without requiring Revit to be running.
+- Approved `library install`, `library repair-apply`, and `addins apply`
+  receipts now link an existing environment baseline through
+  `--env-baseline` or the default `.revitcli/evidence/env-baseline.json`,
+  recording the baseline path, schema, SHA256, generation time, machine, years,
+  and a capture command when the baseline is missing.
+
 ### Added — RVT backup cleanup
 
 - Added `revitcli rvt scan` and `revitcli rvt clean-backups` to find local
@@ -19,6 +31,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   detect missing Autodesk Revit local content libraries, show official
   Autodesk Account / Load Autodesk Family sources, download only official
   Autodesk HTTPS package URLs, and start installers only after `--apply --yes`.
+- `library install --receipt-output` now writes a `revit-library-install.v1`
+  installer launch receipt with package bytes, SHA256, Windows path,
+  process-start status, linked environment baseline evidence, and post-install
+  `library check` verification command.
+
+### Added — Revit crash diagnostics
+
+- Added `revitcli crash analyze` and `revitcli crash collect` to inspect local
+  Revit journals plus optional Windows Application Event Log evidence, classify
+  common crash signatures, suggest next steps, and copy journals with
+  `analysis.json`, `redaction.json`, and manifest hash evidence into a local
+  diagnostics packet.
 
 ## [6.0.0] - 2026-05-29
 

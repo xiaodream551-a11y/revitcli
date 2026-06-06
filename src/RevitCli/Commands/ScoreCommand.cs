@@ -18,7 +18,9 @@ public static class ScoreCommand
 {
     internal const string ScoreSchemaVersion = "model-health-score.v1";
     internal const string HistorySchemaVersion = "model-health-history.v1";
+    internal const string FindingScoreSchemaVersion = "model-health-finding-score.v1";
     internal static readonly string[] OutputFormats = { "table", "json", "markdown" };
+    internal static readonly string[] FindingFailOnValues = { "none", "warning", "error", "blocker" };
 
     private static readonly Dictionary<string, int> RuleWeights = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -38,18 +40,60 @@ public static class ScoreCommand
     {
         var historyOpt = new Option<string?>("--history",
             "Render a per-day score time series over a window (e.g. 7d, 30d). Reads .revitcli/history/.");
+        var findingsOpt = new Option<string?>("--from-findings",
+            "Score a bimops-finding.v1 JSON file without contacting Revit.");
+        var waiversOpt = new Option<string?>("--waivers",
+            "Optional bimops-waivers.v1 JSON file for --from-findings.");
+        var failOnOpt = new Option<string>("--fail-on", () => "none",
+            "Gate threshold for --from-findings: none, warning, error, blocker");
         var dirOpt = new Option<string?>("--dir", "Override history directory (paired with --history)");
         var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, markdown");
 
         var command = new Command("score", "Calculate model health score (0-100)")
         {
             historyOpt,
+            findingsOpt,
+            waiversOpt,
+            failOnOpt,
             dirOpt,
             outputOpt,
         };
 
-        command.SetHandler(async (string? history, string? dir, string outputFormat) =>
+        command.SetHandler(async (string? history, string? findingsPath, string? waiversPath, string failOn, string? dir, string outputFormat) =>
         {
+            if (!string.IsNullOrWhiteSpace(findingsPath))
+            {
+                if (!string.IsNullOrWhiteSpace(history))
+                {
+                    Environment.ExitCode = await WriteFindingsScoreErrorAsync(
+                        Console.Out,
+                        outputFormat,
+                        "Use either --history or --from-findings, not both.");
+                    return;
+                }
+
+                Environment.ExitCode = await ExecuteFindingsAsync(findingsPath, Console.Out, outputFormat, failOn, waiversPath);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(waiversPath))
+            {
+                Environment.ExitCode = await WriteFindingsScoreErrorAsync(
+                    Console.Out,
+                    outputFormat,
+                    "Use --waivers with --from-findings.");
+                return;
+            }
+
+            if (!string.Equals(failOn, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = await WriteFindingsScoreErrorAsync(
+                    Console.Out,
+                    outputFormat,
+                    "Use --fail-on with --from-findings.");
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(history))
             {
                 Environment.ExitCode = await ExecuteHistoryAsync(history, dir, Console.Out, outputFormat);
@@ -76,7 +120,7 @@ public static class ScoreCommand
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"  Model Health Score: [{color} bold]{result}[/] / 100  [{color}]({grade})[/]");
             AnsiConsole.WriteLine();
-        }, historyOpt, dirOpt, outputOpt);
+        }, historyOpt, findingsOpt, waiversOpt, failOnOpt, dirOpt, outputOpt);
 
         return command;
     }
@@ -244,6 +288,92 @@ public static class ScoreCommand
         return 0;
     }
 
+    public static async Task<int> ExecuteFindingsAsync(
+        string findingsPath,
+        TextWriter output,
+        string outputFormat = "table",
+        string failOn = "none",
+        string? waiversPath = null)
+    {
+        if (!TerminalOutputFormat.TryNormalize(outputFormat, out var normalized, OutputFormats))
+        {
+            await WriteOutputFormatErrorAsync(output);
+            return 3;
+        }
+        if (!TryNormalizeFindingFailOn(failOn, out var normalizedFailOn))
+        {
+            await WriteFindingsScoreErrorAsync(output, normalized,
+                "--fail-on must be one of: none, warning, error, blocker.");
+            return 3;
+        }
+
+        BimOpsFindingEnvelope envelope;
+        var fullPath = Path.GetFullPath(findingsPath);
+        try
+        {
+            if (!File.Exists(fullPath))
+            {
+                await WriteFindingsScoreErrorAsync(output, normalized, $"findings file not found: {fullPath}");
+                return 3;
+            }
+
+            envelope = JsonSerializer.Deserialize<BimOpsFindingEnvelope>(
+                await File.ReadAllTextAsync(fullPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? throw new JsonException("findings file deserialized to null.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            await WriteFindingsScoreErrorAsync(output, normalized, $"failed to read findings: {ex.Message}");
+            return 3;
+        }
+
+        if (!string.Equals(envelope.SchemaVersion, BimOpsFindingSchema.Version, StringComparison.Ordinal))
+        {
+            await WriteFindingsScoreErrorAsync(output, normalized,
+                $"schemaVersion must be {BimOpsFindingSchema.Version}, got {envelope.SchemaVersion ?? "(missing)"}.");
+            return 3;
+        }
+
+        FindingWaiverApplication waiverApplication;
+        try
+        {
+            waiverApplication = ReadAndApplyWaivers(envelope.Findings, waiversPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            await WriteFindingsScoreErrorAsync(output, normalized, $"failed to read waivers: {ex.Message}");
+            return 3;
+        }
+
+        var effectiveFindings = waiverApplication.EffectiveFindings;
+        var summary = SummarizeFindings(effectiveFindings);
+        var score = FindingsScore(summary);
+        var exitCode = FindingsGateExitCode(summary, normalizedFailOn);
+        var report = new ModelHealthFindingScoreReport(
+            FindingScoreSchemaVersion,
+            DateTimeOffset.UtcNow,
+            true,
+            fullPath,
+            envelope.Source,
+            false,
+            waiverApplication.WaiversPath,
+            normalizedFailOn,
+            exitCode,
+            score,
+            LetterGrade(score),
+            summary,
+            effectiveFindings.Count,
+            envelope.Findings.Count,
+            waiverApplication.WaivedCount,
+            waiverApplication.ActiveWaiverCount,
+            waiverApplication.ExpiredWaiverCount,
+            null);
+
+        await WriteFindingsScoreReportAsync(output, normalized, report);
+        return exitCode;
+    }
+
     /// <summary>
     /// Compute a deterministic 0-100 score directly from a snapshot, without
     /// requiring a live Revit connection. Used by the v1.6 trend renderer
@@ -309,6 +439,132 @@ public static class ScoreCommand
         if (score >= 70) return "C";
         if (score >= 60) return "D";
         return "F";
+    }
+
+    internal static int FindingsScore(BimOpsFindingSummary summary)
+    {
+        var penalty =
+            (summary.Blockers * 25) +
+            (summary.Errors * 15) +
+            (summary.Warnings * 5);
+        return Math.Max(0, 100 - penalty);
+    }
+
+    internal static int FindingsGateExitCode(BimOpsFindingSummary summary, string failOn)
+    {
+        return failOn switch
+        {
+            "none" => 0,
+            "warning" when summary.Blockers > 0 || summary.Errors > 0 => 2,
+            "warning" when summary.Warnings > 0 => 1,
+            "warning" => 0,
+            "error" when summary.Blockers > 0 || summary.Errors > 0 => 2,
+            "error" => 0,
+            "blocker" when summary.Blockers > 0 => 2,
+            "blocker" => 0,
+            _ => 3,
+        };
+    }
+
+    private static bool TryNormalizeFindingFailOn(string? failOn, out string normalized)
+    {
+        normalized = string.IsNullOrWhiteSpace(failOn) ? "none" : failOn.Trim().ToLowerInvariant();
+        return FindingFailOnValues.Contains(normalized, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static BimOpsFindingSummary SummarizeFindings(IReadOnlyList<BimOpsFinding> findings)
+    {
+        return new BimOpsFindingSummary
+        {
+            Info = findings.Count(finding => string.Equals(finding.Severity, BimOpsFindingSchema.SeverityInfo, StringComparison.OrdinalIgnoreCase)),
+            Warnings = findings.Count(finding => string.Equals(finding.Severity, BimOpsFindingSchema.SeverityWarning, StringComparison.OrdinalIgnoreCase)),
+            Errors = findings.Count(finding => string.Equals(finding.Severity, BimOpsFindingSchema.SeverityError, StringComparison.OrdinalIgnoreCase)),
+            Blockers = findings.Count(finding => string.Equals(finding.Severity, BimOpsFindingSchema.SeverityBlocker, StringComparison.OrdinalIgnoreCase)),
+        };
+    }
+
+    private static FindingWaiverApplication ReadAndApplyWaivers(
+        IReadOnlyList<BimOpsFinding> findings,
+        string? waiversPath)
+    {
+        if (string.IsNullOrWhiteSpace(waiversPath))
+            return new FindingWaiverApplication("", findings, 0, 0, 0);
+
+        var fullPath = Path.GetFullPath(waiversPath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"waivers file not found: {fullPath}", fullPath);
+
+        var document = JsonSerializer.Deserialize<FindingWaiverDocument>(
+            File.ReadAllText(fullPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new JsonException("waivers file deserialized to null.");
+        if (!string.Equals(document.SchemaVersion, "bimops-waivers.v1", StringComparison.Ordinal))
+            throw new InvalidOperationException($"schemaVersion must be bimops-waivers.v1, got {document.SchemaVersion ?? "(missing)"}.");
+
+        var now = DateTimeOffset.UtcNow;
+        var activeWaivers = new List<FindingWaiver>();
+        var expiredCount = 0;
+        foreach (var waiver in document.Waivers)
+        {
+            if (WaiverExpired(waiver, now))
+                expiredCount++;
+            else
+                activeWaivers.Add(waiver);
+        }
+
+        if (activeWaivers.Count == 0)
+            return new FindingWaiverApplication(fullPath, findings, 0, 0, expiredCount);
+
+        var effective = new List<BimOpsFinding>();
+        var waived = 0;
+        foreach (var finding in findings)
+        {
+            if (activeWaivers.Any(waiver => WaiverMatches(waiver, finding)))
+            {
+                waived++;
+                continue;
+            }
+
+            effective.Add(finding);
+        }
+
+        return new FindingWaiverApplication(fullPath, effective, waived, activeWaivers.Count, expiredCount);
+    }
+
+    private static bool WaiverExpired(FindingWaiver waiver, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(waiver.Expires))
+            return false;
+
+        // An unparseable expiry must not silently keep a waiver active forever;
+        // treat it as expired so a malformed date never suppresses real findings.
+        if (!DateTimeOffset.TryParse(
+                waiver.Expires,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var expires))
+        {
+            return true;
+        }
+
+        return expires < now;
+    }
+
+    private static bool WaiverMatches(FindingWaiver waiver, BimOpsFinding finding)
+    {
+        if (!string.IsNullOrWhiteSpace(waiver.FindingId) &&
+            string.Equals(waiver.FindingId, finding.FindingId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(waiver.RuleId) &&
+            string.Equals(waiver.RuleId, finding.RuleId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static double? SheetCompleteness(ModelSnapshot snapshot)
@@ -546,6 +802,47 @@ public static class ScoreCommand
         string Source,
         string Error);
 
+    internal sealed record ModelHealthFindingScoreReport(
+        string SchemaVersion,
+        DateTimeOffset GeneratedAt,
+        bool Success,
+        string FindingsPath,
+        string FindingsSource,
+        bool RequiresRevit,
+        string WaiversPath,
+        string FailOn,
+        int ExitCode,
+        int Score,
+        string Letter,
+        BimOpsFindingSummary Summary,
+        int FindingCount,
+        int OriginalFindingCount,
+        int WaivedCount,
+        int ActiveWaiverCount,
+        int ExpiredWaiverCount,
+        string? Error);
+
+    private sealed record FindingWaiverApplication(
+        string WaiversPath,
+        IReadOnlyList<BimOpsFinding> EffectiveFindings,
+        int WaivedCount,
+        int ActiveWaiverCount,
+        int ExpiredWaiverCount);
+
+    private sealed class FindingWaiverDocument
+    {
+        public string SchemaVersion { get; set; } = "bimops-waivers.v1";
+        public List<FindingWaiver> Waivers { get; set; } = new();
+    }
+
+    private sealed class FindingWaiver
+    {
+        public string? FindingId { get; set; }
+        public string? RuleId { get; set; }
+        public string? Expires { get; set; }
+        public string? Reason { get; set; }
+    }
+
     private static Task WriteOutputFormatErrorAsync(TextWriter output) =>
         output.WriteLineAsync("Error: --output must be 'table', 'json', or 'markdown'.");
 
@@ -569,6 +866,44 @@ public static class ScoreCommand
         }
 
         await output.WriteLineAsync($"Error: {message}");
+    }
+
+    private static async Task<int> WriteFindingsScoreErrorAsync(
+        TextWriter output,
+        string outputFormat,
+        string message)
+    {
+        var normalized = TerminalOutputFormat.TryNormalize(outputFormat, out var value, OutputFormats)
+            ? value
+            : "table";
+
+        if (normalized == "json")
+        {
+            var report = new ModelHealthFindingScoreReport(
+                FindingScoreSchemaVersion,
+                DateTimeOffset.UtcNow,
+                false,
+                "",
+                "",
+                false,
+                "",
+                "none",
+                3,
+                0,
+                "F",
+                new BimOpsFindingSummary(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                message);
+            await output.WriteLineAsync(JsonSerializer.Serialize(report, TerminalJsonOptions.CompactContract));
+            return 3;
+        }
+
+        await output.WriteLineAsync($"Error: {message}");
+        return 3;
     }
 
     private static async Task WriteScoreReportAsync(
@@ -616,6 +951,45 @@ public static class ScoreCommand
                 {
                     await WriteHistoryTableAsync(report.Rows, output);
                 }
+                break;
+        }
+    }
+
+    private static async Task WriteFindingsScoreReportAsync(
+        TextWriter output,
+        string outputFormat,
+        ModelHealthFindingScoreReport report)
+    {
+        switch (outputFormat)
+        {
+            case "json":
+                await output.WriteLineAsync(JsonSerializer.Serialize(report, TerminalJsonOptions.CompactContract));
+                break;
+            case "markdown":
+                await output.WriteLineAsync("# Model Health Finding Score");
+                await output.WriteLineAsync();
+                await output.WriteLineAsync($"Schema: `{report.SchemaVersion}`");
+                await output.WriteLineAsync($"Findings: `{report.FindingsPath}`");
+                await output.WriteLineAsync($"Source: `{report.FindingsSource}`");
+                await output.WriteLineAsync($"Waivers: `{(string.IsNullOrWhiteSpace(report.WaiversPath) ? "-" : report.WaiversPath)}`");
+                await output.WriteLineAsync($"Fail on: `{report.FailOn}`");
+                await output.WriteLineAsync($"Exit code: `{report.ExitCode}`");
+                await output.WriteLineAsync($"Score: **{report.Score}/100 ({report.Letter})**");
+                await output.WriteLineAsync();
+                await output.WriteLineAsync("| Severity | Count |");
+                await output.WriteLineAsync("|---|---:|");
+                await output.WriteLineAsync($"| Blocker | {report.Summary.Blockers} |");
+                await output.WriteLineAsync($"| Error | {report.Summary.Errors} |");
+                await output.WriteLineAsync($"| Warning | {report.Summary.Warnings} |");
+                await output.WriteLineAsync($"| Info | {report.Summary.Info} |");
+                await output.WriteLineAsync();
+                await output.WriteLineAsync($"Waived findings: `{report.WaivedCount}` of `{report.OriginalFindingCount}`");
+                await output.WriteLineAsync($"Active waivers: `{report.ActiveWaiverCount}`");
+                await output.WriteLineAsync($"Expired waivers: `{report.ExpiredWaiverCount}`");
+                break;
+            default:
+                await output.WriteLineAsync(
+                    $"Model Health Finding Score: {report.Score}/100 ({report.Letter}) failOn={report.FailOn} exitCode={report.ExitCode} findings={report.FindingCount}/{report.OriginalFindingCount} waived={report.WaivedCount} expiredWaivers={report.ExpiredWaiverCount} blockers={report.Summary.Blockers} errors={report.Summary.Errors} warnings={report.Summary.Warnings}");
                 break;
         }
     }

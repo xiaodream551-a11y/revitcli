@@ -282,6 +282,7 @@ public static class ExamplesCommand
             {
                 "revitcli standards install ../office-standards --dry-run --output markdown",
                 "revitcli standards install ../office-standards",
+                "revitcli standards policy diff .revitcli/standards.yml ../office-standards/.revitcli/standards.yml --output markdown",
                 "revitcli standards validate --manifest .revitcli/standards.yml",
                 "revitcli standards validate --output markdown",
                 "revitcli workflow validate --output markdown",
@@ -313,6 +314,16 @@ public static class ExamplesCommand
             },
             "Find Revit backup files such as model.0001.rvt, summarize the dry-run cleanup, and wait for approval before deleting."),
         new(
+            "env",
+            "Capture a local Revit machine baseline before support or pilot work.",
+            new[]
+            {
+                "revitcli env baseline --years 2024,2025,2026 --output markdown",
+                "revitcli env baseline --years 2026 --locale ENU --out .revitcli/evidence/env-baseline.json --output json",
+                "revitcli env baseline --years 2026 --content-root /mnt/c/ProgramData/Autodesk/RVT\\ 2026 --revit-ini /mnt/c/Users/Lenovo/AppData/Roaming/Autodesk/Revit/Autodesk\\ Revit\\ 2026/Revit.ini --all-users-root /mnt/c/ProgramData/Autodesk/Revit/Addins --per-user-root /mnt/c/Users/Lenovo/AppData/Roaming/Autodesk/Revit/Addins --output markdown"
+            },
+            "Record Revit install/build evidence, add-in counts, content/library paths, Desktop Connector status, GPU/runtime hints, and unknown-with-reason values without starting Revit."),
+        new(
             "library",
             "Check local Autodesk Revit content libraries and fetch official content installers.",
             new[]
@@ -321,10 +332,43 @@ public static class ExamplesCommand
                 "revitcli library sources --year 2026 --locale ENU --output markdown",
                 "revitcli library download --year 2026 --locale ENU --download-dir /mnt/d/temp/revit-content --output json",
                 "revitcli library download --year 2026 --locale ENU --open-account --download-dir /mnt/d/temp/revit-content --output markdown",
+                "revitcli library repair-plan --year 2026 --locale ENU --revit-ini /mnt/c/Users/Lenovo/AppData/Roaming/Autodesk/Revit/Autodesk Revit 2026/Revit.ini --plan-output .revitcli/plans/library-repair.json --output markdown",
+                "revitcli library repair-apply --plan .revitcli/plans/library-repair.json --dry-run --output markdown",
+                "revitcli library repair-apply --plan .revitcli/plans/library-repair.json --yes --receipt-output .revitcli/receipts/library-repair.receipt.json --env-baseline .revitcli/evidence/env-baseline.json --output json",
+                "revitcli library repair-rollback --receipt .revitcli/receipts/library-repair.receipt.json --dry-run --output markdown",
                 "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --dry-run --output markdown",
-                "revitcli library install --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes"
+                "revitcli library install --year 2026 --locale ENU --package /mnt/d/temp/revit-content/RevitContent.exe --apply --yes --receipt-output .revitcli/receipts/library-install.receipt.json --env-baseline .revitcli/evidence/env-baseline.json --output json",
+                "revitcli library check --year 2026 --locale ENU --output markdown"
             },
-            "Detect missing local Revit family content, use Autodesk Account when no direct package URL is available, and start installers only after explicit approval."),
+            "Detect missing local Revit family content, generate a reviewable Revit.ini repair plan, use Autodesk Account when no direct package URL is available, and start installers only after explicit approval with a launch receipt."),
+        new(
+            "addins",
+            "Audit local Revit add-in manifests before disabling or moving files.",
+            new[]
+            {
+                "revitcli addins audit --versions 2024,2025,2026 --output markdown",
+                "revitcli addins audit --versions 2026 --output json",
+                "revitcli addins audit --versions 2026 --findings --output json",
+                "revitcli addins plan-disable --versions 2026 --profile cloud-safe --plan-output .revitcli/plans/addins-disable.json --output markdown",
+                "revitcli addins apply --plan .revitcli/plans/addins-disable.json --dry-run --output markdown",
+                "revitcli addins apply --plan .revitcli/plans/addins-disable.json --yes --receipt-output .revitcli/receipts/addins-disable.receipt.json --env-baseline .revitcli/evidence/env-baseline.json --output json",
+                "revitcli addins rollback --receipt .revitcli/receipts/addins-disable.receipt.json --dry-run --output markdown",
+                "revitcli addins audit --versions 2026 --all-users-root /mnt/c/ProgramData/Autodesk/Revit/Addins --per-user-root /mnt/c/Users/Lenovo/AppData/Roaming/Autodesk/Revit/Addins --output markdown"
+            },
+            "Find missing assemblies, duplicate AddInId values, filename shadowing, development-path assemblies, and create reviewable disable/rollback plans before moving any manifest."),
+        new(
+            "crash",
+            "Analyze Revit crash journals and collect local diagnostic evidence.",
+            new[]
+            {
+                "revitcli crash analyze --year 2026 --since 24h --output markdown",
+                "revitcli crash analyze --year 2026 --journal /mnt/d/temp/revit-crash/journal.0001.txt --include-event-log false --output json",
+                "revitcli crash repro --year 2026 --case family-saveas --output markdown",
+                "revitcli crash collect --year 2026 --since 24h --output-dir .revitcli/crash/latest --output markdown",
+                "revitcli crash verify --packet .revitcli/crash/latest --output json",
+                "revitcli doctor --check-version 2026 --output json"
+            },
+            "Find the most likely crash signature from local journals and Windows event logs, create a clean repro checklist, then collect and verify evidence before changing add-ins or caches."),
         new(
             "recipes",
             "Open documented Codex CLI prompt-to-command recipes.",

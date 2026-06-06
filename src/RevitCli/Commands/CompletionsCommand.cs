@@ -11,11 +11,16 @@ public static class CompletionsCommand
     private static readonly string[] StatusOutputFormats = { "table", "json" };
     private static readonly string[] DoctorOptions = { "--check-version", "--output" };
     private static readonly string[] DoctorOutputFormats = { "table", "json" };
+    private static readonly string[] EnvSubcommands = { "baseline" };
+    private static readonly string[] EnvOptions =
+        { "--years", "--locale", "--content-root", "--revit-ini", "--all-users-root", "--per-user-root", "--out", "--output" };
+    private static readonly string[] EnvOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] RevitYears = { "2024", "2025", "2026" };
-    private static readonly string[] CheckOptions = { "--profile", "--output", "--report", "--no-save" };
+    private static readonly string[] CheckOptions = { "--profile", "--output", "--report", "--no-save", "--findings" };
     private static readonly string[] CheckOutputFormats = { "table", "json", "html", "sarif", "pr-comment" };
-    private static readonly string[] ScoreOptions = { "--history", "--dir", "--output" };
+    private static readonly string[] ScoreOptions = { "--history", "--from-findings", "--waivers", "--fail-on", "--dir", "--output" };
     private static readonly string[] ScoreOutputFormats = ScoreCommand.OutputFormats;
+    private static readonly string[] ScoreFailOnValues = ScoreCommand.FindingFailOnValues;
     private static readonly string[] QueryOptions = { "--filter", "--id", "--output" };
     private static readonly string[] InspectSubcommands = { "categories", "params", "schedules", "sheets", "workflows", "plans" };
     private static readonly string[] InspectOptions =
@@ -62,16 +67,17 @@ public static class CompletionsCommand
     private static readonly string[] LedgerFailOnValues = { "error", "warning" };
     private static readonly string[] LedgerBucketValues = { "day", "hour" };
     private static readonly string[] DeliverablesSubcommands = { "list", "stats", "verify", "plan", "bundle" };
-    private static readonly string[] DeliverablesOptions = { "--dir", "--profile", "--since", "--bundle-path", "--dry-run", "--force", "--output" };
+    private static readonly string[] DeliverablesOptions = { "--dir", "--profile", "--since", "--bundle-path", "--dry-run", "--force", "--findings", "--output" };
     private static readonly string[] DeliverablesOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] IssueSubcommands = { "preflight", "diff", "package" };
     private static readonly string[] IssueOptions =
-        { "--profile", "--output", "--fail-on", "--from", "--to", "--review", "--report", "--max-rows", "--bundle-path", "--dry-run", "--sign-journal", "--include-receipts" };
+        { "--profile", "--output", "--fail-on", "--findings", "--from", "--to", "--review", "--report", "--max-rows", "--bundle-path", "--dry-run", "--sign-journal", "--include-receipts" };
     private static readonly string[] IssueOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] IssueFailOnValues = { "warning", "error" };
-    private static readonly string[] StandardsSubcommands = { "install", "validate" };
+    private static readonly string[] StandardsSubcommands = { "install", "validate", "policy" };
+    private static readonly string[] StandardsPolicySubcommands = { "init", "validate", "diff" };
     private static readonly string[] StandardsOptions =
-        { "--manifest", "--dir", "--output", "--ref", "--subpath", "--force", "--dry-run" };
+        { "--manifest", "--dir", "--output", "--findings", "--ref", "--subpath", "--force", "--dry-run", "--name", "--pack-version" };
     private static readonly string[] StandardsOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] ReleaseSubcommands = { "verify", "pilot" };
     private static readonly string[] ReleasePilotSubcommands = { "scaffold", "validate", "register", "status", "claim", "support-review" };
@@ -82,10 +88,18 @@ public static class CompletionsCommand
     private static readonly string[] RvtOptions =
         { "--output", "--dry-run", "--apply", "--yes", "--include-orphans", "--non-recursive", "--older-than", "--report" };
     private static readonly string[] RvtOutputFormats = { "table", "json", "markdown" };
-    private static readonly string[] LibrarySubcommands = { "check", "sources", "download", "install" };
+    private static readonly string[] LibrarySubcommands = { "check", "sources", "download", "install", "repair-plan", "repair-apply", "repair-rollback" };
     private static readonly string[] LibraryOptions =
-        { "--year", "--locale", "--content-root", "--revit-ini", "--download-dir", "--url", "--open-account", "--package", "--dry-run", "--apply", "--yes", "--output" };
+        { "--year", "--locale", "--content-root", "--revit-ini", "--download-dir", "--url", "--open-account", "--package", "--plan", "--plan-output", "--receipt", "--receipt-output", "--env-baseline", "--dry-run", "--apply", "--yes", "--findings", "--output" };
     private static readonly string[] LibraryOutputFormats = { "table", "json", "markdown" };
+    private static readonly string[] AddinsSubcommands = { "audit", "plan-disable", "apply", "rollback" };
+    private static readonly string[] AddinsOptions =
+        { "--versions", "--all-users-root", "--per-user-root", "--profile", "--plan-output", "--plan", "--receipt", "--receipt-output", "--env-baseline", "--dry-run", "--yes", "--findings", "--output" };
+    private static readonly string[] AddinsOutputFormats = { "table", "json", "markdown" };
+    private static readonly string[] CrashSubcommands = { "analyze", "collect", "repro", "verify" };
+    private static readonly string[] CrashOptions =
+        { "--year", "--journal", "--since", "--include-event-log", "--context-lines", "--output-dir", "--case", "--packet", "--output" };
+    private static readonly string[] CrashOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] SheetsSubcommands = { "verify", "issue-meta", "renumber", "index", "init", "show" };
     private static readonly string[] SheetsOptions =
     {
@@ -151,6 +165,12 @@ public static class CompletionsCommand
 
     internal static IReadOnlyList<string> WorkbenchCompletionOutputFormats => WorkbenchOutputFormats;
 
+    internal static IReadOnlyList<string> EnvCompletionSubcommands => EnvSubcommands;
+
+    internal static IReadOnlyList<string> EnvCompletionOptions => EnvOptions;
+
+    internal static IReadOnlyList<string> EnvCompletionOutputFormats => EnvOutputFormats;
+
     internal static IReadOnlyList<string> InspectCompletionSubcommands => InspectSubcommands;
 
     internal static IReadOnlyList<string> InspectCompletionOptions => InspectOptions;
@@ -208,6 +228,12 @@ public static class CompletionsCommand
     internal static IReadOnlyList<string> LinksCompletionOptions => LinksOptions;
 
     internal static IReadOnlyList<string> LinksCompletionOutputFormats => LinksOutputFormats;
+
+    internal static IReadOnlyList<string> CrashCompletionSubcommands => CrashSubcommands;
+
+    internal static IReadOnlyList<string> CrashCompletionOptions => CrashOptions;
+
+    internal static IReadOnlyList<string> CrashCompletionOutputFormats => CrashOutputFormats;
 
     internal static IReadOnlyList<string> LinksCompletionCheckValues => LinkCheckValues;
 
@@ -279,11 +305,15 @@ public static class CompletionsCommand
         var statusOutputFormats = JoinWords(StatusOutputFormats);
         var doctorOptions = JoinWords(DoctorOptions);
         var doctorOutputFormats = JoinWords(DoctorOutputFormats);
+        var envWords = JoinWords(EnvSubcommands.Concat(EnvOptions));
+        var envOptions = JoinWords(EnvOptions);
+        var envOutputFormats = JoinWords(EnvOutputFormats);
         var revitYears = JoinWords(RevitYears);
         var checkOptions = JoinWords(CheckOptions);
         var checkOutputFormats = JoinWords(CheckOutputFormats);
         var scoreOptions = JoinWords(ScoreOptions);
         var scoreOutputFormats = JoinWords(ScoreOutputFormats);
+        var scoreFailOnValues = JoinWords(ScoreFailOnValues);
         var queryOptions = JoinWords(QueryOptions);
         var inspectWords = JoinWords(InspectSubcommands.Concat(InspectOptions));
         var inspectOptions = JoinWords(InspectOptions);
@@ -323,6 +353,7 @@ public static class CompletionsCommand
         var issueFailOnValues = JoinWords(IssueFailOnValues);
         var standardsWords = JoinWords(StandardsSubcommands.Concat(StandardsOptions));
         var standardsOptions = JoinWords(StandardsOptions);
+        var standardsPolicySubcommands = JoinWords(StandardsPolicySubcommands);
         var standardsOutputFormats = JoinWords(StandardsOutputFormats);
         var releaseWords = JoinWords(ReleaseSubcommands.Concat(ReleaseOptions));
         var releaseOptions = JoinWords(ReleaseOptions);
@@ -335,6 +366,12 @@ public static class CompletionsCommand
         var libraryWords = JoinWords(LibrarySubcommands.Concat(LibraryOptions));
         var libraryOptions = JoinWords(LibraryOptions);
         var libraryOutputFormats = JoinWords(LibraryOutputFormats);
+        var addinsWords = JoinWords(AddinsSubcommands.Concat(AddinsOptions));
+        var addinsOptions = JoinWords(AddinsOptions);
+        var addinsOutputFormats = JoinWords(AddinsOutputFormats);
+        var crashWords = JoinWords(CrashSubcommands.Concat(CrashOptions));
+        var crashOptions = JoinWords(CrashOptions);
+        var crashOutputFormats = JoinWords(CrashOutputFormats);
         var sheetsWords = JoinWords(SheetsSubcommands.Concat(SheetsOptions));
         var sheetsOptions = JoinWords(SheetsOptions);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
@@ -427,6 +464,27 @@ public static class CompletionsCommand
             "            esac",
             $"            COMPREPLY=($(compgen -W \"{doctorOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        env)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{envOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --years)",
+            $"                    COMPREPLY=($(compgen -W \"{revitYears} 2024,2025,2026\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --content-root|--revit-ini|--all-users-root|--per-user-root|--out)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{envWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{envOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        check)",
             "            case \"$prev\" in",
             "                --output)",
@@ -446,8 +504,16 @@ public static class CompletionsCommand
             $"                    COMPREPLY=($(compgen -W \"{scoreOutputFormats}\" -- \"$cur\"))",
             "                    return",
             "                    ;;",
+            "                --fail-on)",
+            $"                    COMPREPLY=($(compgen -W \"{scoreFailOnValues}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
             "                --dir)",
-            "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --from-findings|--waivers)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
             "                    return",
             "                    ;;",
             "            esac",
@@ -654,7 +720,7 @@ public static class CompletionsCommand
             "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
             "                    return",
             "                    ;;",
-            "                --journal)",
+            "                --journal|--packet)",
             "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
             "                    return",
             "                    ;;",
@@ -793,6 +859,14 @@ public static class CompletionsCommand
             "                    return",
             "                    ;;",
             "            esac",
+            "            if [ \"${words[2]}\" = \"policy\" ]; then",
+            "                if [ $COMP_CWORD -eq 3 ]; then",
+            $"                    COMPREPLY=($(compgen -W \"{standardsPolicySubcommands}\" -- \"$cur\"))",
+            "                    return",
+            "                fi",
+            $"                COMPREPLY=($(compgen -W \"{standardsOptions}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
             "            if [ $COMP_CWORD -eq 2 ]; then",
             $"                COMPREPLY=($(compgen -W \"{standardsWords}\" -- \"$cur\"))",
             "                return",
@@ -859,7 +933,7 @@ public static class CompletionsCommand
             $"                    COMPREPLY=($(compgen -W \"{revitYears}\" -- \"$cur\"))",
             "                    return",
             "                    ;;",
-            "                --content-root|--revit-ini|--download-dir|--package)",
+            "                --content-root|--revit-ini|--download-dir|--package|--plan|--plan-output|--receipt|--receipt-output|--env-baseline)",
             "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
             "                    return",
             "                    ;;",
@@ -869,6 +943,56 @@ public static class CompletionsCommand
             "                return",
             "            fi",
             $"            COMPREPLY=($(compgen -W \"{libraryOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        addins)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{addinsOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --all-users-root|--per-user-root|--plan-output|--plan|--receipt|--receipt-output|--env-baseline)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --profile)",
+            "                    COMPREPLY=($(compgen -W \"office-standard cloud-safe clean\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{addinsWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{addinsOptions}\" -- \"$cur\"))",
+            "            ;;",
+            "        crash)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{crashOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --year)",
+            $"                    COMPREPLY=($(compgen -W \"{revitYears}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --journal)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --output-dir)",
+            "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --include-event-log)",
+            "                    COMPREPLY=($(compgen -W \"true false\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{crashWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{crashOptions}\" -- \"$cur\"))",
             "            ;;",
             "        sheets)",
             "            case \"$prev\" in",
@@ -1101,9 +1225,12 @@ public static class CompletionsCommand
             .Select(command => $"        '{command.Name}:{command.Description}'");
         var statusOutputFormats = JoinWords(StatusOutputFormats);
         var doctorOutputFormats = JoinWords(DoctorOutputFormats);
+        var envSubcommands = JoinWords(EnvSubcommands);
+        var envOutputFormats = JoinWords(EnvOutputFormats);
         var revitYears = JoinWords(RevitYears);
         var checkOutputFormats = JoinWords(CheckOutputFormats);
         var scoreOutputFormats = JoinWords(ScoreOutputFormats);
+        var scoreFailOnValues = JoinWords(ScoreFailOnValues);
         var outputFormats = JoinWords(QueryCommand.ValidOutputFormats);
         var inspectSubcommands = JoinWords(InspectSubcommands);
         var inspectOutputFormats = JoinWords(InspectOutputFormats);
@@ -1137,6 +1264,7 @@ public static class CompletionsCommand
         var issueOutputFormats = JoinWords(IssueOutputFormats);
         var issueFailOnValues = JoinWords(IssueFailOnValues);
         var standardsSubcommands = JoinWords(StandardsSubcommands);
+        var standardsPolicySubcommands = JoinWords(StandardsPolicySubcommands);
         var standardsOutputFormats = JoinWords(StandardsOutputFormats);
         var releaseSubcommands = JoinWords(ReleaseSubcommands);
         var releasePilotSubcommands = JoinWords(ReleasePilotSubcommands);
@@ -1146,6 +1274,10 @@ public static class CompletionsCommand
         var rvtOutputFormats = JoinWords(RvtOutputFormats);
         var librarySubcommands = JoinWords(LibrarySubcommands);
         var libraryOutputFormats = JoinWords(LibraryOutputFormats);
+        var addinsSubcommands = JoinWords(AddinsSubcommands);
+        var addinsOutputFormats = JoinWords(AddinsOutputFormats);
+        var crashSubcommands = JoinWords(CrashSubcommands);
+        var crashOutputFormats = JoinWords(CrashOutputFormats);
         var sheetsSubcommands = JoinWords(SheetsSubcommands);
         var sheetsOutputFormats = JoinWords(SheetsOutputFormats);
         var roomsSubcommands = JoinWords(RoomsSubcommands);
@@ -1205,19 +1337,38 @@ public static class CompletionsCommand
             $"                        '--check-version[Target Revit year]:year:({revitYears})' \\",
             $"                        '--output[Output format]:format:({doctorOutputFormats})'",
             "                    ;;",
+            "                env)",
+            "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {envSubcommands}",
+            "                    else",
+            "                        _arguments \\",
+            "                            '--years[Comma-separated Revit years]:years:' \\",
+            "                            '--locale[Autodesk content locale]:locale:' \\",
+            "                            '--content-root[Override content root]:dir:_directories' \\",
+            "                            '--revit-ini[Override Revit.ini path]:file:_files' \\",
+            "                            '--all-users-root[All-users add-in root]:dir:_directories' \\",
+            "                            '--per-user-root[Per-user add-in root]:dir:_directories' \\",
+            "                            '--out[Write baseline JSON]:file:_files' \\",
+            $"                            '--output[Output format]:format:({envOutputFormats})'",
+            "                    fi",
+            "                    ;;",
             "                check)",
             "                    _arguments \\",
             "                        '1:check set:' \\",
             "                        '--profile[Path to .revitcli.yml profile]:file:_files' \\",
             $"                        '--output[Output format]:format:({checkOutputFormats})' \\",
             "                        '--report[Save report to file]:file:_files' \\",
-            "                        '--no-save[Do not save results for diff comparison]'",
+            "                        '--no-save[Do not save results for diff comparison]' \\",
+            "                        '--findings[Emit bimops-finding.v1 JSON]'",
             "                    ;;",
-            "                score)",
-            "                    _arguments \\",
-            "                        '--history[History window, e.g. 7d or 30d]:duration:' \\",
-            "                        '--dir[History directory]:dir:_directories' \\",
-            $"                        '--output[Output format]:format:({scoreOutputFormats})'",
+                "                score)",
+                "                    _arguments \\",
+                "                        '--history[History window, e.g. 7d or 30d]:duration:' \\",
+                "                        '--from-findings[BimOps findings JSON file]:file:_files' \\",
+                "                        '--waivers[BimOps finding waivers JSON file]:file:_files' \\",
+                $"                        '--fail-on[Finding gate threshold]:threshold:({scoreFailOnValues})' \\",
+                "                        '--dir[History directory]:dir:_directories' \\",
+                $"                        '--output[Output format]:format:({scoreOutputFormats})'",
             "                    ;;",
                 "                query)",
                 "                    _arguments \\",
@@ -1456,6 +1607,7 @@ public static class CompletionsCommand
                 "                            '--bundle-path[Zip file path]:file:_files' \\",
                 "                            '--dry-run[Plan without writing files]' \\",
                 "                            '--force[Overwrite existing bundle path]' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON]' \\",
                 $"                            '--output[Output format]:format:({deliverablesOutputFormats})'",
                 "                    fi",
                 "                    ;;",
@@ -1474,18 +1626,32 @@ public static class CompletionsCommand
                 "                            '--dry-run[Plan package without writing files]' \\",
                 "                            '--sign-journal[Sign local journal before packaging]' \\",
                 "                            '--include-receipts[Include child receipts]:bool:(true false)' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON]' \\",
                 $"                            '--fail-on[Fail threshold]:severity:({issueFailOnValues})' \\",
                 $"                            '--output[Output format]:format:({issueOutputFormats})'",
                 "                    fi",
                 "                    ;;",
                 "                standards)",
-                "                    if (( CURRENT == 3 )); then",
+                "                    if [[ ${words[3]} == policy && CURRENT == 4 ]]; then",
+            $"                        _values 'subcommand' {standardsPolicySubcommands}",
+                "                    elif [[ ${words[3]} == policy ]]; then",
+                "                        _arguments \\",
+                "                            '--manifest[Policy manifest file]:file:_files' \\",
+                "                            '--dir[Project directory]:dir:_directories' \\",
+                $"                            '--output[Output format]:format:({standardsOutputFormats})' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON findings]' \\",
+                "                            '--name[Policy pack name]:name:' \\",
+                "                            '--pack-version[Policy pack version]:version:' \\",
+                "                            '--force[Overwrite existing files]' \\",
+                "                            '--dry-run[Preview without writing files]'",
+                "                    elif (( CURRENT == 3 )); then",
             $"                        _values 'subcommand' {standardsSubcommands}",
                 "                    else",
                 "                        _arguments \\",
                 "                            '--manifest[Standards manifest file]:file:_files' \\",
                 "                            '--dir[Project directory]:dir:_directories' \\",
                 $"                            '--output[Output format]:format:({standardsOutputFormats})' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON findings]' \\",
                 "                            '--ref[Git branch, tag, or commit]:ref:' \\",
                 "                            '--subpath[Path inside standards source]:file:_files' \\",
                 "                            '--force[Overwrite existing files]' \\",
@@ -1726,10 +1892,52 @@ public static class CompletionsCommand
                 "                            '--url[Official Autodesk package URL]:url:' \\",
                 "                            '--open-account[Open Autodesk Account when direct URL is unavailable]' \\",
                 "                            '--package[Official content installer package]:file:_files' \\",
-                "                            '--dry-run[Preview installer launch]' \\",
+                "                            '--plan[Repair plan JSON]:file:_files' \\",
+                "                            '--plan-output[Write repair plan JSON]:file:_files' \\",
+                "                            '--receipt[Repair receipt JSON]:file:_files' \\",
+                "                            '--receipt-output[Write repair/install receipt JSON]:file:_files' \\",
+                "                            '--env-baseline[Environment baseline JSON to link into receipt]:file:_files' \\",
+                "                            '--dry-run[Preview installer launch or repair apply]' \\",
                 "                            '--apply[Start the official installer]' \\",
                 "                            '--yes[Confirm installer launch]' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON findings]' \\",
             $"                            '--output[Output format]:format:({libraryOutputFormats})'",
+                "                    fi",
+                "                    ;;",
+                "                addins)",
+                "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {addinsSubcommands}",
+                "                    else",
+                "                        _arguments \\",
+                "                            '--versions[Comma-separated Revit years]:versions:' \\",
+                "                            '--all-users-root[All-users add-in root]:dir:_directories' \\",
+                "                            '--per-user-root[Per-user add-in root]:dir:_directories' \\",
+                "                            '--profile[Disable profile]:profile:(office-standard cloud-safe clean)' \\",
+                "                            '--plan-output[Write disable plan JSON]:file:_files' \\",
+                "                            '--plan[Disable plan JSON]:file:_files' \\",
+                "                            '--receipt[Disable receipt JSON]:file:_files' \\",
+                "                            '--receipt-output[Write disable receipt JSON]:file:_files' \\",
+                "                            '--env-baseline[Environment baseline JSON to link into receipt]:file:_files' \\",
+                "                            '--dry-run[Preview add-in disable or rollback without moving files]' \\",
+                "                            '--yes[Confirm add-in disable or rollback]' \\",
+                "                            '--findings[Emit bimops-finding.v1 JSON findings]' \\",
+            $"                            '--output[Output format]:format:({addinsOutputFormats})'",
+                "                    fi",
+                "                    ;;",
+                "                crash)",
+                "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {crashSubcommands}",
+                "                    else",
+                "                        _arguments \\",
+                "                            '--year[Target Revit year]:year:(2024 2025 2026)' \\",
+                "                            '--journal[Specific Revit journal file]:file:_files' \\",
+                "                            '--since[Crash evidence window]:duration:' \\",
+                "                            '--include-event-log[Include Windows Event Log]:bool:(true false)' \\",
+                "                            '--context-lines[Journal context lines]:n:' \\",
+                "                            '--output-dir[Crash collection directory]:dir:_directories' \\",
+                "                            '--case[Crash support case label]:case:' \\",
+                "                            '--packet[Crash evidence packet directory]:dir:_directories' \\",
+            $"                            '--output[Output format]:format:({crashOutputFormats})'",
                 "                    fi",
                 "                    ;;",
                 "                journal)",
@@ -1780,6 +1988,7 @@ public static class CompletionsCommand
             .Select(command => $"        '{command.Name}' = '{command.Description}'");
         var statusOptions = FormatPowerShellArray(StatusOptions);
         var doctorOptions = FormatPowerShellArray(DoctorOptions);
+        var envOptions = FormatPowerShellArray(EnvSubcommands.Concat(EnvOptions));
         var checkOptions = FormatPowerShellArray(CheckOptions);
         var scoreOptions = FormatPowerShellArray(ScoreOptions);
         var queryOptions = FormatPowerShellArray(QueryOptions);
@@ -1797,6 +2006,7 @@ public static class CompletionsCommand
         var deliverablesOptions = FormatPowerShellArray(DeliverablesSubcommands.Concat(DeliverablesOptions));
         var issueOptions = FormatPowerShellArray(IssueSubcommands.Concat(IssueOptions));
         var standardsOptions = FormatPowerShellArray(StandardsSubcommands.Concat(StandardsOptions));
+        var standardsPolicySubcommands = FormatPowerShellArray(StandardsPolicySubcommands);
         var releaseOptions = FormatPowerShellArray(ReleaseSubcommands.Concat(ReleaseOptions));
         var releasePilotSubcommands = FormatPowerShellArray(ReleasePilotSubcommands);
         var releasePilotSupportReviewSubcommands = FormatPowerShellArray(ReleasePilotSupportReviewSubcommands);
@@ -1804,6 +2014,10 @@ public static class CompletionsCommand
         var rvtSubcommands = FormatPowerShellArray(RvtSubcommands);
         var libraryOptions = FormatPowerShellArray(LibrarySubcommands.Concat(LibraryOptions));
         var librarySubcommands = FormatPowerShellArray(LibrarySubcommands);
+        var addinsOptions = FormatPowerShellArray(AddinsSubcommands.Concat(AddinsOptions));
+        var addinsSubcommands = FormatPowerShellArray(AddinsSubcommands);
+        var crashOptions = FormatPowerShellArray(CrashSubcommands.Concat(CrashOptions));
+        var crashSubcommands = FormatPowerShellArray(CrashSubcommands);
         var sheetsOptions = FormatPowerShellArray(SheetsSubcommands.Concat(SheetsOptions));
         var roomsOptions = FormatPowerShellArray(RoomsSubcommands.Concat(RoomsOptions));
         var marksOptions = FormatPowerShellArray(MarksSubcommands.Concat(MarksOptions));
@@ -1823,9 +2037,12 @@ public static class CompletionsCommand
         var encodingValues = FormatPowerShellArray(EncodingValues);
         var statusOutputFormats = FormatPowerShellArray(StatusOutputFormats);
         var doctorOutputFormats = FormatPowerShellArray(DoctorOutputFormats);
+        var envSubcommands = FormatPowerShellArray(EnvSubcommands);
+        var envOutputFormats = FormatPowerShellArray(EnvOutputFormats);
         var revitYears = FormatPowerShellArray(RevitYears);
         var checkOutputFormats = FormatPowerShellArray(CheckOutputFormats);
         var scoreOutputFormats = FormatPowerShellArray(ScoreOutputFormats);
+        var scoreFailOnValues = FormatPowerShellArray(ScoreFailOnValues);
         var outputFormats = FormatPowerShellArray(QueryCommand.ValidOutputFormats);
         var inspectOutputFormats = FormatPowerShellArray(InspectOutputFormats);
         var planOutputFormats = FormatPowerShellArray(PlanOutputFormats);
@@ -1852,6 +2069,8 @@ public static class CompletionsCommand
         var releaseOutputFormats = FormatPowerShellArray(ReleaseOutputFormats);
         var rvtOutputFormats = FormatPowerShellArray(RvtOutputFormats);
         var libraryOutputFormats = FormatPowerShellArray(LibraryOutputFormats);
+        var addinsOutputFormats = FormatPowerShellArray(AddinsOutputFormats);
+        var crashOutputFormats = FormatPowerShellArray(CrashOutputFormats);
         var sheetsOutputFormats = FormatPowerShellArray(SheetsOutputFormats);
         var roomsOutputFormats = FormatPowerShellArray(RoomsOutputFormats);
         var marksOutputFormats = FormatPowerShellArray(MarksOutputFormats);
@@ -1893,6 +2112,7 @@ public static class CompletionsCommand
             "    $commandOptions = @{",
             $"        'status' = @({statusOptions})",
             $"        'doctor' = @({doctorOptions})",
+            $"        'env' = @({envOptions})",
             $"        'check' = @({checkOptions})",
             $"        'score' = @({scoreOptions})",
             $"        'query' = @({queryOptions})",
@@ -1914,6 +2134,8 @@ public static class CompletionsCommand
             $"        'release' = @({releaseOptions})",
             $"        'rvt' = @({rvtOptions})",
             $"        'library' = @({libraryOptions})",
+            $"        'addins' = @({addinsOptions})",
+            $"        'crash' = @({crashOptions})",
             $"        'sheets' = @({sheetsOptions})",
             $"        'rooms' = @({roomsOptions})",
             $"        'marks' = @({marksOptions})",
@@ -1938,9 +2160,12 @@ public static class CompletionsCommand
             "",
             $"    $statusOutputFormats = @({statusOutputFormats})",
             $"    $doctorOutputFormats = @({doctorOutputFormats})",
+            $"    $envSubcommands = @({envSubcommands})",
+            $"    $envOutputFormats = @({envOutputFormats})",
             $"    $revitYears = @({revitYears})",
             $"    $checkOutputFormats = @({checkOutputFormats})",
             $"    $scoreOutputFormats = @({scoreOutputFormats})",
+            $"    $scoreFailOnValues = @({scoreFailOnValues})",
             $"    $outputFormats = @({outputFormats})",
             $"    $inspectOutputFormats = @({inspectOutputFormats})",
             $"    $planOutputFormats = @({planOutputFormats})",
@@ -1963,6 +2188,7 @@ public static class CompletionsCommand
             $"    $issueOutputFormats = @({issueOutputFormats})",
             $"    $issueFailOnValues = @({issueFailOnValues})",
             $"    $standardsOutputFormats = @({standardsOutputFormats})",
+            $"    $standardsPolicySubcommands = @({standardsPolicySubcommands})",
             $"    $releaseOutputFormats = @({releaseOutputFormats})",
             $"    $releasePilotSubcommands = @({releasePilotSubcommands})",
             $"    $releasePilotSupportReviewSubcommands = @({releasePilotSupportReviewSubcommands})",
@@ -1970,6 +2196,10 @@ public static class CompletionsCommand
             $"    $rvtOutputFormats = @({rvtOutputFormats})",
             $"    $librarySubcommands = @({librarySubcommands})",
             $"    $libraryOutputFormats = @({libraryOutputFormats})",
+            $"    $addinsSubcommands = @({addinsSubcommands})",
+            $"    $addinsOutputFormats = @({addinsOutputFormats})",
+            $"    $crashSubcommands = @({crashSubcommands})",
+            $"    $crashOutputFormats = @({crashOutputFormats})",
             $"    $sheetsOutputFormats = @({sheetsOutputFormats})",
             $"    $roomsOutputFormats = @({roomsOutputFormats})",
             $"    $marksOutputFormats = @({marksOutputFormats})",
@@ -2065,7 +2295,7 @@ public static class CompletionsCommand
             "            New-RevitCliCompletionResults -Values $commandOptions['status'] -ToolTip 'Option'",
             "            return",
             "        }",
-            "        'doctor' {",
+        "        'doctor' {",
             "            if ($previous -eq '--output') {",
             "                New-RevitCliCompletionResults -Values $doctorOutputFormats -ToolTip 'Output format'",
             "                return",
@@ -2076,6 +2306,27 @@ public static class CompletionsCommand
             "            }",
             "",
             "            New-RevitCliCompletionResults -Values $commandOptions['doctor'] -ToolTip 'Option'",
+            "            return",
+            "        }",
+            "        'env' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $envOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--years') {",
+            "                New-RevitCliCompletionResults -Values ($revitYears + @('2024,2025,2026')) -ToolTip 'Revit years'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--content-root' -or $previous -eq '--revit-ini' -or $previous -eq '--all-users-root' -or $previous -eq '--per-user-root' -or $previous -eq '--out') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if ($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) {",
+            "                New-RevitCliCompletionResults -Values $envSubcommands -ToolTip 'Subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['env'] -ToolTip 'Option'",
             "            return",
             "        }",
             "        'check' {",
@@ -2096,7 +2347,11 @@ public static class CompletionsCommand
             "                New-RevitCliCompletionResults -Values $scoreOutputFormats -ToolTip 'Output format'",
             "                return",
             "            }",
-            "            if ($previous -eq '--dir' -or $previous -eq '--project') {",
+            "            if ($previous -eq '--fail-on') {",
+            "                New-RevitCliCompletionResults -Values $scoreFailOnValues -ToolTip 'Finding gate threshold'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--dir' -or $previous -eq '--project' -or $previous -eq '--from-findings' -or $previous -eq '--waivers') {",
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
             "                return",
             "            }",
@@ -2265,7 +2520,7 @@ public static class CompletionsCommand
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
             "                return",
             "            }",
-            "            if ($previous -eq '--journal') {",
+            "            if ($previous -eq '--journal' -or $previous -eq '--packet') {",
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
             "                return",
             "            }",
@@ -2390,8 +2645,12 @@ public static class CompletionsCommand
                 "                New-RevitCliFileCompletionResults -Path $wordToComplete",
                 "                return",
             "            }",
+            "            if ($tokens.Count -ge 3 -and $tokens[2] -eq 'policy' -and (($tokens.Count -eq 3 -and $endsWithSpace) -or ($tokens.Count -eq 4 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $standardsPolicySubcommands -ToolTip 'Standards policy subcommand'",
+                "                return",
+            "            }",
             "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
-            "                New-RevitCliCompletionResults -Values @('install', 'validate') -ToolTip 'Standards subcommand'",
+            "                New-RevitCliCompletionResults -Values @('install', 'validate', 'policy') -ToolTip 'Standards subcommand'",
                 "                return",
             "            }",
             "",
@@ -2444,16 +2703,16 @@ public static class CompletionsCommand
             "            New-RevitCliCompletionResults -Values $commandOptions['rvt'] -ToolTip 'RVT option'",
             "            return",
             "        }",
-            "        'library' {",
+        "        'library' {",
             "            if ($previous -eq '--output') {",
-            "                New-RevitCliCompletionResults -Values $libraryOutputFormats -ToolTip 'Output format'",
+                "                New-RevitCliCompletionResults -Values $libraryOutputFormats -ToolTip 'Output format'",
             "                return",
             "            }",
             "            if ($previous -eq '--year') {",
             "                New-RevitCliCompletionResults -Values $revitYears -ToolTip 'Revit year'",
             "                return",
             "            }",
-            "            if ($previous -in @('--content-root', '--revit-ini', '--download-dir', '--package')) {",
+            "            if ($previous -in @('--content-root', '--revit-ini', '--download-dir', '--package', '--plan', '--plan-output', '--receipt', '--receipt-output', '--env-baseline')) {",
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
             "                return",
             "            }",
@@ -2463,6 +2722,56 @@ public static class CompletionsCommand
             "            }",
             "",
             "            New-RevitCliCompletionResults -Values $commandOptions['library'] -ToolTip 'Library option'",
+            "            return",
+            "        }",
+            "        'addins' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $addinsOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--profile') {",
+            "                New-RevitCliCompletionResults -Values @('office-standard', 'cloud-safe', 'clean') -ToolTip 'Disable profile'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--all-users-root' -or $previous -eq '--per-user-root' -or $previous -eq '--plan-output' -or $previous -eq '--plan' -or $previous -eq '--receipt' -or $previous -eq '--receipt-output' -or $previous -eq '--env-baseline') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $addinsSubcommands -ToolTip 'Add-ins subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['addins'] -ToolTip 'Add-ins option'",
+            "            return",
+            "        }",
+            "        'crash' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $crashOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--year') {",
+            "                New-RevitCliCompletionResults -Values $revitYears -ToolTip 'Revit year'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--journal') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--output-dir') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--include-event-log') {",
+            "                New-RevitCliCompletionResults -Values @('true', 'false') -ToolTip 'Include event log'",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $crashSubcommands -ToolTip 'Crash subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['crash'] -ToolTip 'Crash option'",
             "            return",
             "        }",
             "        'sheets' {",
