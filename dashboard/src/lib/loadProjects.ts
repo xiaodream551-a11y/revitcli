@@ -16,7 +16,7 @@
 
 import { base } from "$app/paths";
 import { parseHistoryDocument, type HistoryDocument } from "./loadHistory";
-import type { ModelSnapshot } from "./score";
+import { extract, type ModelSnapshot } from "./score";
 
 export interface ProjectEntry {
   name: string;
@@ -164,11 +164,12 @@ function withBasePath(path: string): string {
 export function latestSummary(p: ProjectEntry) {
   const entries = p.history?.entries ?? [];
   const latest = entries[entries.length - 1] ?? null;
+  const snapshot = (latest?.snapshot ?? null) as ModelSnapshot | null;
   return {
-    score: latest?.score ?? null,
+    score: latest?.score ?? (snapshot ? extract(snapshot, "score") : null),
     elementCount: latest?.elementCount ?? null,
     capturedAt: latest?.capturedAt ?? null,
     captureCount: entries.length,
-    snapshot: (latest?.snapshot ?? null) as ModelSnapshot | null,
+    snapshot,
   };
 }

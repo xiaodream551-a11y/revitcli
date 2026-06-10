@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TooltipItem } from 'chart.js';
-  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { Bar } from 'svelte-chartjs';
   import { registerCharts } from './registerCharts';
 
@@ -15,9 +15,9 @@
    */
   export let rows: { category: string; count: number }[] = [];
 
-  // Register Chart.js controllers/scales lazily on mount so SSR (when
-  // svelte-kit prerenders) doesn't try to touch `window`.
-  onMount(() => registerCharts());
+  // Register before the child chart component mounts. Guard with `browser`
+  // so SvelteKit prerender/SSR never initializes Chart.js on the server.
+  if (browser) registerCharts();
 
   $: data = {
     labels: rows.map((r) => r.category),

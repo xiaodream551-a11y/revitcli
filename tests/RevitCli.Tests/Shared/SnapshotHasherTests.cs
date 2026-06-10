@@ -48,6 +48,25 @@ public class SnapshotHasherTests
     }
 
     [Fact]
+    public void HashElement_EqualsInKeyAndValue_DoNotCollide()
+    {
+        var keyContainsEquals = new SnapshotElement
+        {
+            Id = 1,
+            Parameters = new() { ["a=b"] = "c" }
+        };
+        var valueContainsEquals = new SnapshotElement
+        {
+            Id = 1,
+            Parameters = new() { ["a"] = "b=c" }
+        };
+
+        Assert.NotEqual(
+            SnapshotHasher.HashElement(keyContainsEquals),
+            SnapshotHasher.HashElement(valueContainsEquals));
+    }
+
+    [Fact]
     public void HashSheetMeta_Includes_NumberNameAndParameters()
     {
         var baseline = new SnapshotSheet

@@ -24,7 +24,7 @@ import type { ModelSnapshot } from './score';
 export interface HistoryEntry {
   id: string;
   capturedAt: string;
-  source: string;
+  source?: string;
   size?: number;
   elementCount?: number;
   // Optional snapshot payload pre-inlined by `revitcli dashboard build`.
@@ -159,7 +159,8 @@ export function parseHistoryDocument(raw: unknown): HistoryDocument | null {
 
   const entries = entriesRaw
     .map(normaliseEntry)
-    .filter((entry): entry is HistoryEntry => entry !== null);
+    .filter((entry): entry is HistoryEntry => entry !== null)
+    .sort(compareEntriesChronologically);
   if (entriesRaw.length > 0 && entries.length === 0) return null;
 
   const version = isObject(raw) && typeof raw.version === 'number'
@@ -168,17 +169,36 @@ export function parseHistoryDocument(raw: unknown): HistoryDocument | null {
   return { version, entries };
 }
 
+/**
+ * HistoryStore writes index entries newest-first for CLI listing, but the
+ * dashboard time-series and "latest is the final item" projections need
+ * oldest-first data. Normalize every loaded document here so all routes and
+ * multi-project cards share one ordering contract.
+ */
+function compareEntriesChronologically(a: HistoryEntry, b: HistoryEntry): number {
+  const at = Date.parse(a.capturedAt);
+  const bt = Date.parse(b.capturedAt);
+  const aValid = Number.isFinite(at);
+  const bValid = Number.isFinite(bt);
+
+  if (aValid && bValid && at !== bt) return at - bt;
+  if (aValid !== bValid) return aValid ? -1 : 1;
+
+  const byCapturedAt = a.capturedAt.localeCompare(b.capturedAt);
+  return byCapturedAt !== 0 ? byCapturedAt : a.id.localeCompare(b.id);
+}
+
 function normaliseEntry(raw: unknown): HistoryEntry | null {
   if (!isObject(raw)) return null;
-  if (!isNonEmptyString(raw.id) || !isNonEmptyString(raw.capturedAt) || !isNonEmptyString(raw.source)) {
+  if (!isNonEmptyString(raw.id) || !isNonEmptyString(raw.capturedAt)) {
     return null;
   }
 
   const entry: HistoryEntry = {
     id: raw.id,
-    capturedAt: raw.capturedAt,
-    source: raw.source
+    capturedAt: raw.capturedAt
   };
+  if (isNonEmptyString(raw.source)) entry.source = raw.source;
   if (typeof raw.size === 'number' && Number.isFinite(raw.size)) entry.size = raw.size;
   if (typeof raw.elementCount === 'number' && Number.isFinite(raw.elementCount)) {
     entry.elementCount = raw.elementCount;

@@ -82,7 +82,7 @@ public static class SnapshotHasher
     }
 
     private static string Escape(string s) =>
-        s.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("|", "\\|");
+        s.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("|", "\\|").Replace("=", "\\=");
 
     private static string Sha256Short(string content)
     {

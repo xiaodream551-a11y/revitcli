@@ -10,12 +10,14 @@ internal sealed class FakeExternalEvent : IExternalEventSource
     public bool RaiseResult { get; set; } = true;
     public bool RaiseThrows { get; set; }
     public int RaiseCount { get; private set; }
+    public Action? OnRaise { get; set; }
 
     public bool Raise()
     {
         RaiseCount++;
         if (RaiseThrows)
             throw new InvalidOperationException("Raise failed");
+        OnRaise?.Invoke();
         return RaiseResult;
     }
 
@@ -37,6 +39,19 @@ public class RevitBridgeTests
 
         var task = queue.InvokeAsync(app => 42);
         queue.Process(null);
+
+        Assert.Equal(42, await task);
+        Assert.Equal(1, fake.RaiseCount);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_CompletesWhenRaiseProcessesImmediately()
+    {
+        var fake = new FakeExternalEvent();
+        var queue = new RevitRequestQueue<object?>(fake, "TestQueue");
+        fake.OnRaise = () => queue.Process(null);
+
+        var task = queue.InvokeAsync(app => 42);
 
         Assert.Equal(42, await task);
         Assert.Equal(1, fake.RaiseCount);
