@@ -40,7 +40,8 @@ function resolveStaticPath(requestUrl) {
 
   const relative = decodeURIComponent(url.pathname.slice(base.length + 1));
   const candidate = path.resolve(buildDir, relative || "index.html");
-  if (!candidate.startsWith(buildDir)) return null;
+  const relativeToBuild = path.relative(buildDir, candidate);
+  if (relativeToBuild.startsWith("..") || path.isAbsolute(relativeToBuild)) return null;
   if (existsSync(candidate)) return candidate;
   if (!path.extname(candidate)) return path.join(buildDir, "index.html");
   return candidate;

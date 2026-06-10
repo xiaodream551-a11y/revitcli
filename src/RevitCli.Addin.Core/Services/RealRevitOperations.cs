@@ -1906,7 +1906,7 @@ public sealed class RealRevitOperations : IRevitOperations
                 {
                     var row = new Dictionary<string, string>();
                     for (var colIdx = 0; colIdx < columns.Count; colIdx++)
-                        row[columns[colIdx]] = schedule.GetCellText(SectionType.Body, r, colIdx);
+                        row[columns[colIdx]] = schedule.GetCellText(SectionType.Body, r, visibleColIndices[colIdx]);
                     rows.Add(row);
                 }
 
@@ -2822,11 +2822,16 @@ public sealed class RealRevitOperations : IRevitOperations
                     if (bodySection == null) continue;
 
                     var columns = new List<string>();
+                    var visibleColIndices = new List<int>();
                     var fieldCount = vs.Definition.GetFieldCount();
                     for (var i = 0; i < fieldCount; i++)
                     {
                         var f = vs.Definition.GetField(i);
-                        if (!f.IsHidden) columns.Add(f.GetName());
+                        if (!f.IsHidden)
+                        {
+                            columns.Add(f.GetName());
+                            visibleColIndices.Add(i);
+                        }
                     }
 
                     var rows = new List<Dictionary<string, string>>();
@@ -2834,7 +2839,7 @@ public sealed class RealRevitOperations : IRevitOperations
                     {
                         var row = new Dictionary<string, string>();
                         for (var c = 0; c < columns.Count; c++)
-                            row[columns[c]] = vs.GetCellText(SectionType.Body, r, c);
+                            row[columns[c]] = vs.GetCellText(SectionType.Body, r, visibleColIndices[c]);
                         rows.Add(row);
                     }
 

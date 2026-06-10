@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TooltipItem } from 'chart.js';
-  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { Line } from 'svelte-chartjs';
   import { registerCharts } from './registerCharts';
 
@@ -23,7 +23,7 @@
   /** Hide axis ticks / grid for a cleaner sparkline look. The History page passes false. */
   export let minimal: boolean = true;
 
-  onMount(() => registerCharts());
+  if (browser) registerCharts();
 
   $: data = {
     labels: points.map((p) => p.date),

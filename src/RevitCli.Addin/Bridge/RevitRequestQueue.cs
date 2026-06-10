@@ -87,10 +87,13 @@ internal sealed class RevitRequestQueue<TContext> : IDisposable
                 return request.Task;
             }
 
+            _requests.Enqueue(request);
+
             try
             {
                 if (!_eventSource.Raise())
                 {
+                    RemoveQueuedRequest(request);
                     request.Fail(new InvalidOperationException(
                         "ExternalEvent.Raise() was rejected by Revit."));
                     return request.Task;
@@ -98,11 +101,10 @@ internal sealed class RevitRequestQueue<TContext> : IDisposable
             }
             catch (Exception ex)
             {
+                RemoveQueuedRequest(request);
                 request.Fail(ex);
                 return request.Task;
             }
-
-            _requests.Enqueue(request);
         }
 
         return request.Task;
@@ -143,6 +145,23 @@ internal sealed class RevitRequestQueue<TContext> : IDisposable
             request.Fail(disposedException);
 
         _eventSource.Dispose();
+    }
+
+    private void RemoveQueuedRequest(IQueuedRequest request)
+    {
+        if (_requests.Count == 0)
+            return;
+
+        var remaining = new Queue<IQueuedRequest>(_requests.Count);
+        while (_requests.Count > 0)
+        {
+            var candidate = _requests.Dequeue();
+            if (!ReferenceEquals(candidate, request))
+                remaining.Enqueue(candidate);
+        }
+
+        while (remaining.Count > 0)
+            _requests.Enqueue(remaining.Dequeue());
     }
 
     private IQueuedRequest[] TakeAll()
