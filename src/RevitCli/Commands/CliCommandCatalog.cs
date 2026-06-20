@@ -17,7 +17,7 @@ internal static class CliCommandCatalog
         ("config", "View or modify CLI configuration"),
         ("audit", "Run model checking rules against the Revit model"),
         ("completions", "Generate shell completion script"),
-        ("batch", "Execute commands from a JSON batch file"),
+        ("batch", "Execute commands from a JSON batch file or project manifest"),
         ("doctor", "Check RevitCli setup and diagnose issues"),
         ("env", "Capture local Revit machine baseline evidence"),
         ("check", "Run project checks from .revitcli.yml profile"),
@@ -33,11 +33,12 @@ internal static class CliCommandCatalog
         ("workflow", "Create, validate, run, review, and index terminal workflow YAML files"),
         ("report", "Generate local project reports from history and journal data"),
         ("ledger", "Query, validate, summarize, and timeline local operation ledger artifacts"),
+        ("evidence", "Package, verify, and publish local BIMOps evidence"),
         ("deliverables", "Review local delivery plans, manifests, and receipts"),
         ("issue", "Run issue preflight, diff, and package contracts"),
         ("standards", "Install and validate local office standards requirements"),
         ("release", "Verify local release readiness and CI guardrails"),
-        ("rvt", "Find RVT files and clean numbered Revit backups"),
+        ("rvt", "Find RVT files, create project manifests, and clean numbered Revit backups"),
         ("library", "Find and fetch Autodesk Revit content libraries"),
         ("addins", "Audit and safely disable local Revit add-in manifests"),
         ("crash", "Analyze Revit crash journals and collect local diagnostics"),
@@ -108,6 +109,9 @@ internal static class CliCommandCatalog
         ("ledger stats", "Summarize local ledger operation counts without writing"),
         ("ledger timeline", "Bucket local ledger operations into a read-only project-memory timeline"),
         ("ledger analytics", "Write a local stats and timeline analytics snapshot bundle"),
+        ("evidence package", "Build a local BIMOps evidence packet manifest"),
+        ("evidence verify", "Verify a local BIMOps evidence packet offline"),
+        ("evidence site", "Write a static HTML/JSON evidence packet viewer"),
         ("deliverables list", "List delivery manifest entries and receipt status"),
         ("deliverables stats", "Summarize delivery manifest kinds, outcomes, and receipt status"),
         ("deliverables verify", "Verify delivery manifest entries point to readable receipts"),
@@ -131,7 +135,9 @@ internal static class CliCommandCatalog
         ("release pilot support-review validate", "Validate a public-safe v6 production support review summary"),
         ("env baseline", "Capture Revit builds, add-ins, content paths, and machine runtime evidence"),
         ("rvt scan", "List RVT files and classify numbered Revit backups"),
+        ("rvt manifest", "Create a read-only project manifest from local RVT files"),
         ("rvt clean-backups", "Delete numbered Revit backup files after dry-run review"),
+        ("batch projects", "Run resumable read-only checks from an rvt-project-manifest.v1 file"),
         ("library check", "Check local Revit Libraries and Family Templates content"),
         ("library sources", "Show official Autodesk Revit content library sources"),
         ("library download", "Download official Autodesk content packages when a direct URL is available"),
@@ -193,6 +199,7 @@ internal static class CliCommandCatalog
         ("init <template>", "Create .revitcli.yml from starter template"),
         ("doctor", "Check setup, server discovery, and connectivity"),
         ("batch <file>", "Execute commands from a JSON batch file"),
+        ("batch projects", "Run resumable read-only checks from an rvt-project-manifest.v1 file"),
         ("completions <shell>", "Generate shell completion script"),
         ("help", "Show this command list"),
         ("clear", "Clear the screen"),
@@ -235,6 +242,7 @@ internal static class CliCommandCatalog
         root.AddCommand(WorkflowCommand.Create());
         root.AddCommand(ReportCommand.Create());
         root.AddCommand(LedgerCommand.Create(client));
+        root.AddCommand(EvidenceCommand.Create());
         root.AddCommand(DeliverablesCommand.Create());
         root.AddCommand(IssueCommand.Create(client));
         root.AddCommand(StandardsCommand.Create());

@@ -40,6 +40,7 @@ public class CliCommandCatalogTests
         Assert.Contains("workflow", names);
         Assert.Contains("report", names);
         Assert.Contains("deliverables", names);
+        Assert.Contains("evidence", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
         Assert.Contains("env", names);
@@ -89,6 +90,7 @@ public class CliCommandCatalogTests
         Assert.Contains("fix", names);
         Assert.Contains("rollback", names);
         Assert.Contains("deliverables", names);
+        Assert.Contains("evidence", names);
         Assert.Contains("release", names);
         Assert.Contains("env", names);
         Assert.Contains("rvt", names);
@@ -116,6 +118,7 @@ public class CliCommandCatalogTests
         Assert.Contains("workflow", names);
         Assert.Contains("report", names);
         Assert.Contains("deliverables", names);
+        Assert.Contains("evidence", names);
         Assert.Contains("standards", names);
         Assert.Contains("release", names);
         Assert.Contains("env", names);
@@ -149,8 +152,22 @@ public class CliCommandCatalogTests
                      entry.Description.Contains("classify numbered Revit backups"));
         Assert.Contains(
             CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "rvt manifest" &&
+                     entry.Description.Contains("read-only project manifest"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "rvt clean-backups" &&
                      entry.Description.Contains("dry-run review"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeBatchProjects()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "batch projects" &&
+                     entry.Description.Contains("rvt-project-manifest.v1") &&
+                     entry.Description.Contains("read-only"));
     }
 
     [Fact]
@@ -524,6 +541,23 @@ public class CliCommandCatalogTests
             CliCommandCatalog.InteractiveHelpEntries,
             entry => entry.Command == "deliverables verify" &&
                      entry.Description.Contains("receipts"));
+    }
+
+    [Fact]
+    public void InteractiveHelpEntries_IncludeEvidencePackageVerifyAndSite()
+    {
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "evidence package" &&
+                     entry.Description.Contains("packet manifest"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "evidence verify" &&
+                     entry.Description.Contains("offline"));
+        Assert.Contains(
+            CliCommandCatalog.InteractiveHelpEntries,
+            entry => entry.Command == "evidence site" &&
+                     entry.Description.Contains("HTML"));
     }
 
     [Fact]

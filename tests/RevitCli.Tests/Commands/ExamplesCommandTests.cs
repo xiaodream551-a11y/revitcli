@@ -223,8 +223,12 @@ public sealed class ExamplesCommandTests
         Assert.Equal(0, exitCode);
         Assert.Contains("# rvt", text);
         Assert.Contains("revitcli rvt scan /mnt/d/revit --output markdown", text);
+        Assert.Contains("revitcli rvt manifest /mnt/d/revit --manifest-output .revitcli/projects/manifest.json --output json", text);
+        Assert.Contains("revitcli batch projects --manifest .revitcli/projects/manifest.json --command \"rvt scan {modelDirectory} --non-recursive --output json\" --results .revitcli/batch/project-results.jsonl --summary .revitcli/batch/project-summary.md --resume --output markdown", text);
         Assert.Contains("revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown --report .revitcli/reports/rvt-backups.json", text);
         Assert.Contains("revitcli rvt clean-backups /mnt/d/revit --apply --yes --report .revitcli/reports/rvt-backups-applied.json", text);
+        Assert.Contains("read-only project manifest", text);
+        Assert.Contains("resumable read-only checks", text);
         Assert.Contains("wait for approval before deleting", text);
     }
 

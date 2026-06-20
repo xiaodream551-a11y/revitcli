@@ -1,4 +1,6 @@
 using System.CommandLine;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RevitCli.Output;
@@ -13,8 +15,9 @@ public static class RvtCommand
 
     public static Command Create()
     {
-        var command = new Command("rvt", "Find Revit RVT files and clean numbered backup files");
+        var command = new Command("rvt", "Find Revit RVT files, create project manifests, and clean numbered backup files");
         command.AddCommand(CreateScanCommand());
+        command.AddCommand(CreateManifestCommand());
         command.AddCommand(CreateCleanBackupsCommand());
         return command;
     }
@@ -36,6 +39,29 @@ public static class RvtCommand
         {
             Environment.ExitCode = await ExecuteScanAsync(root, nonRecursive, output, Console.Out);
         }, rootArg, nonRecursiveOpt, outputOpt);
+
+        return command;
+    }
+
+    private static Command CreateManifestCommand()
+    {
+        var rootArg = new Argument<string>("root", "Root directory to scan");
+        var nonRecursiveOpt = new Option<bool>("--non-recursive", "Only scan the root directory");
+        var manifestOutputOpt = new Option<string?>("--manifest-output", "Write project manifest JSON to this path");
+        var outputOpt = new Option<string>("--output", () => "table", "Output format: table, json, markdown");
+
+        var command = new Command("manifest", "Create a read-only project manifest from local RVT files")
+        {
+            rootArg,
+            nonRecursiveOpt,
+            manifestOutputOpt,
+            outputOpt,
+        };
+
+        command.SetHandler(async (string root, bool nonRecursive, string? manifestOutput, string output) =>
+        {
+            Environment.ExitCode = await ExecuteManifestAsync(root, nonRecursive, manifestOutput, output, Console.Out);
+        }, rootArg, nonRecursiveOpt, manifestOutputOpt, outputOpt);
 
         return command;
     }
@@ -108,6 +134,44 @@ public static class RvtCommand
 
         await WriteOutputAsync(output, report, normalizedOutput);
         return report.Success ? 0 : 1;
+    }
+
+    public static async Task<int> ExecuteManifestAsync(
+        string root,
+        bool nonRecursive,
+        string? manifestOutputPath,
+        string outputFormat,
+        TextWriter output)
+    {
+        if (!TerminalOutputFormat.TryNormalize(outputFormat, out var normalizedOutput, "table", "json", "markdown"))
+        {
+            await output.WriteLineAsync("Error: --output must be 'table', 'json', or 'markdown'.");
+            return 1;
+        }
+
+        var scan = BuildReport(
+            root,
+            recursive: !nonRecursive,
+            command: "rvt scan",
+            dryRun: true,
+            apply: false,
+            yes: false,
+            includeOrphans: false,
+            olderThan: null,
+            markDeleteCandidates: false);
+
+        var manifest = BuildProjectManifest(scan);
+        var exitCode = manifest.Success ? 0 : 1;
+
+        if (!string.IsNullOrWhiteSpace(manifestOutputPath))
+        {
+            var manifestExit = await WriteProjectManifestAsync(manifestOutputPath, manifest);
+            if (manifestExit != 0)
+                exitCode = manifestExit;
+        }
+
+        await WriteManifestOutputAsync(output, manifest, normalizedOutput);
+        return exitCode;
     }
 
     public static async Task<int> ExecuteCleanBackupsAsync(
@@ -401,8 +465,6 @@ public static class RvtCommand
     {
         var expectedName = stem + ".rvt";
         var directPath = Path.Combine(directory, expectedName);
-        if (File.Exists(directPath))
-            return directPath;
 
         try
         {
@@ -416,6 +478,9 @@ public static class RvtCommand
         catch (Exception ex) when (IsFileSystemException(ex))
         {
         }
+
+        if (File.Exists(directPath))
+            return directPath;
 
         return directPath;
     }
@@ -463,6 +528,242 @@ public static class RvtCommand
             DeletedSizeBytes = files.Where(file => file.Deleted).Sum(file => file.SizeBytes),
             IssueCount = report.Issues.Count,
         };
+    }
+
+    private static RvtProjectManifest BuildProjectManifest(RvtReport scan)
+    {
+        var backupFiles = scan.Files
+            .Where(file => file.Kind == "backup")
+            .ToArray();
+        var projectFiles = scan.Files
+            .Where(file => file.Kind == "main")
+            .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var projects = projectFiles
+            .Select(file =>
+            {
+                var backups = backupFiles
+                    .Where(backup => string.Equals(backup.MainRelativePath, file.RelativePath, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(backup => backup.BackupNumber, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                return new RvtProjectEntry
+                {
+                    Path = file.Path,
+                    RelativePath = file.RelativePath,
+                    FileName = file.FileName,
+                    PathHash = ComputePathHash(file.Path),
+                    Classification = "candidate-project-model",
+                    Confidence = "high",
+                    SizeBytes = file.SizeBytes,
+                    LastWriteUtc = file.LastWriteUtc,
+                    BackupHint = new RvtProjectBackupHint
+                    {
+                        HasNumberedBackups = backups.Length > 0,
+                        NumberedBackupCount = backups.Length,
+                        LatestBackupNumber = backups.LastOrDefault()?.BackupNumber,
+                    },
+                    LocalityHint = BuildLocalityHint(file.Path),
+                };
+            })
+            .ToArray();
+
+        return new RvtProjectManifest
+        {
+            GeneratedAtUtc = scan.GeneratedAtUtc,
+            Root = scan.Root,
+            Recursive = scan.Recursive,
+            Success = scan.Success,
+            Projects = projects,
+            Issues = scan.Issues.ToList(),
+            Summary = new RvtProjectManifestSummary
+            {
+                ProjectCount = projects.Length,
+                BackupFileCount = scan.Summary.BackupFileCount,
+                OrphanBackupFileCount = scan.Summary.OrphanBackupFileCount,
+                ProjectSizeBytes = projects.Sum(project => project.SizeBytes),
+                BackupSizeBytes = scan.Summary.BackupSizeBytes,
+                TotalSizeBytes = scan.Summary.TotalSizeBytes,
+                IssueCount = scan.Issues.Count,
+            },
+        };
+    }
+
+    private static string ComputePathHash(string path)
+    {
+        var normalized = Path.GetFullPath(path)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/')
+            .TrimEnd('/');
+        if (OperatingSystem.IsWindows())
+            normalized = normalized.ToUpperInvariant();
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant();
+    }
+
+    private static RvtProjectLocalityHint BuildLocalityHint(string path)
+    {
+        var normalized = Path.GetFullPath(path).Replace('\\', '/');
+        if (normalized.StartsWith("//", StringComparison.Ordinal))
+        {
+            return new RvtProjectLocalityHint
+            {
+                Kind = "network",
+                Confidence = "high",
+                Reason = "Path uses a UNC network prefix.",
+            };
+        }
+
+        if (normalized.Contains("/ACCDocs/", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("/Autodesk Docs/", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RvtProjectLocalityHint
+            {
+                Kind = "desktop-connector",
+                Confidence = "medium",
+                Reason = "Path resembles an Autodesk Desktop Connector workspace.",
+            };
+        }
+
+        return new RvtProjectLocalityHint
+        {
+            Kind = "local",
+            Confidence = "high",
+            Reason = "Path is on a local or mapped file system.",
+        };
+    }
+
+    private static async Task<int> WriteProjectManifestAsync(string manifestOutputPath, RvtProjectManifest manifest)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(manifestOutputPath);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+
+            manifest.ManifestPath = fullPath;
+            await File.WriteAllTextAsync(
+                fullPath,
+                JsonSerializer.Serialize(manifest, TerminalJsonOptions.PrettyCamel) + Environment.NewLine);
+            return 0;
+        }
+        catch (Exception ex) when (IsFileSystemException(ex))
+        {
+            manifest.Success = false;
+            manifest.Issues.Add(new RvtIssue
+            {
+                Severity = "error",
+                Code = "manifest-write-failed",
+                Path = manifestOutputPath,
+                Message = ex.Message,
+            });
+            manifest.Summary = manifest.Summary with { IssueCount = manifest.Issues.Count };
+            return 1;
+        }
+    }
+
+    private static async Task WriteManifestOutputAsync(TextWriter output, RvtProjectManifest manifest, string outputFormat)
+    {
+        switch (outputFormat)
+        {
+            case "json":
+                await output.WriteLineAsync(JsonSerializer.Serialize(manifest, TerminalJsonOptions.PrettyCamel));
+                break;
+            case "markdown":
+                await output.WriteLineAsync(RenderManifestMarkdown(manifest));
+                break;
+            default:
+                await output.WriteLineAsync(RenderManifestTable(manifest));
+                break;
+        }
+    }
+
+    private static string RenderManifestTable(RvtProjectManifest manifest)
+    {
+        var lines = new List<string>
+        {
+            "RVT project manifest",
+            $"Root: {manifest.Root}",
+            $"Projects: {manifest.Summary.ProjectCount}",
+            $"Backups with main file: {manifest.Summary.BackupFileCount}",
+            $"Orphan backups: {manifest.Summary.OrphanBackupFileCount}",
+        };
+
+        if (!string.IsNullOrWhiteSpace(manifest.ManifestPath))
+            lines.Add($"Manifest: {manifest.ManifestPath}");
+
+        if (manifest.Issues.Count > 0)
+        {
+            lines.Add("Issues:");
+            foreach (var issue in manifest.Issues.Take(20))
+                lines.Add($"  {issue.Severity}: {issue.Code}: {issue.Message}");
+            if (manifest.Issues.Count > 20)
+                lines.Add($"  ... and {manifest.Issues.Count - 20} more.");
+        }
+
+        foreach (var project in manifest.Projects.Take(50))
+        {
+            var backupText = project.BackupHint.NumberedBackupCount == 0
+                ? "no backups"
+                : $"{project.BackupHint.NumberedBackupCount} backups";
+            lines.Add($"  {project.RelativePath}  {FormatBytes(project.SizeBytes)}  {project.LocalityHint.Kind}  {backupText}");
+        }
+
+        if (manifest.Projects.Length > 50)
+            lines.Add($"  ... and {manifest.Projects.Length - 50} more.");
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string RenderManifestMarkdown(RvtProjectManifest manifest)
+    {
+        var lines = new List<string>
+        {
+            "# RVT Project Manifest",
+            "",
+            $"- Root: `{EscapeMarkdown(manifest.Root)}`",
+            $"- Recursive: `{manifest.Recursive.ToString().ToLowerInvariant()}`",
+            $"- Projects: `{manifest.Summary.ProjectCount}`",
+            $"- Backups with main file: `{manifest.Summary.BackupFileCount}`",
+            $"- Orphan backups: `{manifest.Summary.OrphanBackupFileCount}`",
+        };
+
+        if (!string.IsNullOrWhiteSpace(manifest.ManifestPath))
+            lines.Add($"- Manifest: `{EscapeMarkdown(manifest.ManifestPath)}`");
+
+        lines.Add("");
+
+        if (manifest.Issues.Count > 0)
+        {
+            lines.Add("## Issues");
+            lines.Add("");
+            lines.Add("| Severity | Code | Path | Message |");
+            lines.Add("| --- | --- | --- | --- |");
+            foreach (var issue in manifest.Issues)
+            {
+                lines.Add(
+                    $"| {EscapeMarkdown(issue.Severity)} | `{EscapeMarkdown(issue.Code)}` | `{EscapeMarkdown(issue.Path ?? "")}` | {EscapeMarkdown(issue.Message)} |");
+            }
+            lines.Add("");
+        }
+
+        if (manifest.Projects.Length > 0)
+        {
+            lines.Add("## Projects");
+            lines.Add("");
+            lines.Add("| Path | Classification | Confidence | Locality | Backups | Path hash |");
+            lines.Add("| --- | --- | --- | --- | ---: | --- |");
+            foreach (var project in manifest.Projects)
+            {
+                lines.Add(
+                    $"| `{EscapeMarkdown(project.RelativePath)}` | `{project.Classification}` | `{project.Confidence}` | `{project.LocalityHint.Kind}` | {project.BackupHint.NumberedBackupCount} | `{project.PathHash}` |");
+            }
+            lines.Add("");
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static async Task<int> WriteReportAsync(string reportPath, RvtReport report)
@@ -684,5 +985,58 @@ public static class RvtCommand
         public string Code { get; init; } = "";
         public string? Path { get; init; }
         public string Message { get; init; } = "";
+    }
+
+    public sealed class RvtProjectManifest
+    {
+        public string SchemaVersion { get; init; } = "rvt-project-manifest.v1";
+        public string Command { get; init; } = "rvt manifest";
+        public bool Success { get; set; } = true;
+        public DateTimeOffset GeneratedAtUtc { get; init; }
+        public string Root { get; init; } = "";
+        public bool Recursive { get; init; }
+        public string? ManifestPath { get; set; }
+        public RvtProjectManifestSummary Summary { get; set; } = new();
+        public RvtProjectEntry[] Projects { get; init; } = Array.Empty<RvtProjectEntry>();
+        public List<RvtIssue> Issues { get; init; } = new();
+    }
+
+    public sealed record RvtProjectManifestSummary
+    {
+        public int ProjectCount { get; init; }
+        public int BackupFileCount { get; init; }
+        public int OrphanBackupFileCount { get; init; }
+        public long ProjectSizeBytes { get; init; }
+        public long BackupSizeBytes { get; init; }
+        public long TotalSizeBytes { get; init; }
+        public int IssueCount { get; init; }
+    }
+
+    public sealed class RvtProjectEntry
+    {
+        public string Path { get; init; } = "";
+        public string RelativePath { get; init; } = "";
+        public string FileName { get; init; } = "";
+        public string PathHash { get; init; } = "";
+        public string Classification { get; init; } = "";
+        public string Confidence { get; init; } = "";
+        public long SizeBytes { get; init; }
+        public DateTime LastWriteUtc { get; init; }
+        public RvtProjectBackupHint BackupHint { get; init; } = new();
+        public RvtProjectLocalityHint LocalityHint { get; init; } = new();
+    }
+
+    public sealed class RvtProjectBackupHint
+    {
+        public bool HasNumberedBackups { get; init; }
+        public int NumberedBackupCount { get; init; }
+        public string? LatestBackupNumber { get; init; }
+    }
+
+    public sealed class RvtProjectLocalityHint
+    {
+        public string Kind { get; init; } = "";
+        public string Confidence { get; init; } = "";
+        public string Reason { get; init; } = "";
     }
 }

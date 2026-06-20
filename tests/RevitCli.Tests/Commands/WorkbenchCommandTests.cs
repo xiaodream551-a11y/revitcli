@@ -64,7 +64,14 @@ public sealed class WorkbenchCommandTests
             command.GetProperty("supportsJson").GetBoolean() &&
             command.GetProperty("supportsMarkdown").GetBoolean() &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt scan") &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt manifest") &&
             command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "rvt clean-backups"));
+        Assert.Contains(commands, command =>
+            command.GetProperty("name").GetString() == "batch" &&
+            command.GetProperty("risk").GetString() == "read-only" &&
+            command.GetProperty("supportsJson").GetBoolean() &&
+            command.GetProperty("supportsMarkdown").GetBoolean() &&
+            command.GetProperty("commandPaths").EnumerateArray().Any(path => path.GetString() == "batch projects"));
         Assert.Contains(commands, command =>
             command.GetProperty("name").GetString() == "library" &&
             command.GetProperty("risk").GetString() == "local-write" &&
@@ -127,6 +134,18 @@ public sealed class WorkbenchCommandTests
             ledger.GetProperty("commandPaths").EnumerateArray(),
             path => path.GetString() == "ledger analytics");
         Assert.Contains("operations.jsonl", ledger.GetProperty("receipt").GetString()!);
+        var evidence = commands.Single(command => command.GetProperty("name").GetString() == "evidence");
+        Assert.Equal("local-write", evidence.GetProperty("risk").GetString());
+        Assert.Contains(
+            evidence.GetProperty("commandPaths").EnumerateArray(),
+            path => path.GetString() == "evidence package");
+        Assert.Contains(
+            evidence.GetProperty("commandPaths").EnumerateArray(),
+            path => path.GetString() == "evidence verify");
+        Assert.Contains(
+            evidence.GetProperty("commandPaths").EnumerateArray(),
+            path => path.GetString() == "evidence site");
+        Assert.Contains("bimops-evidence-package.v1", evidence.GetProperty("receipt").GetString()!);
         var schedule = commands.Single(command => command.GetProperty("name").GetString() == "schedule");
         Assert.Equal("mixed", schedule.GetProperty("risk").GetString());
         Assert.Contains(
@@ -2924,6 +2943,13 @@ journal verify
             path.GetProperty("command").GetString() == "workbench" &&
             path.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "batch projects" &&
+            path.GetProperty("commandLine").GetString() == "revitcli batch projects" &&
+            path.GetProperty("command").GetString() == "batch" &&
+            path.GetProperty("risk").GetString() == "read-only" &&
+            path.GetProperty("supportsJson").GetBoolean() &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(paths, path =>
             path.GetProperty("path").GetString() == "release pilot scaffold" &&
             path.GetProperty("command").GetString() == "release" &&
             path.GetProperty("supportsJson").GetBoolean());
@@ -3004,6 +3030,21 @@ journal verify
             path.GetProperty("command").GetString() == "model" &&
             path.GetProperty("dryRun").GetString()!.Contains("required", StringComparison.OrdinalIgnoreCase) &&
             path.GetProperty("receipt").GetString()!.Contains("model-map-fix-plan.v1", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "evidence package" &&
+            path.GetProperty("commandLine").GetString() == "revitcli evidence package" &&
+            path.GetProperty("command").GetString() == "evidence" &&
+            path.GetProperty("risk").GetString() == "local-write" &&
+            path.GetProperty("supportsJson").GetBoolean() &&
+            path.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "evidence verify" &&
+            path.GetProperty("command").GetString() == "evidence" &&
+            path.GetProperty("supportsJson").GetBoolean());
+        Assert.Contains(paths, path =>
+            path.GetProperty("path").GetString() == "evidence site" &&
+            path.GetProperty("command").GetString() == "evidence" &&
+            path.GetProperty("receipt").GetString()!.Contains("static", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -3223,6 +3264,19 @@ journal verify
             contract.GetProperty("jsonSchema").GetString() == "rvt-file-scan.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
         Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "rvt manifest" &&
+            contract.GetProperty("jsonSchema").GetString() == "rvt-project-manifest.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "batch projects" &&
+            contract.GetProperty("jsonSchema").GetString() == "batch-project-run.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean() &&
+            contract.GetProperty("notes").GetString()!.Contains("JSONL", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "batch projects --results" &&
+            contract.GetProperty("jsonSchema").GetString() == "batch-project-result.v1" &&
+            contract.GetProperty("notes").GetString()!.Contains("per-model", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "rvt clean-backups" &&
             contract.GetProperty("jsonSchema").GetString() == "rvt-backup-cleanup-report.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
@@ -3290,6 +3344,18 @@ journal verify
         Assert.Contains(outputs, contract =>
             contract.GetProperty("commandPath").GetString() == "ledger analytics" &&
             contract.GetProperty("jsonSchema").GetString() == "ledger-analytics-bundle.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "evidence package" &&
+            contract.GetProperty("jsonSchema").GetString() == "bimops-evidence-package.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "evidence verify" &&
+            contract.GetProperty("jsonSchema").GetString() == "bimops-evidence-package-verify.v1" &&
+            contract.GetProperty("supportsMarkdown").GetBoolean());
+        Assert.Contains(outputs, contract =>
+            contract.GetProperty("commandPath").GetString() == "evidence site" &&
+            contract.GetProperty("jsonSchema").GetString() == "bimops-evidence-site.v1" &&
             contract.GetProperty("supportsMarkdown").GetBoolean());
     }
 

@@ -29,6 +29,10 @@ cd dashboard && npm run check && npm run build  # type-check + production build
 - `Directory.Packages.props` centralizes NuGet versions — add new packages there, not in csproj.
 - `RevitCliVersion` in `Directory.Build.props` is the **single source of truth** for both CLI and add-in. Bump it (not csproj `<Version>`) when releasing.
 
+## Codex Subagents
+
+Project-local Codex helper agents live in `.codex/config.toml`; `.codex/CONTRACT.md` is their source of truth. They are bounded helpers for lookup, implementation, tests, and review. They do not stage or commit, and write-capable assignments must name allowed paths and verification commands.
+
 ## Architecture
 
 ```

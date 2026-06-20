@@ -68,6 +68,54 @@ public sealed class RvtCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Manifest_Json_EmitsProjectManifestWithHashesBackupHintsAndLocality()
+    {
+        WriteRvt("tower.rvt");
+        WriteRvt("tower.0001.rvt");
+        WriteRvt("archive.0001.rvt");
+        WriteRvt(Path.Combine("nested", "school.rvt"));
+        var manifestPath = Path.Combine(_root, ".revitcli", "projects", "manifest.json");
+        var output = new StringWriter();
+
+        var exitCode = await RvtCommand.ExecuteManifestAsync(
+            _root,
+            nonRecursive: false,
+            manifestOutputPath: manifestPath,
+            outputFormat: "json",
+            output);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(File.Exists(manifestPath));
+
+        using var json = JsonDocument.Parse(output.ToString());
+        var root = json.RootElement;
+        Assert.Equal("rvt-project-manifest.v1", root.GetProperty("schemaVersion").GetString());
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.Equal(Path.GetFullPath(manifestPath), root.GetProperty("manifestPath").GetString());
+
+        var summary = root.GetProperty("summary");
+        Assert.Equal(2, summary.GetProperty("projectCount").GetInt32());
+        Assert.Equal(1, summary.GetProperty("backupFileCount").GetInt32());
+        Assert.Equal(1, summary.GetProperty("orphanBackupFileCount").GetInt32());
+
+        var projects = root.GetProperty("projects").EnumerateArray().ToArray();
+        Assert.Equal(2, projects.Length);
+        var tower = Assert.Single(projects, project => project.GetProperty("relativePath").GetString() == "tower.rvt");
+        Assert.Equal("candidate-project-model", tower.GetProperty("classification").GetString());
+        Assert.Equal("high", tower.GetProperty("confidence").GetString());
+        Assert.Equal(64, tower.GetProperty("pathHash").GetString()!.Length);
+        Assert.Equal("local", tower.GetProperty("localityHint").GetProperty("kind").GetString());
+        Assert.Equal("high", tower.GetProperty("localityHint").GetProperty("confidence").GetString());
+        Assert.True(tower.GetProperty("backupHint").GetProperty("hasNumberedBackups").GetBoolean());
+        Assert.Equal(1, tower.GetProperty("backupHint").GetProperty("numberedBackupCount").GetInt32());
+        Assert.Equal("0001", tower.GetProperty("backupHint").GetProperty("latestBackupNumber").GetString());
+
+        using var saved = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        Assert.Equal("rvt-project-manifest.v1", saved.RootElement.GetProperty("schemaVersion").GetString());
+        Assert.Equal(2, saved.RootElement.GetProperty("projects").GetArrayLength());
+    }
+
+    [Fact]
     public async Task CleanBackups_DryRun_DoesNotDeleteAndWritesReport()
     {
         WriteRvt("model.rvt");

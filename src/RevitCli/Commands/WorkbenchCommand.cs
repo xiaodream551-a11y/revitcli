@@ -147,14 +147,24 @@ public static class WorkbenchCommand
             "0 when release gates pass; 1 when required docs, workflows, smoke disclosures, or strict gates fail."),
         new(
             "rvt",
-            "Find RVT files and clean Revit numbered backup files from local folders.",
+            "Find RVT files, create local project manifests, and clean Revit numbered backup files from local folders.",
             "local-write",
             SupportsJson: true,
             SupportsMarkdown: true,
             "required before backup cleanup apply",
-            "rvt-backup-cleanup-report.v1 when --report is used",
+            "rvt-project-manifest.v1 when --manifest-output is used; rvt-backup-cleanup-report.v1 when --report is used",
             "revitcli rvt clean-backups . --dry-run --output markdown",
             "0 when scans or cleanups complete; 1 for invalid paths/options/refused cleanup; 2 for partial delete failures."),
+        new(
+            "batch",
+            "Run resumable read-only project checks from an RVT project manifest.",
+            "read-only",
+            SupportsJson: true,
+            SupportsMarkdown: true,
+            "available for previewing commands before execution",
+            "batch-project-run.v1 plus batch-project-result.v1 JSONL rows when --results is used",
+            "revitcli batch projects --manifest .revitcli/projects/manifest.json --command \"rvt scan {modelDirectory} --non-recursive --output json\" --resume --output markdown",
+            "0 when all executed or skipped project checks succeed; 1 when command validation fails or any model check fails/times out."),
         new(
             "library",
             "Check local Autodesk Revit content libraries and fetch official content installers.",
@@ -434,7 +444,17 @@ public static class WorkbenchCommand
             "--yes required for append writes",
             ".revitcli/ledger/operations.jsonl",
             "revitcli ledger append --action issue.package --output json",
-            "0 when local artifacts are appended, replay-previewed, queried, or validated; 1 for invalid filters, failed validation thresholds, invalid append input, or output options.")
+            "0 when local artifacts are appended, replay-previewed, queried, or validated; 1 for invalid filters, failed validation thresholds, invalid append input, or output options."),
+        new(
+            "evidence",
+            "Package, verify, and publish local BIMOps evidence packets without a service runtime.",
+            "local-write",
+            SupportsJson: true,
+            SupportsMarkdown: true,
+            "none; package and site write only the requested local output directories",
+            "bimops-evidence-package.v1 manifest plus bimops-evidence-package-verify.v1 and bimops-evidence-site.v1 static site reports",
+            "revitcli evidence package --dir . --output-dir .revitcli/evidence/latest --output json",
+            "0 when packaging, offline verification, or static site generation succeeds; 1 for invalid paths, hash/size mismatches, write failures, or output options.")
     };
 
     private static readonly WorkbenchReceiptContract[] ReceiptContracts =
@@ -634,6 +654,27 @@ public static class WorkbenchCommand
             "rvt-file-scan.v1",
             SupportsMarkdown: true,
             "Read-only local RVT file inventory with numbered backup and orphan backup classification."),
+        new(
+            "rvt-project-manifest",
+            "rvt manifest",
+            SupportsTable: true,
+            "rvt-project-manifest.v1",
+            SupportsMarkdown: true,
+            "Read-only local project manifest with path hash, backup hints, locality hints, and confidence."),
+        new(
+            "batch-project-run",
+            "batch projects",
+            SupportsTable: true,
+            "batch-project-run.v1",
+            SupportsMarkdown: true,
+            "Manifest-backed project batch summary with dry-run, resume, timeout, and JSONL results path evidence."),
+        new(
+            "batch-project-result",
+            "batch projects --results",
+            SupportsTable: true,
+            "batch-project-result.v1",
+            SupportsMarkdown: true,
+            "Per-model JSONL result rows with status, exit code, duration, captured output, and path hash."),
         new(
             "rvt-backup-cleanup",
             "rvt clean-backups",
@@ -990,7 +1031,28 @@ public static class WorkbenchCommand
             SupportsTable: true,
             "ledger-analytics-bundle.v1",
             SupportsMarkdown: true,
-            "Local operations ledger analytics bundle that writes stats and timeline snapshot evidence without a service or database runtime.")
+            "Local operations ledger analytics bundle that writes stats and timeline snapshot evidence without a service or database runtime."),
+        new(
+            "bimops-evidence-package",
+            "evidence package",
+            SupportsTable: true,
+            "bimops-evidence-package.v1",
+            SupportsMarkdown: true,
+            "Local evidence packet manifest with copied artifacts, categories, schema hints, sizes, and SHA256 hashes."),
+        new(
+            "bimops-evidence-package-verify",
+            "evidence verify",
+            SupportsTable: true,
+            "bimops-evidence-package-verify.v1",
+            SupportsMarkdown: true,
+            "Offline evidence packet size and SHA256 verification report."),
+        new(
+            "bimops-evidence-site",
+            "evidence site",
+            SupportsTable: true,
+            "bimops-evidence-site.v1",
+            SupportsMarkdown: true,
+            "Static HTML and JSON evidence packet viewer output report.")
     };
 
     private static readonly WorkbenchSafeguardContract[] SafeguardContracts =
@@ -2343,6 +2405,7 @@ public static class WorkbenchCommand
             "release pilot support-review validate",
             "env baseline",
             "rvt scan",
+            "rvt manifest",
             "rvt clean-backups",
             "library check",
             "library sources",
@@ -2394,7 +2457,10 @@ public static class WorkbenchCommand
             "ledger query",
             "ledger validate",
             "ledger stats",
-            "ledger timeline"
+            "ledger timeline",
+            "evidence package",
+            "evidence verify",
+            "evidence site"
         };
         var missingCommandPaths = requiredCommandPaths
             .Where(path => !commandPaths.Contains(path))
@@ -2579,6 +2645,8 @@ public static class WorkbenchCommand
             "workbench-project.v1",
             "workbench-handoff.v1",
             "revit-env-baseline.v1",
+            "batch-project-run.v1",
+            "batch-project-result.v1",
             "inspect-workflows.v1",
             "inspect-plans.v1",
             "schedule-ensure-plan.v1",
@@ -2609,7 +2677,10 @@ public static class WorkbenchCommand
             "ledger-query.v1",
             "ledger-validate.v1",
             "ledger-stats.v1",
-            "ledger-timeline.v1"
+            "ledger-timeline.v1",
+            "bimops-evidence-package.v1",
+            "bimops-evidence-package-verify.v1",
+            "bimops-evidence-site.v1"
         };
         var outputSchemas = outputIndex.Outputs
             .Select(output => output.JsonSchema)
@@ -10021,7 +10092,8 @@ schedules:
                 "release pilot support-review validate",
             },
             "env" => new[] { "env baseline" },
-            "rvt" => new[] { "rvt scan", "rvt clean-backups" },
+            "rvt" => new[] { "rvt scan", "rvt manifest", "rvt clean-backups" },
+            "batch" => new[] { "batch projects" },
             "library" => new[] { "library check", "library sources", "library download", "library install", "library repair-plan", "library repair-apply", "library repair-rollback" },
             "addins" => new[] { "addins audit", "addins plan-disable", "addins apply", "addins rollback" },
             "crash" => new[] { "crash analyze", "crash collect", "crash repro", "crash verify" },
@@ -10061,6 +10133,7 @@ schedules:
             "journal" => new[] { "journal show", "journal stats", "journal review", "journal sign", "journal verify" },
             "report" => new[] { "report weekly", "report knowledge" },
             "ledger" => new[] { "ledger append", "ledger replay", "ledger query", "ledger validate", "ledger stats", "ledger timeline", "ledger analytics" },
+            "evidence" => new[] { "evidence package", "evidence verify", "evidence site" },
             _ => new[] { name }
         };
 

@@ -37,6 +37,10 @@ Use C# with 4-space indentation, `nullable` enabled, and implicit usings. Keep p
 
 Tests use xUnit with Moq where needed. Add CLI command tests under `tests/RevitCli.Tests/Commands/`; shared behavior belongs in the matching feature folder. Prefer fake HTTP handlers and `StringWriter` for CLI output assertions. Put add-in integration coverage under `tests/RevitCli.Addin.Tests/Integration/`. Run at least `dotnet test tests/RevitCli.Tests/` before submitting changes.
 
+## Codex Subagents
+
+Project-local Codex helper agents are configured in `.codex/config.toml` and governed by `.codex/CONTRACT.md`. Use them only for bounded lookup, implementation, test, or review assignments with explicit allowed paths and verification commands. Agents do not stage or commit.
+
 ## Revit Add-in Hot Reload Baseline
 
 As of 2026-05-27, the Revit 2026 add-in hot-reload and local development signing path has been validated on this machine.

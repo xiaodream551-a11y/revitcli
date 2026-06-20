@@ -18,12 +18,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   recording the baseline path, schema, SHA256, generation time, machine, years,
   and a capture command when the baseline is missing.
 
-### Added — RVT backup cleanup
+### Added — RVT project manifest and backup cleanup
 
 - Added `revitcli rvt scan` and `revitcli rvt clean-backups` to find local
   `.rvt` files, classify numbered backups such as `model.0001.rvt`, preview
   cleanup candidates with JSON/Markdown reports, and delete only after
   explicit `--apply --yes` confirmation.
+- Added `revitcli rvt manifest` to emit `rvt-project-manifest.v1` with
+  candidate project models, SHA-256 path hashes, numbered-backup hints,
+  locality hints, and confidence values for future read-only batch runs.
+- Added `revitcli batch projects` to run a read-only command template across
+  `rvt-project-manifest.v1` projects with dry-run previews, per-model timeout,
+  resume-by-path-hash, `batch-project-result.v1` JSONL rows, and
+  `batch-project-run.v1` table/JSON/Markdown summaries.
+
+### Added — BIMOps evidence packets
+
+- Added `revitcli evidence package`, `evidence verify`, and `evidence site`
+  to copy local `.revitcli` artifacts into an offline evidence packet, write
+  `bimops-evidence-package.v1` with category/schema/size/SHA256 metadata,
+  verify packaged artifact integrity as
+  `bimops-evidence-package-verify.v1`, and generate a static HTML/JSON viewer
+  as `bimops-evidence-site.v1` without requiring a service, database, Revit
+  session, or dashboard.
+- Shell completions, the command catalog, and `workbench paths` /
+  `workbench outputs` now expose the evidence package/verify/site surface.
 
 ### Added — Revit content library detection
 

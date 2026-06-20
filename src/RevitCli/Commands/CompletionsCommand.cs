@@ -37,6 +37,10 @@ public static class CompletionsCommand
     };
     private static readonly string[] PlanOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] AuditOptions = { "--rules", "--list" };
+    private static readonly string[] BatchSubcommands = { "projects" };
+    private static readonly string[] BatchOptions =
+        { "--manifest", "--command", "--results", "--summary", "--timeout-ms", "--resume", "--dry-run", "--output" };
+    private static readonly string[] BatchOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] FixOptions =
     {
         "--profile", "--rule", "--severity", "--dry-run", "--apply", "--yes",
@@ -69,6 +73,9 @@ public static class CompletionsCommand
     private static readonly string[] DeliverablesSubcommands = { "list", "stats", "verify", "plan", "bundle" };
     private static readonly string[] DeliverablesOptions = { "--dir", "--profile", "--since", "--bundle-path", "--dry-run", "--force", "--findings", "--output" };
     private static readonly string[] DeliverablesOutputFormats = { "table", "json", "markdown" };
+    private static readonly string[] EvidenceSubcommands = { "package", "verify", "site" };
+    private static readonly string[] EvidenceOptions = { "--dir", "--output-dir", "--packet", "--output" };
+    private static readonly string[] EvidenceOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] IssueSubcommands = { "preflight", "diff", "package" };
     private static readonly string[] IssueOptions =
         { "--profile", "--output", "--fail-on", "--findings", "--from", "--to", "--review", "--report", "--max-rows", "--bundle-path", "--dry-run", "--sign-journal", "--include-receipts" };
@@ -84,9 +91,9 @@ public static class CompletionsCommand
     private static readonly string[] ReleasePilotSupportReviewSubcommands = { "scaffold", "validate" };
     private static readonly string[] ReleaseOptions = { "--root", "--output", "--tag", "--strict", "--pilot-id", "--path", "--force", "--yes", "--production-support", "--support-review" };
     private static readonly string[] ReleaseOutputFormats = { "table", "json", "markdown" };
-    private static readonly string[] RvtSubcommands = { "scan", "clean-backups" };
+    private static readonly string[] RvtSubcommands = { "scan", "manifest", "clean-backups" };
     private static readonly string[] RvtOptions =
-        { "--output", "--dry-run", "--apply", "--yes", "--include-orphans", "--non-recursive", "--older-than", "--report" };
+        { "--output", "--manifest-output", "--dry-run", "--apply", "--yes", "--include-orphans", "--non-recursive", "--older-than", "--report" };
     private static readonly string[] RvtOutputFormats = { "table", "json", "markdown" };
     private static readonly string[] LibrarySubcommands = { "check", "sources", "download", "install", "repair-plan", "repair-apply", "repair-rollback" };
     private static readonly string[] LibraryOptions =
@@ -347,6 +354,9 @@ public static class CompletionsCommand
         var deliverablesWords = JoinWords(DeliverablesSubcommands.Concat(DeliverablesOptions));
         var deliverablesOptions = JoinWords(DeliverablesOptions);
         var deliverablesOutputFormats = JoinWords(DeliverablesOutputFormats);
+        var evidenceWords = JoinWords(EvidenceSubcommands.Concat(EvidenceOptions));
+        var evidenceOptions = JoinWords(EvidenceOptions);
+        var evidenceOutputFormats = JoinWords(EvidenceOutputFormats);
         var issueWords = JoinWords(IssueSubcommands.Concat(IssueOptions));
         var issueOptions = JoinWords(IssueOptions);
         var issueOutputFormats = JoinWords(IssueOutputFormats);
@@ -423,6 +433,8 @@ public static class CompletionsCommand
         var exportFormats = JoinWords(ExportCommand.ValidFormats);
         var exportOutputFormats = JoinWords(ExportOutputFormats);
         var auditRules = JoinWords(AuditCommand.AvailableRules);
+        var batchWords = JoinWords(BatchSubcommands.Concat(BatchOptions));
+        var batchOutputFormats = JoinWords(BatchOutputFormats);
         var shells = JoinWords(CliCommandCatalog.Shells);
 
         return JoinLines(
@@ -609,11 +621,26 @@ public static class CompletionsCommand
             "                return",
             "            fi",
             "            ;;",
-            "        batch)",
+        "        batch)",
+            "            case \"$prev\" in",
+            "                --manifest|--results|--summary)",
+            "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{batchOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
             "            if [ $COMP_CWORD -eq 2 ]; then",
-            "                COMPREPLY=($(compgen -f -- \"$cur\"))",
+            $"                COMPREPLY=($(compgen -W \"{batchWords}\" -- \"$cur\") $(compgen -f -- \"$cur\"))",
+                "                return",
+            "            fi",
+            "            if [ \"$subcmd\" = \"projects\" ]; then",
+            $"                COMPREPLY=($(compgen -W \"{batchWords}\" -- \"$cur\"))",
             "                return",
             "            fi",
+            "            COMPREPLY=($(compgen -f -- \"$cur\"))",
             "            ;;",
             "        publish)",
             "            case \"$prev\" in",
@@ -823,6 +850,23 @@ public static class CompletionsCommand
             "            fi",
             $"            COMPREPLY=($(compgen -W \"{deliverablesOptions}\" -- \"$cur\"))",
             "            ;;",
+            "        evidence)",
+            "            case \"$prev\" in",
+            "                --output)",
+            $"                    COMPREPLY=($(compgen -W \"{evidenceOutputFormats}\" -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "                --dir|--output-dir|--packet)",
+            "                    COMPREPLY=($(compgen -d -- \"$cur\"))",
+            "                    return",
+            "                    ;;",
+            "            esac",
+            "            if [ $COMP_CWORD -eq 2 ]; then",
+            $"                COMPREPLY=($(compgen -W \"{evidenceWords}\" -- \"$cur\"))",
+            "                return",
+            "            fi",
+            $"            COMPREPLY=($(compgen -W \"{evidenceOptions}\" -- \"$cur\"))",
+            "            ;;",
             "        issue)",
             "            case \"$prev\" in",
             "                --output)",
@@ -908,7 +952,7 @@ public static class CompletionsCommand
             $"                    COMPREPLY=($(compgen -W \"{rvtOutputFormats}\" -- \"$cur\"))",
             "                    return",
             "                    ;;",
-            "                --report)",
+            "                --manifest-output|--report)",
             "                    COMPREPLY=($(compgen -f -- \"$cur\"))",
             "                    return",
             "                    ;;",
@@ -1242,6 +1286,8 @@ public static class CompletionsCommand
         var configKeys = JoinWords(ConfigCommand.ValidKeys);
         var shells = JoinWords(CliCommandCatalog.Shells);
         var auditRules = JoinWords(AuditCommand.AvailableRules);
+        var batchSubcommands = JoinWords(BatchSubcommands);
+        var batchOutputFormats = JoinWords(BatchOutputFormats);
         var fixOptions = JoinWords(FixOptions);
         var diffOutputFormats = JoinWords(DiffOutputFormats);
         var workbenchSubcommands = JoinWords(WorkbenchSubcommands);
@@ -1260,6 +1306,8 @@ public static class CompletionsCommand
         var ledgerBucketValues = JoinWords(LedgerBucketValues);
         var deliverablesSubcommands = JoinWords(DeliverablesSubcommands);
         var deliverablesOutputFormats = JoinWords(DeliverablesOutputFormats);
+        var evidenceSubcommands = JoinWords(EvidenceSubcommands);
+        var evidenceOutputFormats = JoinWords(EvidenceOutputFormats);
         var issueSubcommands = JoinWords(IssueSubcommands);
         var issueOutputFormats = JoinWords(IssueOutputFormats);
         var issueFailOnValues = JoinWords(IssueFailOnValues);
@@ -1448,11 +1496,20 @@ public static class CompletionsCommand
             "                        fi",
             "                    fi",
             "                    ;;",
-            "                completions)",
+                "                completions)",
             $"                    _arguments '1:shell:({shells})'",
             "                    ;;",
-            "                batch)",
-            "                    _arguments '1:file:_files'",
+                "                batch)",
+            "                    _arguments '1:file:_files' \\",
+            $"                        '1:subcommand:({batchSubcommands})' \\",
+            "                        '--manifest[Project manifest JSON]:file:_files' \\",
+            "                        '--command[Read-only command template]:command:' \\",
+            "                        '--results[Project JSONL results path]:file:_files' \\",
+            "                        '--summary[Markdown summary path]:file:_files' \\",
+            "                        '--timeout-ms[Per-model timeout in milliseconds]:ms:' \\",
+            "                        '--resume[Skip succeeded path hashes already in the results JSONL]' \\",
+            "                        '--dry-run[Preview per-model commands without executing]' \\",
+            $"                        '--output[Output format]:format:({batchOutputFormats})'",
             "                    ;;",
             "                publish)",
             "                    _arguments \\",
@@ -1609,6 +1666,17 @@ public static class CompletionsCommand
                 "                            '--force[Overwrite existing bundle path]' \\",
                 "                            '--findings[Emit bimops-finding.v1 JSON]' \\",
                 $"                            '--output[Output format]:format:({deliverablesOutputFormats})'",
+                "                    fi",
+                "                    ;;",
+                "                evidence)",
+                "                    if (( CURRENT == 3 )); then",
+            $"                        _values 'subcommand' {evidenceSubcommands}",
+                "                    else",
+                "                        _arguments \\",
+                "                            '--dir[Project directory]:dir:_directories' \\",
+                "                            '--output-dir[Evidence output directory]:dir:_directories' \\",
+                "                            '--packet[Evidence packet directory]:dir:_directories' \\",
+            $"                            '--output[Output format]:format:({evidenceOutputFormats})'",
                 "                    fi",
                 "                    ;;",
                 "                issue)",
@@ -1870,6 +1938,7 @@ public static class CompletionsCommand
                 "                        _arguments \\",
                 "                            '2:root directory:_directories' \\",
             $"                            '--output[Output format]:format:({rvtOutputFormats})' \\",
+                "                            '--manifest-output[Write project manifest JSON]:file:_files' \\",
                 "                            '--dry-run[Preview backup cleanup without deleting]' \\",
                 "                            '--apply[Delete matched backup files]' \\",
                 "                            '--yes[Confirm backup deletion]' \\",
@@ -1997,6 +2066,7 @@ public static class CompletionsCommand
         var setOptions = FormatPowerShellArray(SetOptions);
         var planOptions = FormatPowerShellArray(PlanSubcommands.Concat(PlanOptions));
         var auditOptions = FormatPowerShellArray(AuditOptions);
+        var batchOptions = FormatPowerShellArray(BatchSubcommands.Concat(BatchOptions));
         var fixOptions = FormatPowerShellArray(FixOptions);
         var rollbackOptions = FormatPowerShellArray(RollbackOptions);
         var diffOptions = FormatPowerShellArray(DiffOptions);
@@ -2004,6 +2074,7 @@ public static class CompletionsCommand
         var workflowOptions = FormatPowerShellArray(WorkflowSubcommands.Concat(WorkflowOptions));
         var reportOptions = FormatPowerShellArray(ReportSubcommands.Concat(ReportOptions));
         var deliverablesOptions = FormatPowerShellArray(DeliverablesSubcommands.Concat(DeliverablesOptions));
+        var evidenceOptions = FormatPowerShellArray(EvidenceSubcommands.Concat(EvidenceOptions));
         var issueOptions = FormatPowerShellArray(IssueSubcommands.Concat(IssueOptions));
         var standardsOptions = FormatPowerShellArray(StandardsSubcommands.Concat(StandardsOptions));
         var standardsPolicySubcommands = FormatPowerShellArray(StandardsPolicySubcommands);
@@ -2051,6 +2122,8 @@ public static class CompletionsCommand
         var workbenchSubcommands = FormatPowerShellArray(WorkbenchSubcommands);
         var workbenchOutputFormats = FormatPowerShellArray(WorkbenchOutputFormats);
         var workbenchContractSchemas = FormatPowerShellArray(WorkbenchContractSchemas);
+        var batchSubcommands = FormatPowerShellArray(BatchSubcommands);
+        var batchOutputFormats = FormatPowerShellArray(BatchOutputFormats);
         var workflowSubcommands = FormatPowerShellArray(WorkflowSubcommands);
         var workflowReportOutputFormats = FormatPowerShellArray(WorkflowReportOutputFormats);
         var workflowSuggestOutputFormats = FormatPowerShellArray(WorkflowSuggestOutputFormats);
@@ -2063,6 +2136,7 @@ public static class CompletionsCommand
         var ledgerFailOnValues = FormatPowerShellArray(LedgerFailOnValues);
         var ledgerBucketValues = FormatPowerShellArray(LedgerBucketValues);
         var deliverablesOutputFormats = FormatPowerShellArray(DeliverablesOutputFormats);
+        var evidenceOutputFormats = FormatPowerShellArray(EvidenceOutputFormats);
         var issueOutputFormats = FormatPowerShellArray(IssueOutputFormats);
         var issueFailOnValues = FormatPowerShellArray(IssueFailOnValues);
         var standardsOutputFormats = FormatPowerShellArray(StandardsOutputFormats);
@@ -2121,6 +2195,7 @@ public static class CompletionsCommand
             $"        'set' = @({setOptions})",
             $"        'plan' = @({planOptions})",
             $"        'audit' = @({auditOptions})",
+            $"        'batch' = @({batchOptions})",
             $"        'fix' = @({fixOptions})",
             $"        'rollback' = @({rollbackOptions})",
             $"        'diff' = @({diffOptions})",
@@ -2129,6 +2204,7 @@ public static class CompletionsCommand
             $"        'report' = @({reportOptions})",
             $"        'ledger' = @({ledgerOptions})",
             $"        'deliverables' = @({deliverablesOptions})",
+            $"        'evidence' = @({evidenceOptions})",
             $"        'issue' = @({issueOptions})",
             $"        'standards' = @({standardsOptions})",
             $"        'release' = @({releaseOptions})",
@@ -2174,6 +2250,8 @@ public static class CompletionsCommand
             $"    $workbenchSubcommands = @({workbenchSubcommands})",
             $"    $workbenchOutputFormats = @({workbenchOutputFormats})",
             $"    $workbenchContractSchemas = @({workbenchContractSchemas})",
+            $"    $batchSubcommands = @({batchSubcommands})",
+            $"    $batchOutputFormats = @({batchOutputFormats})",
             $"    $workflowSubcommands = @({workflowSubcommands})",
             $"    $workflowReportOutputFormats = @({workflowReportOutputFormats})",
             $"    $workflowSuggestOutputFormats = @({workflowSuggestOutputFormats})",
@@ -2185,6 +2263,7 @@ public static class CompletionsCommand
             $"    $ledgerFailOnValues = @({ledgerFailOnValues})",
             $"    $ledgerBucketValues = @({ledgerBucketValues})",
             $"    $deliverablesOutputFormats = @({deliverablesOutputFormats})",
+            $"    $evidenceOutputFormats = @({evidenceOutputFormats})",
             $"    $issueOutputFormats = @({issueOutputFormats})",
             $"    $issueFailOnValues = @({issueFailOnValues})",
             $"    $standardsOutputFormats = @({standardsOutputFormats})",
@@ -2418,6 +2497,23 @@ public static class CompletionsCommand
             "            New-RevitCliCompletionResults -Values $commandOptions['audit'] -ToolTip 'Option'",
             "            return",
             "        }",
+            "        'batch' {",
+            "            if ($previous -eq '--output') {",
+            "                New-RevitCliCompletionResults -Values $batchOutputFormats -ToolTip 'Output format'",
+            "                return",
+            "            }",
+            "            if ($previous -eq '--manifest' -or $previous -eq '--results' -or $previous -eq '--summary') {",
+            "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+            "                return",
+            "            }",
+            "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+            "                New-RevitCliCompletionResults -Values $batchSubcommands -ToolTip 'Batch subcommand'",
+            "                return",
+            "            }",
+            "",
+            "            New-RevitCliCompletionResults -Values $commandOptions['batch'] -ToolTip 'Batch option'",
+            "            return",
+            "        }",
             "        'config' {",
             "            if ($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) {",
             "                New-RevitCliCompletionResults -Values $configSubcommands -ToolTip 'Config subcommand'",
@@ -2615,6 +2711,23 @@ public static class CompletionsCommand
         "            New-RevitCliCompletionResults -Values $commandOptions['deliverables'] -ToolTip 'Deliverables option'",
         "            return",
         "        }",
+        "        'evidence' {",
+        "            if ($previous -eq '--output') {",
+        "                New-RevitCliCompletionResults -Values $evidenceOutputFormats -ToolTip 'Output format'",
+        "                return",
+        "            }",
+        "            if ($previous -eq '--dir' -or $previous -eq '--output-dir' -or $previous -eq '--packet') {",
+        "                New-RevitCliFileCompletionResults -Path $wordToComplete",
+        "                return",
+        "            }",
+        "            if (($tokens.Count -eq 2 -or ($tokens.Count -eq 3 -and -not $endsWithSpace)) -and -not $wordToComplete.StartsWith('-')) {",
+        "                New-RevitCliCompletionResults -Values @('package', 'verify', 'site') -ToolTip 'Evidence subcommand'",
+        "                return",
+        "            }",
+        "",
+        "            New-RevitCliCompletionResults -Values $commandOptions['evidence'] -ToolTip 'Evidence option'",
+        "            return",
+        "        }",
         "        'issue' {",
         "            if ($previous -eq '--output') {",
         "                New-RevitCliCompletionResults -Values $issueOutputFormats -ToolTip 'Output format'",
@@ -2687,7 +2800,7 @@ public static class CompletionsCommand
             "                New-RevitCliCompletionResults -Values $rvtOutputFormats -ToolTip 'Output format'",
             "                return",
             "            }",
-            "            if ($previous -eq '--report') {",
+            "            if ($previous -eq '--manifest-output' -or $previous -eq '--report') {",
             "                New-RevitCliFileCompletionResults -Path $wordToComplete",
             "                return",
             "            }",

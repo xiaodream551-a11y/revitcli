@@ -43,6 +43,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("audit", script);
         Assert.Contains("completions", script);
         Assert.Contains("batch", script);
+        Assert.Contains("compgen -W \"projects --manifest --command --results --summary --timeout-ms --resume --dry-run --output\" -- \"$cur\"", script);
         Assert.Contains("doctor", script);
         Assert.Contains("env", script);
         Assert.Contains("env)", script);
@@ -59,6 +60,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("report", script);
         Assert.Contains("ledger", script);
         Assert.Contains("deliverables", script);
+        Assert.Contains("evidence", script);
         Assert.Contains("standards", script);
         Assert.Contains("release", script);
         Assert.Contains("rvt", script);
@@ -124,6 +126,7 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("compgen -W \"error warning\" -- \"$cur\"", script);
         Assert.Contains("compgen -W \"day hour\" -- \"$cur\"", script);
         Assert.Contains("list stats verify plan bundle --dir --profile --since --bundle-path --dry-run --force --findings --output", script);
+        Assert.Contains("package verify site --dir --output-dir --packet --output", script);
         Assert.Contains("preflight diff package --profile --output --fail-on --findings --from --to --review --report --max-rows --bundle-path --dry-run --sign-journal --include-receipts", script);
         Assert.Contains("install validate policy --manifest --dir --output --findings --ref --subpath --force --dry-run --name --pack-version", script);
         Assert.Contains("verify pilot --root --output --tag --strict --pilot-id --path --force --yes --production-support --support-review", script);
@@ -144,7 +147,7 @@ public class CompletionsCommandTests : IDisposable
             script,
             "        rvt)",
             "        library)");
-        Assert.Contains("compgen -W \"scan clean-backups --output --dry-run --apply --yes --include-orphans --non-recursive --older-than --report\" -- \"$cur\"", rvtBlock);
+        Assert.Contains("compgen -W \"scan manifest clean-backups --output --manifest-output --dry-run --apply --yes --include-orphans --non-recursive --older-than --report\" -- \"$cur\"", rvtBlock);
         Assert.Contains("compgen -W \"table json markdown\" -- \"$cur\"", rvtBlock);
         Assert.Contains("compgen -f -- \"$cur\"", rvtBlock);
         var libraryBlock = ExtractBlock(
@@ -199,9 +202,13 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("'report:Generate local project reports from history and journal data'", script);
         Assert.Contains("'ledger:Query, validate, summarize, and timeline local operation ledger artifacts'", script);
         Assert.Contains("'deliverables:Review local delivery plans, manifests, and receipts'", script);
+        Assert.Contains("'evidence:Package, verify, and publish local BIMOps evidence'", script);
         Assert.Contains("'standards:Install and validate local office standards requirements'", script);
         Assert.Contains("'release:Verify local release readiness and CI guardrails'", script);
-        Assert.Contains("'rvt:Find RVT files and clean numbered Revit backups'", script);
+        Assert.Contains("'rvt:Find RVT files, create project manifests, and clean numbered Revit backups'", script);
+        Assert.Contains("'1:subcommand:(projects)'", script);
+        Assert.Contains("--manifest[Project manifest JSON]:file:_files", script);
+        Assert.Contains("--timeout-ms[Per-model timeout in milliseconds]:ms:", script);
         Assert.Contains("'library:Find and fetch Autodesk Revit content libraries'", script);
         Assert.Contains("'addins:Audit and safely disable local Revit add-in manifests'", script);
         Assert.Contains("'sheets:Verify sheet numbering and local sheet-frame expectations'", script);
@@ -236,6 +243,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("--fail-on[Failure threshold]:threshold:(error warning)", script);
         Assert.Contains("--findings[Emit bimops-finding.v1 JSON]", script);
         Assert.Contains("list stats verify plan bundle", script);
+        Assert.Contains("_values 'subcommand' package verify site", script);
+        Assert.Contains("--packet[Evidence packet directory]:dir:_directories", script);
         Assert.Contains("install validate policy", script);
         Assert.Contains("_values 'subcommand' init validate diff", script);
         Assert.Contains("verify", script);
@@ -273,7 +282,8 @@ public class CompletionsCommandTests : IDisposable
             script,
             "                rvt)",
             "                library)");
-        Assert.Contains("_values 'subcommand' scan clean-backups", rvtBlock);
+        Assert.Contains("_values 'subcommand' scan manifest clean-backups", rvtBlock);
+        Assert.Contains("--manifest-output[Write project manifest JSON]:file:_files", rvtBlock);
         Assert.Contains("--include-orphans[Also delete backups without a main RVT]", rvtBlock);
         Assert.Contains("--older-than[Only delete backups older than duration]:duration:", rvtBlock);
         var libraryBlock = ExtractBlock(
@@ -334,11 +344,16 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("$statusOutputFormats = @('table', 'json')", script);
         Assert.Contains("$publishOutputFormats = @('table', 'json')", script);
         Assert.Contains("$exportOutputFormats = @('table', 'json')", script);
+        Assert.Contains("'batch' = @('projects', '--manifest', '--command', '--results', '--summary', '--timeout-ms', '--resume', '--dry-run', '--output')", script);
+        Assert.Contains("$batchSubcommands = @('projects')", script);
+        Assert.Contains("$batchOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("New-RevitCliCompletionResults -Values $batchSubcommands -ToolTip 'Batch subcommand'", script);
         Assert.Contains("'examples' = 'Show copy-paste examples for common architect workflows'", script);
         Assert.Contains("'workflow' = 'Create, validate, run, review, and index terminal workflow YAML files'", script);
         Assert.Contains("'report' = 'Generate local project reports from history and journal data'", script);
         Assert.Contains("'ledger' = 'Query, validate, summarize, and timeline local operation ledger artifacts'", script);
         Assert.Contains("'deliverables' = 'Review local delivery plans, manifests, and receipts'", script);
+        Assert.Contains("'evidence' = 'Package, verify, and publish local BIMOps evidence'", script);
         Assert.Contains("'standards' = 'Install and validate local office standards requirements'", script);
         Assert.Contains("'release' = 'Verify local release readiness and CI guardrails'", script);
         Assert.Contains("'library' = 'Find and fetch Autodesk Revit content libraries'", script);
@@ -376,6 +391,9 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("$ledgerBucketValues = @('day', 'hour')", script);
         Assert.Contains("'list', 'stats', 'verify', 'plan', 'bundle', '--dir', '--profile', '--since', '--bundle-path', '--dry-run', '--force', '--findings', '--output'", script);
         Assert.Contains("$deliverablesOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("'evidence' = @('package', 'verify', 'site', '--dir', '--output-dir', '--packet', '--output')", script);
+        Assert.Contains("$evidenceOutputFormats = @('table', 'json', 'markdown')", script);
+        Assert.Contains("New-RevitCliCompletionResults -Values @('package', 'verify', 'site') -ToolTip 'Evidence subcommand'", script);
         Assert.Contains("'install', 'validate', 'policy', '--manifest', '--dir', '--output', '--findings', '--ref', '--subpath', '--force', '--dry-run', '--name', '--pack-version'", script);
         Assert.Contains("$standardsOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$standardsPolicySubcommands = @('init', 'validate', 'diff')", script);
@@ -383,8 +401,8 @@ public class CompletionsCommandTests : IDisposable
         Assert.Contains("$releaseOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("$releasePilotSubcommands = @('scaffold', 'validate', 'register', 'status', 'claim', 'support-review')", script);
         Assert.Contains("$releasePilotSupportReviewSubcommands = @('scaffold', 'validate')", script);
-        Assert.Contains("'rvt' = @('scan', 'clean-backups', '--output', '--dry-run', '--apply', '--yes', '--include-orphans', '--non-recursive', '--older-than', '--report')", script);
-        Assert.Contains("$rvtSubcommands = @('scan', 'clean-backups')", script);
+        Assert.Contains("'rvt' = @('scan', 'manifest', 'clean-backups', '--output', '--manifest-output', '--dry-run', '--apply', '--yes', '--include-orphans', '--non-recursive', '--older-than', '--report')", script);
+        Assert.Contains("$rvtSubcommands = @('scan', 'manifest', 'clean-backups')", script);
         Assert.Contains("$rvtOutputFormats = @('table', 'json', 'markdown')", script);
         Assert.Contains("'library' = @('check', 'sources', 'download', 'install', 'repair-plan', 'repair-apply', 'repair-rollback', '--year', '--locale', '--content-root', '--revit-ini', '--download-dir', '--url', '--open-account', '--package', '--plan', '--plan-output', '--receipt', '--receipt-output', '--env-baseline', '--dry-run', '--apply', '--yes', '--findings', '--output')", script);
         Assert.Contains("$librarySubcommands = @('check', 'sources', 'download', 'install', 'repair-plan', 'repair-apply', 'repair-rollback')", script);

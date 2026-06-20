@@ -126,6 +126,9 @@ Current normalized finding surfaces:
 | Delivery evidence | `deliverables verify --findings --output json` | `bimops-finding.v1` |
 | Model health gate | `check --findings --output json` | `bimops-finding.v1` |
 | Score v2 gate | `score --from-findings findings.json --waivers waivers.json --fail-on error --output json` | `model-health-finding-score.v1` with active/expired waiver counts and exit codes 0 pass, 1 warning gate, 2 fail gate, 3 tool error |
+| Project manifest | `rvt manifest <root> --manifest-output .revitcli/projects/manifest.json --output json` | `rvt-project-manifest.v1`; read-only candidate project model list with SHA-256 path hashes, numbered-backup hints, locality hints, and confidence values for future manifest-backed batch runs |
+| Read-only project batch | `batch projects --manifest .revitcli/projects/manifest.json --command "rvt scan {modelDirectory} --non-recursive --output json" --resume --output markdown` | `batch-project-run.v1` plus `batch-project-result.v1` JSONL rows; command templates are validated as read-only/dry-run safe, support dry-run previews, per-model timeout, and resume by manifest path hash |
+| Evidence package static site | `evidence package --dir . --output-dir .revitcli/evidence/latest --output json`; `evidence verify --packet .revitcli/evidence/latest --output json`; `evidence site --packet .revitcli/evidence/latest --output-dir .revitcli/evidence/site --output markdown` | `bimops-evidence-package.v1`, `bimops-evidence-package-verify.v1`, and `bimops-evidence-site.v1`; local `.revitcli` artifacts are copied into an offline packet with SHA256 metadata, verified without network/service dependencies, and rendered as static HTML/JSON |
 
 ## Verification Gates
 

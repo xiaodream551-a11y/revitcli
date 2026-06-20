@@ -304,15 +304,17 @@ public static class ExamplesCommand
             "Preview unused family cleanup and write a purge report; do not apply until I approve."),
         new(
             "rvt",
-            "Find RVT files and clean numbered Revit backup files from local folders.",
+            "Find RVT files, create project manifests, and clean numbered Revit backup files from local folders.",
             new[]
             {
                 "revitcli rvt scan /mnt/d/revit --output markdown",
+                "revitcli rvt manifest /mnt/d/revit --manifest-output .revitcli/projects/manifest.json --output json",
+                "revitcli batch projects --manifest .revitcli/projects/manifest.json --command \"rvt scan {modelDirectory} --non-recursive --output json\" --results .revitcli/batch/project-results.jsonl --summary .revitcli/batch/project-summary.md --resume --output markdown",
                 "revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown --report .revitcli/reports/rvt-backups.json",
                 "revitcli rvt clean-backups /mnt/d/revit --dry-run --older-than 7d --output json",
                 "revitcli rvt clean-backups /mnt/d/revit --apply --yes --report .revitcli/reports/rvt-backups-applied.json"
             },
-            "Find Revit backup files such as model.0001.rvt, summarize the dry-run cleanup, and wait for approval before deleting."),
+            "Create a read-only project manifest, run resumable read-only checks across models, find Revit backup files such as model.0001.rvt, summarize the dry-run cleanup, and wait for approval before deleting."),
         new(
             "env",
             "Capture a local Revit machine baseline before support or pilot work.",

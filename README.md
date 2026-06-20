@@ -65,11 +65,16 @@ revitcli ledger replay --source ledger --output json         # preview local led
 revitcli ledger validate --source all --output json          # validate local ledger artifact links
 revitcli ledger stats --source all --output json             # summarize local ledger project memory
 revitcli ledger timeline --source all --bucket day --output json # bucket local ledger project memory
+revitcli evidence package --dir . --output-dir .revitcli/evidence/latest --output json # package local BIMOps evidence
+revitcli evidence verify --packet .revitcli/evidence/latest --output json # verify evidence packet hashes offline
+revitcli evidence site --packet .revitcli/evidence/latest --output-dir .revitcli/evidence/site --output markdown # static evidence viewer
 revitcli standards install profiles/office-standard --dry-run --output markdown # preview standards bootstrap
 revitcli standards install profiles/office-standard              # bootstrap a new project
 revitcli standards validate --output markdown                # check local office standards
 revitcli family purge --dry-run --report .revitcli/reports/family-purge.json # review cleanup candidates
 revitcli rvt scan /mnt/d/revit --output markdown             # find RVT files and numbered backups
+revitcli rvt manifest /mnt/d/revit --manifest-output .revitcli/projects/manifest.json --output json # stable project manifest
+revitcli batch projects --manifest .revitcli/projects/manifest.json --command "rvt scan {modelDirectory} --non-recursive --output json" --resume --output markdown # resumable read-only project checks
 revitcli rvt clean-backups /mnt/d/revit --dry-run --output markdown # preview .0001.rvt backup cleanup
 revitcli library check --year 2026 --output markdown         # detect missing Revit content libraries
 revitcli library sources --year 2026 --locale ENU            # show official Autodesk content sources
@@ -138,9 +143,10 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli ledger validate` | Validate local ledger source readability, artifact links, receipt status, and timestamp format as `ledger-validate.v1` without writing or requiring Revit |
 | `revitcli ledger stats` | Summarize local ledger operation counts by source, action, category, operator, receipt status, issue source, and malformed artifact issue severity as `ledger-stats.v1` without writing or requiring Revit |
 | `revitcli ledger timeline` | Bucket local ledger project memory by day or hour with source, action, category counts per bucket, operator counts per bucket, receipt status, issue severity, and unbucketed timestamp evidence as `ledger-timeline.v1` without writing or requiring Revit |
+| `revitcli evidence package` / `verify` / `site` | Copy local `.revitcli` artifacts into a hash-addressed evidence packet, verify it offline, and write a static HTML/JSON viewer without a server or database |
 | `revitcli deliverables list` / `stats` / `verify` / `plan` / `bundle` | Review delivery plans, manifest entries, receipt traceability, and package handoff zips |
 | `revitcli standards install` / `validate` | Install and validate required profiles, workflows, outputs, schedules, and family rules |
-| `revitcli rvt scan` / `clean-backups` | Find local `.rvt` files, classify `model.0001.rvt` backups, and delete numbered backups only after dry-run review plus `--apply --yes` |
+| `revitcli rvt scan` / `manifest` / `clean-backups` | Find local `.rvt` files, emit a read-only project manifest with path hashes and backup/locality hints, and delete numbered backups only after dry-run review plus `--apply --yes` |
 | `revitcli library check` / `sources` / `download` / `install` | Detect missing Autodesk Revit content libraries, show official sources, download official Autodesk package URLs, and start installers only after `--apply --yes` |
 | `revitcli addins audit` / `plan-disable` / `apply` / `rollback` | Audit `.addin` manifests and disable risky add-ins only through reviewable plans, dry-run apply, receipts, and rollback |
 | `revitcli crash analyze` / `repro` / `collect` / `verify` | Analyze local Revit journals and Windows Application Event Log crash evidence, generate clean-repro checklists, then copy and verify local diagnostics packets |
@@ -149,7 +155,7 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 | `revitcli diff <from> <to>` | Diff two snapshots, or add `--review` for anomaly/notable/routine triage |
 | `revitcli import <file>` | Batch-write parameters from CSV, with `--plan-output` support |
 | `revitcli config show` / `set` | View or modify CLI configuration |
-| `revitcli batch <file>` | Execute commands from a JSON file |
+| `revitcli batch <file>` / `batch projects` | Execute commands from a JSON file, or run resumable read-only checks across an `rvt-project-manifest.v1` model set |
 | `revitcli completions <shell>` | Generate shell completions (bash/zsh/PowerShell) |
 | `revitcli interactive` / `-i` | Interactive REPL mode |
 | `revitcli history init` / `capture` / `list` / `prune` / `diff` / `trend` | Local snapshot timeline + ASCII trend (v1.6) |
@@ -207,6 +213,12 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 - `deliverables plan --profile .revitcli.yml --since baseline.json --output markdown` prints a read-only `delivery-plan.v1` profile export plan with pipeline/preset output paths, baseline sheet counts when available, review command paths, and risk evidence before publish
 - `deliverables list`, `deliverables stats`, and `deliverables verify` review the local delivery manifest in table, JSON, or Markdown and confirm each entry points back to a readable receipt
 - `deliverables bundle --dry-run --output markdown` previews the manifest receipts, per-file SHA256 evidence, and output files that would be packaged; real bundle runs write a zip plus `delivery-bundle-receipt.v1` sidecar with the bundle hash
+
+### Evidence packets — offline local handoff
+
+- `evidence package --dir . --output-dir .revitcli/evidence/latest --output json|markdown` copies supported local `.revitcli` artifacts into `artifacts/` and writes `bimops-evidence-package.v1` with category, schema hint, size, and SHA256 metadata.
+- `evidence verify --packet .revitcli/evidence/latest --output json|markdown` prints `bimops-evidence-package-verify.v1` and fails when a packaged artifact is missing or its size/hash changed.
+- `evidence site --packet .revitcli/evidence/latest --output-dir .revitcli/evidence/site --output json|markdown` writes a static `index.html`, manifest copy, and artifact copy for review without any service, database, Revit session, or dashboard.
 
 ### Publish `--since` — incremental re-export (v1.2.0)
 
@@ -284,10 +296,10 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 - `issue diff --from baseline.json --to current --review --output json|markdown` prints `issue-diff-report.v1`, reusing snapshot diff review groups for issue-day anomaly/notable/routine triage
 - `issue package --profile .revitcli/issue.yml --bundle-path deliverables/issue-package.zip --dry-run --sign-journal --include-receipts true --output json|markdown` prints `issue-package-receipt.v1` without writing delivery files in dry-run; approved package writes include manifest path, child files/receipts, per-file SHA256 hashes, bundle hash, and optional journal signature evidence
 - `schedule create --dry-run --output json|markdown` prints `schedule-create.v1` without calling Revit; real schedule creates write `schedule-create-receipt.v1` under `.revitcli/receipts` by default, expose `receiptRequired`/`receiptSaved`, and JSON/Markdown failures use the same schema
-- Shell completions keep inspect, workflow, schedules, views, links, model, schedule, rooms, marks, and issue output formats aligned by subcommand, and `workbench verify` guards the inspect/workbench/workflow/schedules/views/links/model/schedule/rooms/marks/issue completion surface: inspect commands include `inspect plans`, workflow suggest uses table/JSON/YAML, workflow reports use table/JSON/Markdown, schedules ensure/batch-export/compare, views audit/template-apply/clone-set, links audit/repair, model map-check/map-fix, issue preflight/diff/package use table/JSON/Markdown, schedule list/create use table/JSON/Markdown, schedule export also offers CSV, and rooms/marks numbering commands offer table/JSON/Markdown
+- Shell completions keep inspect, workflow, schedules, views, links, model, schedule, rooms, marks, issue, and evidence output formats aligned by subcommand, and `workbench verify` guards the inspect/workbench/workflow/schedules/views/links/model/schedule/rooms/marks/issue/evidence completion surface: inspect commands include `inspect plans`, workflow suggest uses table/JSON/YAML, workflow reports use table/JSON/Markdown, schedules ensure/batch-export/compare, views audit/template-apply/clone-set, links audit/repair, model map-check/map-fix, issue preflight/diff/package and evidence package/verify/site use table/JSON/Markdown, schedule list/create use table/JSON/Markdown, schedule export also offers CSV, and rooms/marks numbering commands offer table/JSON/Markdown
 - The contract lists stable command vocabulary, callable command paths, recipe discovery, risk mode, JSON/Markdown support, recommended first command, dry-run expectations, receipt locations, and exit-code notes
 - Write paths without a dry-run/receipt contract are intentionally excluded from the Codex callable path index; `schedule create` is included now that it has a dry-run preview and receipt contract
-- JSON includes `commandPaths` entries such as `plan apply`, `score --history`, `inspect workflows`, `inspect plans`, `workflow review`, `workbench contract --contract workbench-contract.v2`, `workbench verify`, `workbench verify --contract workbench-contract.v2`, `workbench receipts`, `workbench paths`, `workbench exits`, `workbench extensions`, `workbench outputs`, `workbench safeguards`, `workbench project`, `workbench handoff`, `schedules ensure`, `schedules batch-export`, `schedules compare`, `views audit`, `views template-apply`, `views clone-set`, `links audit`, `links repair`, `model map-check`, `model map-fix`, `rooms renumber`, `marks assign`, `marks verify`, `issue preflight`, `issue diff`, `issue package`, `deliverables plan`, and `deliverables bundle` so Codex CLI can choose concrete commands without scraping help text
+- JSON includes `commandPaths` entries such as `plan apply`, `score --history`, `inspect workflows`, `inspect plans`, `workflow review`, `workbench contract --contract workbench-contract.v2`, `workbench verify`, `workbench verify --contract workbench-contract.v2`, `workbench receipts`, `workbench paths`, `workbench exits`, `workbench extensions`, `workbench outputs`, `workbench safeguards`, `workbench project`, `workbench handoff`, `schedules ensure`, `schedules batch-export`, `schedules compare`, `views audit`, `views template-apply`, `views clone-set`, `links audit`, `links repair`, `model map-check`, `model map-fix`, `rooms renumber`, `marks assign`, `marks verify`, `issue preflight`, `issue diff`, `issue package`, `deliverables plan`, `deliverables bundle`, `evidence package`, `evidence verify`, and `evidence site` so Codex CLI can choose concrete commands without scraping help text
 - Output formats are table, JSON, and Markdown; workbench commands are read-only and have no Revit API, dashboard, cloud, LLM runtime, or MCP dependency
 
 ### Reports — local project summaries
@@ -318,6 +330,8 @@ CLI (revitcli.exe)  ──HTTP REST──>  Revit Add-in (embedded HTTP server)
 ### RVT File Cleanup
 
 - `rvt scan <root> --output json|markdown` recursively lists local `.rvt` files and classifies numbered Revit backups such as `model.0001.rvt` without requiring Revit.
+- `rvt manifest <root> --manifest-output .revitcli/projects/manifest.json --output json` emits `rvt-project-manifest.v1` with candidate project models, SHA-256 path hashes, numbered-backup hints, locality hints, and confidence values for read-only batch planning.
+- `batch projects --manifest .revitcli/projects/manifest.json --command "rvt scan {modelDirectory} --non-recursive --output json" --results .revitcli/batch/project-results.jsonl --summary .revitcli/batch/project-summary.md --resume --output markdown` runs a read-only command template per manifest project, skips succeeded path hashes on resume, writes `batch-project-result.v1` JSONL rows, and emits a `batch-project-run.v1` summary.
 - `rvt clean-backups <root> --dry-run --report .revitcli/reports/rvt-backups.json` previews backup deletion candidates with file size, timestamp, main-file linkage, orphan status, and skipped reasons.
 - `rvt clean-backups <root> --apply --yes` deletes only matched numbered backups. By default it requires the same-directory main file, skips orphan backups, and leaves ordinary names such as `project.2026.rvt` untouched.
 - Add `--include-orphans` only when orphaned numbered backups should also be deleted, and `--older-than 7d` to require an age threshold.
